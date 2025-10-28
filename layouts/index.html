@@ -1,0 +1,48 @@
+{{- define "main" -}}
+{{- $recent := first 5 (sort .Site.RegularPages "Date" "desc") -}}
+{{- $popularData := (site.Data.popular | default (slice)) -}}
+<div class="wrapper list-page">
+    <header class="header">
+        {{/*
+            <h1 class="header-title center">최근 글</h1>
+        */}}
+        {{ partial "section-intro.html" . }}
+    </header>
+    <h3 class="posts-item-note" aria-label="Recent Posts">최근 글</h3>
+    <main class="page-content" aria-label="Content">
+        {{ range $recent }}
+        {{ partial "postCard" . }}
+        {{ end }}
+        <p>
+            <a href="https://vividian.net/all"> 전체 글 보기</a>
+        </p>
+    </main>
+    {{- if gt (len $popularData) 0 }}
+    <section class="popular-posts">
+        <h3 class="posts-item-note" aria-label="Popular Posts">인기 글 (최근 30일)</h3>
+        <div class="page-content popular-content" aria-label="Popular Content">
+            {{- range $popularData }}
+                {{- $path := .page_path -}}
+                {{- $page := site.GetPage $path -}}
+                {{- if not $page }}
+                    {{- $page = site.GetPage (strings.TrimSuffix "/" $path) -}}
+                {{- end -}}
+                {{- if not $page }}
+                    {{- $page = site.GetPage (strings.TrimPrefix "/" $path) -}}
+                {{- end -}}
+                {{- if $page -}}
+                    {{ partial "popularCard.html" (dict "Page" $page "Views" .views) }}
+                {{- else -}}
+                    <article class="post-item">
+                        <h4 class="post-item-title">
+                            <a href="{{ $path }}">{{ .page_title | default $path }}</a>
+                        </h4>
+                        <div class="page-content popular-content">조회수 {{ .views }}</div>
+                    </article>
+                {{- end }}
+            {{- end }}
+        </div>
+    </section>
+    {{- end }}
+</div>
+{{- end -}}

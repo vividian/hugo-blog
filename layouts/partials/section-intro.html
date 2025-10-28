@@ -1,0 +1,22 @@
+{{/* Renders an introduction block above the post list.
+     Priority:
+       1. data/section_intro.{yaml|json|toml} entry matching section/home
+       2. .Content from the section's _index.md
+*/}}
+{{- $ctx := . -}}
+{{- $section := "" -}}
+{{- if .IsHome -}}
+  {{- $section = "home" -}}
+{{- else if .IsSection -}}
+  {{- $section = .Section -}}
+{{- end -}}
+{{- $data := site.Data.section_intro -}}
+{{- if and $data (ne $section "") (isset $data $section) -}}
+  <div class="section-intro">
+    {{- index $data $section | markdownify -}}
+  </div>
+{{- else if .Content -}}
+  <div class="section-intro">
+    {{- .Content -}}
+  </div>
+{{- end -}}
