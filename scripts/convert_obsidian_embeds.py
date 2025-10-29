@@ -16,29 +16,52 @@ try:
 except ImportError:
     from .config_utils import get_path
 
-EMBED_PATTERN = re.compile(r"!\[\[([^|\]]+)(?:\|([^\]]+))?\]\]")
+EMBED_PATTERN = re.compile(r"!\[\[([^\]]+)\]\]")
+SIZE_SINGLE_PATTERN = re.compile(r"^\d+$")
+SIZE_PAIR_PATTERN = re.compile(r"^(?P<width>\d+)x(?P<height>\d+)$", re.IGNORECASE)
 
 
 def convert_embed(match: re.Match) -> str:
-    path = match.group(1).strip()
-    size = (match.group(2) or "").strip()
-    alt = Path(path).name
+    raw = match.group(1)
+    parts = [part.strip() for part in raw.split("|")]
+    path = parts[0]
+    filename = Path(path).name
 
-    styles: list[str] = []
-    if size:
-        if size.isdigit():
-            styles.append(f"width:{size}px")
-        elif re.match(r"^\d+x\d+$", size):
-            width, height = size.split("x", 1)
-            if width.isdigit():
-                styles.append(f"width:{width}px")
-            if height.isdigit():
-                styles.append(f"height:{height}px")
+    alt: str | None = None
+    width: str | None = None
+    height: str | None = None
+
+    extras = parts[1:]
+
+    def parse_size(value: str) -> tuple[str | None, str | None]:
+        value = value.replace(" ", "")
+        if SIZE_SINGLE_PATTERN.match(value):
+            return value, None
+        pair = SIZE_PAIR_PATTERN.match(value)
+        if pair:
+            return pair.group("width"), pair.group("height")
+        return None, None
+
+    if extras:
+        first = extras[0]
+        w, h = parse_size(first)
+        if w or h:
+            width, height = w, h
         else:
-            styles.append(f"width:{size}")
+            alt = first
+            if len(extras) > 1:
+                width, height = parse_size(extras[1])
+    # Set fallback alt text if nothing provided
+    if not alt:
+        alt = Path(filename).stem
 
-    style_attr = f' style="{"; ".join(styles)}"' if styles else ""
-    return f'<img src="{path}" alt="{alt}"{style_attr} />'
+    attrs = [f'src="{filename}"', f'alt="{alt}"']
+    if width:
+        attrs.append(f'width="{width}"')
+    if height:
+        attrs.append(f'height="{height}"')
+
+    return f"<img {' '.join(attrs)} />"
 
 
 def process_file(md_path: Path) -> bool:
