@@ -12,6 +12,7 @@ Output:
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -39,6 +40,17 @@ except ImportError:  # When executed as module
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = get_path("data") / "popular.json"
+TITLE_SUFFIX_PATTERNS = (
+    re.compile(r"\s*\|\s*Vividian Repository", flags=re.IGNORECASE),
+    re.compile(r"\s*-\s*Vividian Repository", flags=re.IGNORECASE),
+)
+
+
+def normalize_title(title: str) -> str:
+    normalized = title
+    for pattern in TITLE_SUFFIX_PATTERNS:
+        normalized = pattern.sub("", normalized)
+    return normalized.strip()
 
 
 def get_client(credentials_file: str) -> BetaAnalyticsDataClient:
@@ -80,6 +92,7 @@ def fetch_report(
     for row in response.rows:
         page_path = row.dimension_values[0].value or ""
         page_title = row.dimension_values[1].value or ""
+        page_title = normalize_title(page_title)
         views = int(row.metric_values[0].value or 0)
 
         if not page_path or page_path == "/" or page_path.startswith("/tags/") or page_path.startswith("/category/"):
