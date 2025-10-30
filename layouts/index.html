@@ -17,6 +17,7 @@
             <a href="https://vividian.net/all"> 전체 글 보기</a>
         </p>
     </main>
+    <p></p>
     {{- if gt (len $popularData) 0 }}
     <section class="popular-posts">
         <h3 class="posts-item-note" aria-label="Popular Posts">인기 글 (최근 30일)</h3>
@@ -33,11 +34,14 @@
                 {{- if $page -}}
                     {{ partial "popularCard.html" (dict "Page" $page "Views" .views) }}
                 {{- else -}}
+                    <!-- <article class="post-item post-item--popular"> -->
                     <article class="post-item">
                         <h4 class="post-item-title">
                             <a href="{{ $path }}">{{ .page_title | default $path }}</a>
                         </h4>
-                        <div class="page-content popular-content">조회수 {{ .views }}</div>
+                        <div class="post-item-right">
+                            <span class="post-item-meta">조회수 {{ .views }}</span>
+                        </div>
                     </article>
                 {{- end }}
             {{- end }}

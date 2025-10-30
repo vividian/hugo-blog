@@ -1,0 +1,12 @@
+{{ define "main" }}
+<div class="wrapper search-page" data-search-page>
+    <main class="page-content" aria-label="Search results">
+        <header class="search-page__intro">
+            <h1>{{ .Title }}</h1>
+            <p>상단 검색창에서 입력한 키워드의 결과가 아래에 표시됩니다.</p>
+        </header>
+        <p id="search-message" class="search-message" aria-live="polite"></p>
+        <div id="search-results" class="search-results" aria-live="polite"></div>
+    </main>
+</div>
+{{ end }}

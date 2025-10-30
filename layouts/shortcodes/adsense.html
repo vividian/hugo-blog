@@ -1,11 +1,20 @@
-<br>
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9349922731061739"
-     crossorigin="anonymous"></script>
-<!-- before content -->
-<ins class="adsbygoogle"
-     style="display:inline-block;width:660px;height:90px"
-     data-ad-client="ca-pub-9349922731061739"
-     data-ad-slot="4024915460"></ins>
-<script>
-     (adsbygoogle = window.adsbygoogle || []).push({});
-</script>
+{{ $adsense := .Site.Params.adsense }}
+{{ with $adsense }}
+  {{ $client := .client }}
+  {{ $slot := .slot }}
+  {{ if and $client $slot }}
+    {{ $width := .width | default 660 }}
+    {{ $height := .height | default 90 }}
+    <br>
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={{ $client }}"
+            crossorigin="anonymous"></script>
+    <!-- before content -->
+    <ins class="adsbygoogle"
+         style="display:inline-block;width:{{ $width }}px;height:{{ $height }}px"
+         data-ad-client="{{ $client }}"
+         data-ad-slot="{{ $slot }}"></ins>
+    <script>
+         (adsbygoogle = window.adsbygoogle || []).push({});
+    </script>
+  {{ end }}
+{{ end }}

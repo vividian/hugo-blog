@@ -75,7 +75,7 @@ def main() -> int:
 
     rsync_cmd = [
         "rsync",
-        "-av",
+        "-a",
         "--delete",
         *[item for excl in excludes for item in ("--exclude", excl)],
         "-e",

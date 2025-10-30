@@ -13,3 +13,14 @@
     {{ end }}
   {{ end }}
 {{ end }}
+{{ $robots := "" }}
+{{ with .Params.robots }}
+  {{ $robots = . }}
+{{ else }}
+  {{ if eq .RelPermalink (relLangURL "/search/") }}
+    {{ $robots = "noindex, nofollow" }}
+  {{ end }}
+{{ end }}
+{{ if $robots }}
+  <meta name="robots" content="{{ $robots }}">
+{{ end }}
