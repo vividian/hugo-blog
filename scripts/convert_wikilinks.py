@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Convert Obsidian-style wiki links ([[...]] ) to HTML anchors in public pages."""
+"""Convert Obsidian-style wiki links ([[...]] / ![[...]]) inside Markdown or rendered HTML."""
 
 from __future__ import annotations
 
+import argparse
 import html
 import re
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 try:
     from config_utils import get_path, get_value
@@ -13,10 +15,20 @@ except ImportError:
     from .config_utils import get_path, get_value
 
 CONTENT_DIR = get_path("content")
-PUBLIC_DIR = get_path("public")
 PERMALINKS = get_value("wikilinks.permalinks", {}) or {}
 
-WIKILINK_PATTERN = re.compile(r"\[\[([^\]]+)\]\]")
+WIKILINK_PATTERN = re.compile(r"(!?)\[\[([^\]]+)\]\]")
+YOUTUBE_HOSTS = {
+    "youtube.com",
+    "www.youtube.com",
+    "m.youtube.com",
+    "youtu.be",
+    "www.youtu.be",
+}
+YOUTUBE_ID_PATTERN = re.compile(r"^[\w\-]{11}$")
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"}
+SIZE_PATTERN = re.compile(r"^(?P<width>\d+)(?:x(?P<height>\d+))?$", re.IGNORECASE)
+FRONT_MATTER_PATTERN = re.compile(r"^---\s*\n.*?\n---\s*\n", re.DOTALL)
 
 
 def slugify(value: str) -> str:
@@ -28,25 +40,23 @@ def slugify(value: str) -> str:
 
 def parse_front_matter(md_path: Path) -> dict[str, str]:
     text = md_path.read_text(encoding="utf-8")
-    if not text.startswith("---"):
+    match = FRONT_MATTER_PATTERN.match(text)
+    if not match:
         return {}
-    parts = text.split("---", 2)
-    if len(parts) < 3:
-        return {}
-    front = parts[1]
+    front = match.group(0)
     result: dict[str, str] = {}
     for key in ("title", "slug", "url"):
-        pattern = re.compile(rf"^{key}:\s*[\"']?([^\"'\n]+)", re.MULTILINE)
-        match = pattern.search(front)
-        if match:
-            result[key] = match.group(1).strip()
+        pattern = re.compile(f"^{key}:\\s*[\"']?([^\"'\\n]+)", re.MULTILINE)
+        field = pattern.search(front)
+        if field:
+            result[key] = field.group(1).strip()
     return result
 
 
-def build_mapping() -> dict[str, dict[str, str]]:
+def build_mapping(content_dir: Path) -> dict[str, dict[str, str]]:
     mapping: dict[str, dict[str, str]] = {}
-    for md_path in CONTENT_DIR.rglob("index.md"):
-        rel_parts = md_path.relative_to(CONTENT_DIR).parts
+    for md_path in content_dir.rglob("index.md"):
+        rel_parts = md_path.relative_to(content_dir).parts
         if len(rel_parts) < 2:
             continue
         section = rel_parts[0]
@@ -88,57 +98,193 @@ def find_entry(mapping: dict[str, dict[str, str]], target: str) -> dict[str, str
     return None
 
 
-def convert_file(path: Path, mapping: dict[str, str]) -> bool:
-    text = path.read_text(encoding="utf-8")
-    body_match = re.search(r"(<body[^>]*>)(.*)(</body>)", text, flags=re.IGNORECASE | re.DOTALL)
-    if not body_match:
-        return False
+def render_youtube_embed(video_id: str, label: str | None, width: str | None, height: str | None) -> str:
+    title_attr = html.escape(label or "YouTube video")
+    embed_src = html.escape(f"https://www.youtube.com/embed/{video_id}")
+    width_attr = f' width="{width}"' if width else ""
+    height_attr = ""
+    if height:
+        height_attr = f' height="{height}"'
+    elif width:
+        try:
+            height_val = max(1, round(int(width) * 9 / 16))
+            height_attr = f' height="{height_val}"'
+        except ValueError:
+            pass
+    return (
+        '<div class="video-embed youtube">'
+        f'<iframe src="{embed_src}"{width_attr}{height_attr} '
+        f'title="{title_attr}" frameborder="0" '
+        'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" '
+        'allowfullscreen></iframe>'
+        "</div>"
+    )
 
-    body_start = body_match.start(2)
-    body_end = body_match.end(2)
-    changed = False
 
-    def repl(match: re.Match[str]) -> str:
-        nonlocal changed
-        raw = match.group(1)
-        parts = [p.strip() for p in raw.split("|", 1)]
-        target = parts[0]
-        custom_label = parts[1] if len(parts) > 1 else None
-        entry = find_entry(mapping, target)
-        label = custom_label or (entry.get("title") if entry else target)
+def render_image(src: str, label: str | None, width: str | None, height: str | None) -> str:
+    alt_text = label or Path(src).stem
+    attrs = [
+        f'src="{html.escape(src, quote=True)}"',
+        f'alt="{html.escape(alt_text)}"',
+    ]
+    if width:
+        attrs.append(f' width="{width}"')
+    if height:
+        attrs.append(f' height="{height}"')
+    return f"<img {' '.join(attrs)} />"
 
-        if body_start <= match.start() < body_end:
-            if entry:
-                changed = True
-                url = entry["url"]
-                return f'<a href="{html.escape(url)}">{html.escape(label)}</a>'
-            else:
-                changed = True
-                return html.escape(label)
-        else:
-            return html.escape(label)
 
-    new_text = WIKILINK_PATTERN.sub(repl, text)
-    if changed:
-        path.write_text(new_text, encoding="utf-8")
-    return changed
+def extract_youtube_id(url: str) -> str | None:
+    parsed = urlparse(url)
+    host = parsed.netloc.lower()
+    path = parsed.path
+
+    if host not in YOUTUBE_HOSTS:
+        return None
+
+    if host.endswith("youtu.be"):
+        return path.lstrip("/").split("/", 1)[0]
+    if path.startswith("/watch"):
+        return parse_qs(parsed.query).get("v", [None])[0]
+    if path.startswith("/embed/"):
+        parts = path.split("/")
+        if len(parts) > 2:
+            return parts[2]
+    if path.startswith("/shorts/"):
+        parts = path.split("/")
+        if len(parts) > 2:
+            return parts[2]
+    return None
+
+
+def build_replacement(match: re.Match[str], mapping: dict[str, dict[str, str]], allow_embed: bool) -> tuple[str, bool]:
+    is_embed = match.group(1) == "!"
+    raw = match.group(2)
+
+    parts = [p.strip() for p in raw.split("|")]
+    target = parts[0]
+    extras = parts[1:]
+
+    size_width = size_height = None
+    if extras:
+        size_match = SIZE_PATTERN.match(extras[-1])
+        if size_match:
+            size_width = size_match.group("width")
+            size_height = size_match.group("height")
+            extras = extras[:-1]
+
+    custom_label = "|".join(extras) if extras else None
+
+    target_is_url = target.startswith(("http://", "https://"))
+    youtube_id = extract_youtube_id(target) if target_is_url else None
+
+    if is_embed:
+        if not allow_embed:
+            return match.group(0), False
+        if youtube_id and YOUTUBE_ID_PATTERN.match(youtube_id):
+            return render_youtube_embed(youtube_id, custom_label or target, size_width, size_height), True
+        return render_image(target, custom_label, size_width, size_height), True
+
+    if youtube_id and YOUTUBE_ID_PATTERN.match(youtube_id):
+        if not allow_embed:
+            return match.group(0), False
+        return render_youtube_embed(youtube_id, custom_label or target, size_width, size_height), True
+
+    entry = find_entry(mapping, target)
+    label = custom_label or (entry.get("title") if entry else target)
+
+    if entry:
+        return f'<a href="{html.escape(entry["url"])}">{html.escape(label)}</a>', True
+    if target_is_url:
+        return f'<a href="{html.escape(target, quote=True)}">{html.escape(custom_label or target)}</a>', True
+    return html.escape(label), True
+
+
+def convert_markdown(content_dir: Path, mapping: dict[str, dict[str, str]]) -> int:
+    updated = 0
+    for md_file in content_dir.rglob("*.md"):
+        text = md_file.read_text(encoding="utf-8")
+        match = FRONT_MATTER_PATTERN.match(text)
+        offset = match.end() if match else 0
+        body = text[offset:]
+
+        def repl(mt: re.Match[str]) -> str:
+            replacement, changed = build_replacement(mt, mapping, allow_embed=True)
+            if changed:
+                repl.changed = True  # type: ignore[attr-defined]
+            return replacement
+
+        repl.changed = False  # type: ignore[attr-defined]
+        new_body = WIKILINK_PATTERN.sub(repl, body)
+        if repl.changed:
+            updated += 1
+            md_file.write_text(text[:offset] + new_body, encoding="utf-8")
+    return updated
+
+
+def convert_html(public_dir: Path, mapping: dict[str, dict[str, str]]) -> int:
+    updated = 0
+    for html_file in public_dir.rglob("*.html"):
+        text = html_file.read_text(encoding="utf-8")
+        body_match = re.search(r"(<body[^>]*>)(.*)(</body>)", text, flags=re.IGNORECASE | re.DOTALL)
+        if not body_match:
+            continue
+        body_start = body_match.start(2)
+        body_end = body_match.end(2)
+
+        def repl(mt: re.Match[str]) -> str:
+            allow = body_start <= mt.start() < body_end
+            replacement, changed = build_replacement(mt, mapping, allow_embed=allow)
+            if changed:
+                repl.changed = True  # type: ignore[attr-defined]
+            return replacement
+
+        repl.changed = False  # type: ignore[attr-defined]
+        new_text = WIKILINK_PATTERN.sub(repl, text)
+        if repl.changed:
+            updated += 1
+            html_file.write_text(new_text, encoding="utf-8")
+    return updated
 
 
 def main() -> int:
-    if not PUBLIC_DIR.is_dir():
-        print("public 디렉터리를 찾을 수 없습니다")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--content-dir", type=Path, help="Directory containing Markdown files")
+    parser.add_argument("--public-dir", type=Path, help="Directory containing rendered HTML files")
+    args = parser.parse_args()
+
+    if args.content_dir and args.public_dir:
+        print("--content-dir 와 --public-dir 중 하나만 지정하세요")
         return 1
 
-    mapping = build_mapping()
-    if not mapping:
-        print("위키 링크 매핑 정보가 없습니다")
+    target_dir: Path | None = None
+    mode = "content"
+    if args.content_dir:
+        target_dir = args.content_dir.resolve()
+        if not target_dir.is_dir():
+            print(f"{target_dir} 디렉터리를 찾을 수 없습니다")
+            return 1
+    elif args.public_dir:
+        target_dir = args.public_dir.resolve()
+        if not target_dir.is_dir():
+            print(f"{target_dir} 디렉터리를 찾을 수 없습니다")
+            return 1
+        mode = "public"
+    else:
+        target_dir = CONTENT_DIR
 
-    converted = 0
-    for html_file in PUBLIC_DIR.rglob("*.html"):
-        if convert_file(html_file, mapping):
-            converted += 1
-
-    print(f"위키 링크 변환 완료: {converted}개 파일")
+    if mode == "content":
+        mapping = build_mapping(target_dir)
+        if not mapping:
+            print("위키 링크 매핑 정보가 없습니다")
+        converted = convert_markdown(target_dir, mapping)
+        print(f"위키 링크 변환 완료 (Markdown): {converted}개 파일")
+    else:
+        mapping = build_mapping(CONTENT_DIR)
+        if not mapping:
+            print("위키 링크 매핑 정보가 없습니다")
+        converted = convert_html(target_dir, mapping)
+        print(f"위키 링크 변환 완료 (HTML): {converted}개 파일")
     return 0
 
 
