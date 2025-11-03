@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deploy the Hugo site using configuration from config.yaml."""
+"""Deploy the Hugo site using configuration from hugo.yaml."""
 
 from __future__ import annotations
 

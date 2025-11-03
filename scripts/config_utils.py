@@ -13,7 +13,7 @@ except ModuleNotFoundError as exc:
     raise SystemExit("PyYAML 패키지가 필요합니다. pip install pyyaml 로 설치하세요.") from exc
 
 ROOT = Path(__file__).resolve().parents[1]
-CONFIG_PATH = ROOT / "config.yaml"
+CONFIG_PATH = ROOT / "hugo.yaml"
 
 
 @functools.lru_cache(maxsize=1)
