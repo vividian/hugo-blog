@@ -1,6 +1,8 @@
 {{- define "main" -}}
 {{- $recent := first 5 (sort .Site.RegularPages "Date" "desc") -}}
-{{- $popularData := (site.Data.popular | default (slice)) -}}
+{{- $popularRaw := site.Data.popular | default (slice) -}}
+{{- $topSix := first 6 $popularRaw -}}
+{{- $popularData := first 5 (where $topSix "page_title" "ne" "검색") -}}
 <div class="wrapper list-page">
     <header class="header">
         {{/*
@@ -20,7 +22,7 @@
     <p></p>
     {{- if gt (len $popularData) 0 }}
     <section class="popular-posts">
-        <h3 class="posts-item-note" aria-label="Popular Posts">인기 글 (최근 30일)</h3>
+        <h3 class="posts-item-note" aria-label="Popular Posts">인기 글 (최근 28일)</h3>
         <div class="page-content popular-content" aria-label="Popular Content">
             {{- range $popularData }}
                 {{- $path := .page_path -}}

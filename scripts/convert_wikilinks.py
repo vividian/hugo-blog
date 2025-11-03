@@ -200,28 +200,6 @@ def build_replacement(match: re.Match[str], mapping: dict[str, dict[str, str]], 
     return html.escape(label), True
 
 
-def convert_markdown(content_dir: Path, mapping: dict[str, dict[str, str]]) -> int:
-    updated = 0
-    for md_file in content_dir.rglob("*.md"):
-        text = md_file.read_text(encoding="utf-8")
-        match = FRONT_MATTER_PATTERN.match(text)
-        offset = match.end() if match else 0
-        body = text[offset:]
-
-        def repl(mt: re.Match[str]) -> str:
-            replacement, changed = build_replacement(mt, mapping, allow_embed=True)
-            if changed:
-                repl.changed = True  # type: ignore[attr-defined]
-            return replacement
-
-        repl.changed = False  # type: ignore[attr-defined]
-        new_body = WIKILINK_PATTERN.sub(repl, body)
-        if repl.changed:
-            updated += 1
-            md_file.write_text(text[:offset] + new_body, encoding="utf-8")
-    return updated
-
-
 def convert_html(public_dir: Path, mapping: dict[str, dict[str, str]]) -> int:
     updated = 0
     for html_file in public_dir.rglob("*.html"):
@@ -253,38 +231,21 @@ def main() -> int:
     parser.add_argument("--public-dir", type=Path, help="Directory containing rendered HTML files")
     args = parser.parse_args()
 
-    if args.content_dir and args.public_dir:
-        print("--content-dir 와 --public-dir 중 하나만 지정하세요")
+    if args.content_dir and not args.public_dir:
+        print("Markdown 파일은 수정하지 않습니다. --public-dir 옵션을 사용해 주세요.")
+        return 0
+
+    public_dir = args.public_dir.resolve() if args.public_dir else get_path("public")
+    if not public_dir.is_dir():
+        print(f"{public_dir} 디렉터리를 찾을 수 없습니다")
         return 1
 
-    target_dir: Path | None = None
-    mode = "content"
-    if args.content_dir:
-        target_dir = args.content_dir.resolve()
-        if not target_dir.is_dir():
-            print(f"{target_dir} 디렉터리를 찾을 수 없습니다")
-            return 1
-    elif args.public_dir:
-        target_dir = args.public_dir.resolve()
-        if not target_dir.is_dir():
-            print(f"{target_dir} 디렉터리를 찾을 수 없습니다")
-            return 1
-        mode = "public"
-    else:
-        target_dir = CONTENT_DIR
+    mapping = build_mapping(CONTENT_DIR)
+    if not mapping:
+        print("위키 링크 매핑 정보가 없습니다")
 
-    if mode == "content":
-        mapping = build_mapping(target_dir)
-        if not mapping:
-            print("위키 링크 매핑 정보가 없습니다")
-        converted = convert_markdown(target_dir, mapping)
-        print(f"위키 링크 변환 완료 (Markdown): {converted}개 파일")
-    else:
-        mapping = build_mapping(CONTENT_DIR)
-        if not mapping:
-            print("위키 링크 매핑 정보가 없습니다")
-        converted = convert_html(target_dir, mapping)
-        print(f"위키 링크 변환 완료 (HTML): {converted}개 파일")
+    converted = convert_html(public_dir, mapping)
+    print(f"위키 링크 변환 완료 (HTML): {converted}개 파일")
     return 0
 
 

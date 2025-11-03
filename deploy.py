@@ -37,6 +37,8 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix=temp_prefix) as temp_dir:
         temp_path = Path(temp_dir)
         content_dir = get_path("content")
+        public_dir = get_path("public")
+
         run([
             "rsync",
             "-a",
@@ -45,7 +47,9 @@ def main() -> int:
             f"{temp_path}/",
         ], cwd=ROOT)
 
-        run_python("scripts/convert_obsidian_embeds.py", "--content-dir", str(temp_path))
+        # run_python("scripts/convert_to_webp.py", "--content-dir", str(temp_path))
+        run_python("scripts/convert_to_webp.py", "--content-dir", str(content_dir))
+        run_python("scripts/convert_wikilinks.py", "--content-dir", str(temp_path))
         run_python("scripts/replace_ad_marker.py", "--content-dir", str(temp_path))
 
         hugo_exe = get_value("hugo.executable", "hugo")
@@ -53,7 +57,7 @@ def main() -> int:
         hugo_cmd = [hugo_exe, *hugo_args, "--contentDir", str(temp_path)]
         run(hugo_cmd, cwd=ROOT)
 
-    run_python("scripts/convert_wikilinks.py")
+        run_python("scripts/convert_wikilinks.py", "--public-dir", str(public_dir))
 
     ssh_conf = get_value("ssh_deploy", {}) or {}
     host = ssh_conf.get("host")
@@ -68,7 +72,6 @@ def main() -> int:
         return 1
 
     remote = f"{user}@{host}"
-    public_dir = get_path("public")
 
     ssh_cmd = ["ssh", "-p", port, remote, f"mkdir -p '{drive_public}' '{web_public}'"]
     run(ssh_cmd)

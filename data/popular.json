@@ -1,27 +1,32 @@
 [
   {
-    "page_path": "/pc-nas-랜선-직결/",
-    "page_title": "PC와 시놀로지 나스 랜선 직접 연결 - vividian repository",
-    "views": 25
+    "page_path": "/search/",
+    "page_title": "검색",
+    "views": 36
   },
   {
-    "page_path": "/윈도우11-설치-미디어로-엔터프라이즈-버전-iso-파일-다/",
-    "page_title": "윈도우11 설치 미디어로 엔터프라이즈 버전 ISO 파일 다운로드 받기 - vividian repository",
-    "views": 17
+    "page_path": "/notes/",
+    "page_title": "적바림",
+    "views": 34
   },
   {
-    "page_path": "/필모라filmora-구입했다가-환불-못한-경험/",
-    "page_title": "필모라(Filmora) 환불 경험 - vividian repository",
-    "views": 16
+    "page_path": "/블로그-글-쓰는-변화/",
+    "page_title": "블로그 글 쓰는 변화",
+    "views": 20
+  },
+  {
+    "page_path": "/dividend-and-distribution-records-2025-10/",
+    "page_title": "배당 및 분배금 기록 (25년 10월)",
+    "views": 18
+  },
+  {
+    "page_path": "/how-to-apply-the-korean-language-and-android-auto-and-apple-carplay-versions-for-the-rcd330-plus/",
+    "page_title": "RCD330 PLUS 한글 및 안드로이드 오토, 애플 카플레이 버전 적용 방법",
+    "views": 18
   },
   {
     "page_path": "/router-external-access-synology-ssh-tunneling-settings/",
-    "page_title": "공유기 외부접속, 시놀로지 SSH 터널링 세팅 | Vividian Repository",
-    "views": 12
-  },
-  {
-    "page_path": "/converting-wordpress-to-hugo/",
-    "page_title": "워드프레스를 휴고로 변환하기 | Vividian Repository",
-    "views": 10
+    "page_title": "공유기 외부접속, 시놀로지 SSH 터널링 세팅",
+    "views": 18
   }
 ]
