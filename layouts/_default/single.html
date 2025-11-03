@@ -13,9 +13,15 @@
                 {{ end }}
             </header>
             {{ partial "toc.html" .}}
+            {{ if .Params.reviewPending }}
+            <div class="page-content review-pending">
+                <p>{{ .Params.reviewMessage | default "이 글은 현재 검토 중입니다." }}</p>
+            </div>
+            {{ else }}
             <div class="page-content">
                 {{ .Content }}
             </div>
+            {{ end }}
         </article>
         <!-- <article>
             {{ range .Params.tags }}

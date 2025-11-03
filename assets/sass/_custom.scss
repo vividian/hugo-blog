@@ -130,6 +130,28 @@ body[data-theme="dark"] .site-search__input {
   background-color: rgba(255, 255, 255, 0.04);
 }
 
+.post-item-badge {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0.12rem 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1;
+  border-radius: 999px;
+  background-color: rgba(255, 215, 0, 0.2);
+  color: #f5c400;
+  vertical-align: middle;
+}
+
+.review-pending {
+  padding: 1.6rem 1rem;
+  margin: 1.5rem 0;
+  border-radius: 8px;
+  background-color: rgba(120, 120, 120, 0.12);
+  text-align: center;
+  font-weight: 500;
+}
+
 .search-page {
   max-width: 720px;
   margin: 0 auto;
@@ -182,14 +204,15 @@ body[data-theme="dark"] .site-search__input {
 
 .search-result__excerpt {
   margin: 0;
-  font-size: 0.92rem;
-  line-height: 1.5;
-  opacity: 0.85;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  opacity: 0.68;
   text-align: left;
 }
 
 body[data-theme="dark"] .search-result__meta {
-  opacity: 0.78;
+  // opacity: 0.78;
+  opacity: 0.85;
 }
 //   border-color: rgba(255, 255, 255, 0.08);
 //   background-color: rgba(255, 255, 255, 0.05);
