@@ -5,16 +5,53 @@
   {{ if and $client $slot }}
     {{ $width := .width | default 660 }}
     {{ $height := .height | default 90 }}
-    <br>
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={{ $client }}"
-            crossorigin="anonymous"></script>
-    <!-- before content -->
-    <ins class="adsbygoogle"
-         style="display:inline-block;width:{{ $width }}px;height:{{ $height }}px"
-         data-ad-client="{{ $client }}"
-         data-ad-slot="{{ $slot }}"></ins>
+    <div class="adsense-placeholder"></div>
     <script>
-         (adsbygoogle = window.adsbygoogle || []).push({});
+      (function() {
+        if (window.matchMedia("(max-width: 767px)").matches) {
+          return;
+        }
+
+        var client = "{{ $client }}";
+        var slot = "{{ $slot }}";
+        var width = "{{ $width }}";
+        var height = "{{ $height }}";
+        var placeholder = document.currentScript.previousElementSibling;
+        if (!placeholder) {
+          return;
+        }
+
+        function loadAdsScript() {
+          if (window.__adsbygoogleInitialized) {
+            return Promise.resolve();
+          }
+          return new Promise(function(resolve) {
+            var script = document.createElement("script");
+            script.async = true;
+            script.crossOrigin = "anonymous";
+            script.src = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=" + client;
+            script.onload = function() {
+              window.__adsbygoogleInitialized = true;
+              resolve();
+            };
+            script.onerror = resolve;
+            document.head.appendChild(script);
+          });
+        }
+
+        loadAdsScript().then(function() {
+          var ins = document.createElement("ins");
+          ins.className = "adsbygoogle";
+          ins.style.display = "inline-block";
+          ins.style.width = width + (width.indexOf("%") > -1 ? "" : "px");
+          ins.style.height = height + (height.indexOf("%") > -1 ? "" : "px");
+          ins.setAttribute("data-ad-client", client);
+          ins.setAttribute("data-ad-slot", slot);
+          placeholder.appendChild(ins);
+
+          (adsbygoogle = window.adsbygoogle || []).push({});
+        });
+      })();
     </script>
   {{ end }}
 {{ end }}
