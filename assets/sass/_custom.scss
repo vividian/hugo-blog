@@ -47,7 +47,7 @@ p > code {
 }
 
 .comments {
-  margin-top: 3rem;
+  margin-top: 0.5rem;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   padding-top: 1.5rem;
 }
@@ -59,6 +59,29 @@ p > code {
 
 .comments__body {
   margin-top: 1rem;
+}
+
+.post-ads {
+  margin: 1.5rem 0 1.75rem;
+  text-align: center;
+}
+
+.post-ads--top {
+  margin: 0 0 1.1rem;
+}
+
+.post-ads--bottom {
+  margin-top: 2.25rem;
+}
+
+.post-ads .adsense-placeholder {
+  display: inline-flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.header .post-ads--top {
+  margin-top: 0;
 }
 
 .menu .trigger {
@@ -218,6 +241,168 @@ body[data-theme="dark"] .search-result__meta {
 //   background-color: rgba(255, 255, 255, 0.05);
 // }
 
+.page-toc {
+  margin: 1.25rem 0 2.5rem;
+  padding: 0.75rem 1.4rem 1.2rem;
+  border-radius: 10px;
+  background-color: rgba(110, 110, 110, 0.08);
+  border: 1px solid rgba(110, 110, 110, 0.15);
+}
+
+body[data-theme="dark"] .page-toc {
+  background-color: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.page-toc__title {
+  margin: 0 0 0rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.page-toc #TableOfContents {
+  margin: 0;
+}
+
+.page-toc #TableOfContents ul {
+  list-style: none;
+  margin: 0;
+  padding-left: 0;
+}
+
+.page-toc #TableOfContents li {
+  position: relative;
+  margin-bottom: 0.45rem;
+  padding-left: 1.1rem;
+}
+
+.page-toc #TableOfContents li:last-child {
+  margin-bottom: 0;
+}
+
+.page-toc #TableOfContents li::before {
+  // content: "•";
+  position: absolute;
+  left: 0;
+  top: 0.05rem;
+  color: rgba(110, 110, 110, 0.8);
+  font-size: 0.85rem;
+}
+
+.page-toc #TableOfContents ul ul {
+  padding-left: 1rem;
+  margin-top: 0.35rem;
+}
+
+.page-toc #TableOfContents a {
+  text-decoration: none;
+  color: inherit;
+  opacity: 0.85;
+}
+
+.page-toc #TableOfContents a:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+.tags-page .page-header {
+  text-align: center;
+  margin-bottom: 1.2rem;
+}
+
+.tags-list {
+  max-width: 720px;
+  margin: 0 auto;
+  padding-top: 1.5rem;
+}
+
+.tags-list__intro {
+  margin-bottom: 1.2rem;
+  font-size: 0.95rem;
+  text-align: center;
+  opacity: 0.75;
+}
+
+.tags-list__items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tags-list__items--grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.tags-list__items--list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.tag-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid rgba(110, 110, 110, 0.18);
+  border-radius: 8px;
+  background-color: rgba(110, 110, 110, 0.06);
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+body[data-theme="dark"] .tag-item {
+  background-color: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.tag-item:hover {
+  background-color: rgba(110, 110, 110, 0.1);
+}
+
+.tag-item__link {
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.tag-item__count {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}
+
+.tags-list__items--list .tag-item {
+  border: none;
+  border-bottom: 1px solid rgba(110, 110, 110, 0.2);
+  border-radius: 0;
+  padding: 0.5rem 0;
+  background-color: transparent;
+}
+
+.tag-item--post {
+  align-items: baseline;
+}
+
+.tag-item__meta {
+  margin-left: 1rem;
+  font-size: 0.85rem;
+  opacity: 0.65;
+  white-space: nowrap;
+}
+
+.tags-empty {
+  text-align: center;
+  opacity: 0.65;
+  margin-top: 2rem;
+}
+
+@media (max-width: 1024px) {
+  .tags-list__items--grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 768px) {
   .navbar-search {
     margin-top: 3.5rem;
@@ -247,4 +432,38 @@ body[data-theme="dark"] .search-result__meta {
   .search-result__meta {
     gap: 0.35rem;
   }
+
+  .tags-list {
+    padding-top: 1rem;
+  }
+
+  .tags-page .page-header {
+    margin-bottom: 1rem;
+  }
+
+  .tags-list__items--grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tags-list__intro {
+    margin-bottom: 0.9rem;
+  }
+
+  .tag-item__meta {
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .tags-list__items--grid {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+}
+
+.page-toc + p {
+  margin-top: 0.75rem;   // 원하는 만큼 간격 조정
+}
+
+.page-content > p:first-child {
+  margin-top: 0;         // 초반 문단이 위로 붙지 않도록
 }

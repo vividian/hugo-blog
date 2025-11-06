@@ -1,0 +1,6 @@
+{{ with .Page.TableOfContents }}
+<div class="page-toc">
+  <div class="page-toc__title">글 목록</div>
+  {{ . | safeHTML }}
+</div>
+{{ end }}

@@ -1,5 +1,5 @@
 {{- define "main" -}}
-{{- $recent := first 5 (sort .Site.RegularPages "Date" "desc") -}}
+{{- $recent := first 10 (sort .Site.RegularPages "Date" "desc") -}}
 {{- $popularRaw := site.Data.popular | default (slice) -}}
 {{- $topSix := first 6 $popularRaw -}}
 {{- $popularData := first 5 (where $topSix "page_title" "ne" "검색") -}}

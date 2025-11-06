@@ -1,0 +1,63 @@
+{{ define "main" }}
+<main class="page-main tags-page">
+  <header class="header">
+      <h1 class="header-title center">{{ .Title }}</h1>
+      {{ partial "section-intro.html" . }}
+    <!-- {{ if eq .Kind "term" }}
+      <h1>{{ .Data.Term }}</h1>
+    {{ else }}
+      <h1>{{ .Title }}</h1>
+    {{ end }} -->
+  </header>
+
+  {{ if eq .Kind "taxonomy" }}
+    {{ with .Data.Terms }}
+      {{ $terms := .ByCount }}
+      {{ if gt (len $terms) 0 }}
+        <div class="tags-list">
+          {{ with $.Content }}
+            <!-- <div class="tags-list__intro">
+              {{ . | safeHTML }}
+            </div> -->
+          {{ end }}
+          <ul class="tags-list__items tags-list__items--grid">
+            {{ range $terms }}
+              {{ $label := .Term | default .Page.Title }}
+              <li class="tag-item">
+                <a class="tag-item__link" href="{{ .Page.Permalink }}">{{ $label }}</a>
+                <span class="tag-item__count">{{ .Count }}</span>
+              </li>
+            {{ end }}
+          </ul>
+        </div>
+      {{ else }}
+        <p class="tags-empty">태그가 없습니다.</p>
+      {{ end }}
+    {{ else }}
+      <p class="tags-empty">태그가 없습니다.</p>
+    {{ end }}
+  {{ else if eq .Kind "term" }}
+    {{ $pages := (.Pages.ByDate).Reverse }}
+    {{ if gt (len $pages) 0 }}
+      <div class="tags-list">
+        {{ with .Content }}
+          <div class="tags-list__intro">
+            {{ . | safeHTML }}
+          </div>
+        {{ end }}
+        <ul class="tags-list__items tags-list__items--list">
+          {{ range $pages }}
+            <li class="tag-item tag-item--post">
+              <a class="tag-item__link" href="{{ .Permalink }}">{{ .Title }}</a>
+              <span class="tag-item__meta">{{ .Date.Format "2006-01-02" }}</span>
+            </li>
+          {{ end }}
+        </ul>
+      </div>
+    {{ else }}
+      <p class="tags-empty">이 태그에 해당하는 글이 없습니다.</p>
+    {{ end }}
+  {{ end }}
+
+</main>
+{{ end }}
