@@ -166,3 +166,4 @@ venv.bak/
 author.mailmap
 /blog/data/popular.json
 hugo.yaml
+/resources
