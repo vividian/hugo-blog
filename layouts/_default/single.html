@@ -2,7 +2,32 @@
 <div class="wrapper post">
     <main class="page-content" aria-label="Content">
         <article>
+            {{ $scratch := newScratch }}
+            {{ $scratch.Set "showTopAd" false }}
+            {{ $scratch.Set "showBottomAd" false }}
+            {{ with .Site.Params.adsense }}
+                {{ with .show_top }}
+                    {{ $scratch.Set "showTopAd" . }}
+                {{ end }}
+                {{ with .show_bottom }}
+                    {{ $scratch.Set "showBottomAd" . }}
+                {{ end }}
+                {{ with .show_bottom }}
+                    {{ $scratch.Set "showBottomAd" . }}
+                {{ end }}
+            {{ end }}
+            {{ if isset .Params "adsense_top" }}
+                {{ $scratch.Set "showTopAd" .Params.adsense_top }}
+            {{ end }}
+            {{ if isset .Params "show_bottom" }}
+                {{ $scratch.Set "showBottomAd" .Params.show_bottom }}
+            {{ end }}
             <header class="header">
+                {{ if $scratch.Get "showTopAd" }}
+                <div class="post-ads post-ads--top">
+                    {{ partial "adsense.html" . }}
+                </div>
+                {{ end }}
                 <h1 class="header-title">{{ .Title }}</h1>
                 {{ $configDateFormat := .Site.Params.dateFormat | default ":date_medium" }}
                 {{ with .Date }}
@@ -22,15 +47,18 @@
                 {{ .Content }}
             </div>
             {{ end }}
+            {{ if $scratch.Get "showBottomAd" }}
+            <div class="post-ads post-ads--bottom">
+                {{ partial "adsense.html" . }}
+            </div>
+            {{ end }}
         </article>
         <!-- <article>
             {{ range .Params.tags }}
                 <a href="{{ "tags/" | relLangURL }}{{ . | urlize }}">{{ . }}</a>
             {{ end }}
         </article> -->
-        <p>
-            {{- partial "comments.html" . -}}
-        </p>
+        {{- partial "comments.html" . -}}
     </main>
 </div>
 {{ end }}
