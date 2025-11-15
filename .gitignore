@@ -158,12 +158,11 @@ venv.bak/
 *~ 
 
 # blog
-/content
-/public
-/static
-/themes
+content/
+public/
+resources/
+config/
+data/
+static/wordpress/
 .hugo_build.lock
 author.mailmap
-/blog/data/popular.json
-hugo.yaml
-/resources
