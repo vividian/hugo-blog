@@ -467,3 +467,15 @@ body[data-theme="dark"] .tag-item {
 .page-content > p:first-child {
   margin-top: 0;         // 초반 문단이 위로 붙지 않도록
 }
+
+.portfolio-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0px;          /* 원하는 간격 */
+  align-items: center;
+}
+.portfolio-stack img {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0;          /* 기본 margin 제거 */
+}
