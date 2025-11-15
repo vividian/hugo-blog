@@ -71,7 +71,8 @@ def main():
 
     # 원격지 경로 설정 (drive_public 경로를 기반으로)
     remote_blog_root = Path(drive_public).parent
-    remote_config_path = remote_blog_root / "config"
+    # remote_config_path = remote_blog_root / "config"
+    remote_config_path = remote_blog_root
 
     # rsync 명령어 구성
     rsync_cmd = [
