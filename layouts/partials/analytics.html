@@ -1,0 +1,9 @@
+{{ if not (or .Params.no_ga .Site.Params.disableGA) }}
+<script async src="https://www.googletagmanager.com/gtag/js?id=GA-ID"></script>
+<script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'GA-ID');
+</script>
+{{ end }}
