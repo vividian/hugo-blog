@@ -2,6 +2,40 @@ import subprocess
 import yaml
 from pathlib import Path
 
+
+def run_process(cmd, *, cwd=None, capture=False):
+    return subprocess.run(
+        cmd,
+        check=True,
+        cwd=cwd,
+        text=True,
+        capture_output=capture,
+        encoding="utf-8",
+    )
+
+
+def git_push_blog(root_dir: Path) -> None:
+    print("blog 저장소 변경 사항 푸시 중...")
+    run_process(["git", "push"], cwd=root_dir)
+    print("blog 저장소 푸시 완료.")
+
+
+def git_sync_content(content_dir: Path) -> None:
+    if not content_dir.exists():
+        print(f"경고: 콘텐츠 디렉터리를 찾을 수 없습니다: {content_dir}")
+        return
+    print("content 저장소 상태 확인 중...")
+    status = run_process(["git", "status", "--porcelain"], cwd=content_dir, capture=True)
+    if status.stdout.strip():
+        print("변경 사항을 발견했습니다. 커밋을 생성합니다.")
+        run_process(["git", "add", "-A"], cwd=content_dir)
+        run_process(["git", "commit", "-m", "게시글 업데이트"], cwd=content_dir)
+    else:
+        print("커밋할 변경 사항이 없어 커밋을 생략합니다.")
+    print("content 저장소 푸시 중...")
+    run_process(["git", "push"], cwd=content_dir)
+    print("content 저장소 푸시 완료.")
+
 def main():
     """
     로컬 config 폴더를 원격 NAS의 config 폴더와 동기화합니다.
@@ -55,17 +89,17 @@ def main():
 
     # rsync 실행
     try:
-        process = subprocess.run(
-            rsync_cmd, 
-            check=True, 
-            capture_output=True, 
-            text=True,
-            encoding='utf-8'
+        process = run_process(
+            rsync_cmd,
+            capture=True,
         )
-        print("STDOUT:", process.stdout)
+        if process.stdout:
+            print("STDOUT:", process.stdout)
         if process.stderr:
             print("STDERR:", process.stderr)
         print("동기화가 성공적으로 완료되었습니다.")
+        git_push_blog(root_dir)
+        git_sync_content(root_dir / "content")
     except subprocess.CalledProcessError as e:
         print(f"오류: 동기화 중 오류가 발생했습니다 (Exit Code: {e.returncode}).")
         print("STDOUT:", e.stdout)
