@@ -8,6 +8,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+import argparse
+
 from scripts import fetch_top_posts
 from scripts.config_utils import get_path, get_value, load_config
 
@@ -24,8 +26,27 @@ def run_python(script: str, *args: str) -> None:
     run([PYTHON, script, *args], cwd=ROOT)
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Deploy Hugo site")
+    parser.add_argument(
+        "--full-portfolio",
+        action="store_true",
+        help="Rebuild all historical portfolio reports instead of only the latest month",
+    )
+    return parser.parse_args()
+
+
 def main() -> int:
+    args = parse_args()
     config = load_config()
+
+    try:
+        if args.full_portfolio:
+            run_python("scripts/update_fa.py", "--full")
+        else:
+            run_python("scripts/update_fa.py")
+    except Exception as exc:
+        print(f"(경고) 포트폴리오 계산 스크립트 실행 중 오류가 발생했습니다: {exc}")
 
     try:
         fetch_top_posts.main()
@@ -78,7 +99,7 @@ def main() -> int:
 
     rsync_cmd = [
         "rsync",
-        "-a",
+        "-av",
         "--delete",
         *[item for excl in excludes for item in ("--exclude", excl)],
         "-e",
