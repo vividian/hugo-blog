@@ -72,7 +72,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--target",
         type=Path,
-        help="빌드된 public을 복사할 로컬 경로 (기본: hugo.yaml의 ssh_deploy.web_public)",
+        help="빌드된 public을 복사할 로컬 경로 (지정하지 않으면 동기화를 생략합니다)",
     )
     return parser.parse_args()
 
@@ -175,17 +175,11 @@ def main() -> int:
 
     # 배포 대상 경로 결정
     target_path = args.target
-    if target_path is None:
-        # --target 인자가 없으면 설정 파일에서 경로를 찾음
-        target_value = get_value("ssh_deploy.web_public")
-        if not target_value:
-            print("web_public 경로를 알 수 없습니다. --target 옵션을 지정하세요.")
-            return 1
-        target_path = Path(target_value)
-
-    # 최종 목적지로 동기화
-    sync_to_target(public_dir, target_path)
-    print(f"배포 완료: {public_dir} → {target_path}")
+    if target_path:
+        sync_to_target(public_dir, target_path)
+        print(f"배포 완료: {public_dir} → {target_path}")
+    else:
+        print(f"빌드 완료: {public_dir} (동기화 생략)")
     return 0
 
 
