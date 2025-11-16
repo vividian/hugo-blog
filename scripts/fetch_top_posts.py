@@ -17,17 +17,22 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-import importlib.metadata as stdlib_metadata
-
-try:
-    stdlib_metadata.packages_distributions  # type: ignore[attr-defined]
-except AttributeError:
+def _ensure_metadata_backport() -> None:
     try:
-        import importlib_metadata as backport_metadata  # type: ignore[import-not-found]
+        from importlib import metadata as stdlib_metadata  # type: ignore
+        stdlib_metadata.packages_distributions  # type: ignore[attr-defined]
+    except AttributeError:
+        try:
+            import importlib_metadata  # type: ignore[import-not-found]
 
-        stdlib_metadata.packages_distributions = backport_metadata.packages_distributions  # type: ignore[attr-defined]
-    except ModuleNotFoundError:
-        pass
+            import importlib.metadata as stdlib_metadata
+
+            stdlib_metadata.packages_distributions = importlib_metadata.packages_distributions  # type: ignore[attr-defined]
+        except ModuleNotFoundError:
+            pass
+
+
+_ensure_metadata_backport()
 
 try:
     # Google Analytics 라이브러리 임포트
