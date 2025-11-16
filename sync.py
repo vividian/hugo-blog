@@ -1,3 +1,4 @@
+import argparse
 import subprocess
 import yaml
 from pathlib import Path
@@ -36,11 +37,22 @@ def git_sync_content(content_dir: Path) -> None:
     run_process(["git", "push"], cwd=content_dir)
     print("content 저장소 푸시 완료.")
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="NAS config sync & git push helper")
+    parser.add_argument(
+        "--config",
+        action="store_true",
+        help="Run rsync to sync config/ to NAS. (Default: skip rsync)",
+    )
+    return parser.parse_args()
+
+
 def main():
     """
     로컬 config 폴더를 원격 NAS의 config 폴더와 동기화합니다.
     config/config.yaml 파일에서 SSH 접속 정보를 읽어 사용합니다.
     """
+    args = parse_args()
     # 블로그 루트 디렉토리 설정
     root_dir = Path(__file__).parent.resolve()
     config_path = root_dir / "config" / "config.yaml"
@@ -85,30 +97,31 @@ def main():
         f"{user}@{host}:{remote_config_path}"
     ]
 
-    print("NAS와 config 폴더 동기화를 시작합니다...")
-    print(f"실행 명령어: {' '.join(rsync_cmd)}")
+    if args.config:
+        print("NAS와 config 폴더 동기화를 시작합니다...")
+        print(f"실행 명령어: {' '.join(rsync_cmd)}")
+        try:
+            process = run_process(
+                rsync_cmd,
+                capture=True,
+            )
+            if process.stdout:
+                print("STDOUT:", process.stdout)
+            if process.stderr:
+                print("STDERR:", process.stderr)
+            print("동기화가 성공적으로 완료되었습니다.")
+        except subprocess.CalledProcessError as e:
+            print(f"오류: 동기화 중 오류가 발생했습니다 (Exit Code: {e.returncode}).")
+            print("STDOUT:", e.stdout)
+            print("STDERR:", e.stderr)
+        except FileNotFoundError:
+            print("오류: 'rsync' 명령을 찾을 수 없습니다. rsync가 설치되어 있고 PATH에 등록되어 있는지 확인해주세요.")
+        except Exception as e:
+            print(f"알 수 없는 오류가 발생했습니다: {e}")
+            return
 
-    # rsync 실행
-    try:
-        process = run_process(
-            rsync_cmd,
-            capture=True,
-        )
-        if process.stdout:
-            print("STDOUT:", process.stdout)
-        if process.stderr:
-            print("STDERR:", process.stderr)
-        print("동기화가 성공적으로 완료되었습니다.")
-        git_push_blog(root_dir)
-        git_sync_content(root_dir / "content")
-    except subprocess.CalledProcessError as e:
-        print(f"오류: 동기화 중 오류가 발생했습니다 (Exit Code: {e.returncode}).")
-        print("STDOUT:", e.stdout)
-        print("STDERR:", e.stderr)
-    except FileNotFoundError:
-        print("오류: 'rsync' 명령을 찾을 수 없습니다. rsync가 설치되어 있고 PATH에 등록되어 있는지 확인해주세요.")
-    except Exception as e:
-        print(f"알 수 없는 오류가 발생했습니다: {e}")
+    git_push_blog(root_dir)
+    git_sync_content(root_dir / "content")
 
 if __name__ == "__main__":
     main()
