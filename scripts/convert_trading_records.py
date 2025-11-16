@@ -8,26 +8,36 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 CONFIG_PATH = ROOT_DIR / "config" / "config.yaml"
 
 
-def _load_trading_path() -> Path:
+def _resolve_path(path_str: str) -> Path:
+    path = Path(path_str)
+    if not path.is_absolute():
+        path = ROOT_DIR / path
+    return path
+
+
+def _load_paths() -> tuple[Path, Path]:
     config = {}
     if CONFIG_PATH.exists():
         with CONFIG_PATH.open("r", encoding="utf-8") as fp:
             config = yaml.safe_load(fp) or {}
     paths = (config.get("financial_assets") or {}).get("paths") or {}
-    rel_path = paths.get("trading_records", "config/trading_records.csv")
-    return ROOT_DIR / rel_path
+    csv_path = _resolve_path(paths.get("trading_records", {})
+    md_path = _resolve_path(paths.get("trading_records_md", {})
+    return csv_path, md_path
 
 
-TRADING_RECORDS_PATH = _load_trading_path()
+CSV_PATH, MD_PATH = _load_paths()
 
 def convert_md_to_csv():
     """
     trading_records.md 파일의 마크다운 테이블을 trading_records.csv 파일로 변환합니다.
     """
-    # 경로 설정
-    # .md 파일은 .csv 파일과 이름은 같고 확장자만 다르다고 가정합니다.
-    csv_file_path = TRADING_RECORDS_PATH
-    md_file_path = csv_file_path.with_suffix(".md")
+    csv_file_path = CSV_PATH
+    md_file_path = MD_PATH
+
+    if not md_file_path.exists():
+        print(f"Markdown 원본을 찾을 수 없습니다: {md_file_path}")
+        return
 
     with open(md_file_path, 'r', encoding='utf-8') as md_file:
         content = md_file.read()
