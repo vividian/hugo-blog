@@ -1102,7 +1102,7 @@ def plot_total_holdings(holdings_df: pd.DataFrame, output_path: Path) -> Path:
         bbox=[0.0, 0.05, 1.0, 0.97]
     )
     table.auto_set_font_size(False)
-    table.set_fontsize(13)
+    table.set_fontsize(12)
     table.scale(1.0, 1.15)
 
     header_color = "#2c3e50"
