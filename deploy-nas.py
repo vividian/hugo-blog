@@ -89,6 +89,8 @@ def build_site(full_portfolio: bool) -> Path:
     """
     # 1. 포트폴리오 데이터 업데이트
     try:
+        run_python("scripts/convert_fa_md.py")
+        run_python("scripts/convert_trading_records.py")
         if full_portfolio:
             run_python("scripts/update_fa.py", "--full")
         else:

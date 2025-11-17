@@ -49,6 +49,8 @@ def main() -> int:
 
     try:
         # 자산현황 업데이트 스크립트를 실행합니다.
+        run_python("scripts/convert_fa_md.py")
+        run_python("scripts/convert_trading_records.py")
         if args.full:
             run_python("scripts/update_fa.py", "--full")
         else:
