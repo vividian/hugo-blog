@@ -43,7 +43,7 @@ def _load_fa_paths() -> Dict[str, Path]:
 
     return {
         "trading_records": resolve("trading_records", "config/trading_records.csv"),
-        "static_dir": resolve("static_dir", "static/fa"),
+        "static_dir": resolve("static_dir", "content/fa"),
         "build_info": resolve("build_info", "data/fa.json"),
         "yaml": resolve("yaml", "config/fa.yaml"),
     }
