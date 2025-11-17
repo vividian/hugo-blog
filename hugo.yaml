@@ -50,9 +50,9 @@ menu:
     - name: "시놀로지"
       url: "/synology/"
       weight: 7
-    - name: "주식"
-      url: "/stocks/"
-      weight: 8
+    # - name: "주식"
+    #   url: "/stocks/"
+    #   weight: 8
     - name: "배당기록"
       url: "/dividends/"
       weight: 9
