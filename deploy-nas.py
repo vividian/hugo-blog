@@ -135,7 +135,7 @@ def build_site(full_portfolio: bool) -> Path:
         # 5. Hugo 빌드 실행
         hugo_exe = get_value("hugo.executable", "hugo")
         hugo_args = get_value("hugo.args", []) or []
-        hugo_cmd = [hugo_exe, *hugo_args, "--contentDir", str(temp_path)]
+        hugo_cmd = [hugo_exe, *hugo_args, "--config hugo.yaml --contentDir", str(temp_path)]
         run(hugo_cmd)
 
         # 6. 빌드 후처리
