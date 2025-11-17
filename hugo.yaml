@@ -71,6 +71,7 @@ permalinks:
   daily: "/daily/:slug/"
   travel: "/travel/:slug/"
   gourmet: "/gourmet/:slug/"
+  reviews: "/reviews/:slug/"
   synology: "/synology/:slug/"
   stocks: "/stocks/:slug/"
   dividends: "/dividends/:slug/"
