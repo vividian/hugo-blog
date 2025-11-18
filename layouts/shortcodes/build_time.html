@@ -1,0 +1,3 @@
+{{ with site.Data.built_at }}
+<p>빌드 시각: {{ . | time.Format "2006-01-02 15:04:05" }}</p>
+{{ end }}
