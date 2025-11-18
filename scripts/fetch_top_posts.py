@@ -32,7 +32,10 @@ def _ensure_metadata_backport() -> None:
 
             importlib_metadata_module.packages_distributions = importlib_metadata.packages_distributions  # type: ignore[attr-defined]
         except ModuleNotFoundError:
-            pass
+            # 최소한 빈 함수라도 주입해 AttributeError를 방지
+            import importlib.metadata as stdlib_metadata
+
+            stdlib_metadata.packages_distributions = lambda: {}  # type: ignore[attr-defined]
 
 
 _ensure_metadata_backport()
