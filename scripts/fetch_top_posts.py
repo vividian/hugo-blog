@@ -28,6 +28,9 @@ def _ensure_metadata_backport() -> None:
             import importlib.metadata as stdlib_metadata
 
             stdlib_metadata.packages_distributions = importlib_metadata.packages_distributions  # type: ignore[attr-defined]
+            import importlib.metadata as importlib_metadata_module  # type: ignore
+
+            importlib_metadata_module.packages_distributions = importlib_metadata.packages_distributions  # type: ignore[attr-defined]
         except ModuleNotFoundError:
             pass
 

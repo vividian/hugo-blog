@@ -11,6 +11,8 @@ CONFIG_PATH = ROOT_DIR / "config" / "config.yaml"
 
 
 def _resolve_path(path_str: str) -> Path:
+    if not isinstance(path_str, (str, bytes)):
+        return ROOT_DIR / "content/fa/fa.md"
     path = Path(path_str)
     if not path.is_absolute():
         path = ROOT_DIR / path
