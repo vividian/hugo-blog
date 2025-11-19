@@ -86,6 +86,7 @@ ACCOUNT_TITLES = {
     "title_assets_trend": "◉ 계좌별 자산 추세",
     "title_account_assets": "◉ 전체 계좌별 자산 현황 (투자금, 평가금, 수익금 등)",
     "title_total_holdings": "◉ 실시간 보유종목 현황",
+    "title_trading_history": "◉ 보유종목 거래내역",
     "title_monthly_dividends": "◉ 월별 배당금 및 분배금 현황 (최근 12개월)",
     "title_usa_detail": "◉ 상세계좌: US Stock (SPLG:IEF:SGOV = 7:2:1)",
     "title_kor1_detail": "◉ 상세계좌: Krean Stock1 (리츠)",
@@ -100,6 +101,7 @@ CONTENT_TITLE_KEYS = {
     "assets_trend": "title_assets_trend",
     "account_assets": "title_account_assets",
     "total_holdings": "title_total_holdings",
+    "trading_history": "title_trading_history",
     "monthly_dividends": "title_monthly_dividends",
 }
 
@@ -1154,6 +1156,98 @@ def plot_total_holdings(holdings_df: pd.DataFrame, output_path: Path) -> Path:
     return True
 
 
+def plot_monthly_trading_history(records: pd.DataFrame,
+                          fx_series: pd.Series,
+                          month_end: pd.Timestamp,
+                          output_path: Path) -> Path:
+    """해당 월 거래 내역을 텍스트 형태로 정리해 저장한다."""
+    period = month_end.to_period("M")
+    start = period.start_time
+    end = period.end_time
+    month_records = records[(records["일자"] >= start) & (records["일자"] <= end)].copy()
+    if month_records.empty:
+        raise ValueError("해당 월 거래 내역이 없습니다.")
+
+    buy_total = sell_total = invest_total = div_total = 0.0
+    lines: List[Tuple[str, str]] = []
+
+    def fmt_currency(val: float) -> str:
+        return f"{val:,.0f}"
+
+    month_records = month_records.sort_values("일자", ascending=False)
+    for _, row in month_records.iterrows():
+        date = pd.Timestamp(row["일자"])
+        date_str = f"{date:%Y년 %m월 %d일}"
+        account = account_label(str(row.get("계좌", "")).strip())
+        symbol = str(row.get("종목", "")).strip()
+        qty = row.get("수량")
+        price = row.get("단가")
+        dividend = row.get("배당")
+        invest = row.get("투자금")
+
+        has_qty_price = pd.notna(qty) and pd.notna(price) and qty != 0
+        has_dividend = pd.notna(dividend) and dividend != 0
+        has_invest = pd.notna(invest) and invest != 0
+
+        if has_qty_price:
+            trade_amt = convert_to_krw(row["계좌"], float(qty) * float(price), date, fx_series)
+            unit_price = convert_to_krw(row["계좌"], float(price), date, fx_series)
+            if qty > 0:
+                buy_total += trade_amt
+                lines.append((
+                    "buy",
+                    f"{date_str} - (매수) {account}: {symbol} {fmt_currency(trade_amt)}원 매수 (단가 {fmt_currency(unit_price)}원, {abs(qty):g}주)"
+                ))
+            else:
+                sell_total += abs(trade_amt)
+                lines.append((
+                    "sell",
+                    f"{date_str} - (매도) {account}: {symbol} {fmt_currency(abs(trade_amt))}원 매도 (단가 {fmt_currency(unit_price)}원, {abs(qty):g}주)"
+                ))
+        elif has_dividend:
+            div_amt = convert_to_krw(row["계좌"], float(dividend), date, fx_series)
+            div_total += div_amt
+            native_str = "" if row["계좌"] not in USD_ACCOUNTS else f" ({dividend}달러)"
+            lines.append((
+                "div",
+                f"{date_str} - (배당금) {account}: {symbol} 배당 {fmt_currency(div_amt)}원 수령{native_str}"
+            ))
+        elif has_invest:
+            invest_amt = convert_to_krw(row["계좌"], float(invest), date, fx_series)
+            invest_total += invest_amt
+            lines.append((
+                "invest",
+                f"{date_str} - (투자금) {account}: 투자금 {fmt_currency(invest_amt)}원 증액"
+            ))
+
+    summary = f"{period.year}년 {period.month:02d}월 투자금: {fmt_currency(invest_total)}원, 매수: {fmt_currency(buy_total)}원, 매도: {fmt_currency(sell_total)}원, 배당금: {fmt_currency(div_total)}원"
+
+    _configure_matplotlib()
+    line_count = len(lines) + 1
+    fig_height = max(4.0, 1.0 + 0.35 * line_count)
+    fig, ax = plt.subplots(figsize=(12, fig_height), dpi=FIG_DPI)
+    fig.patch.set_facecolor(CANVAS_BG_COLOR)
+    ax.axis("off")
+
+    colors = {
+        "buy": "#d63031",
+        "sell": "#0984e3",
+        "invest": "#2c3e50",
+        "div": "#2c3e50",
+    }
+
+    y = 0.95
+    ax.text(0.0, y, summary, ha="left", va="top", fontsize=14, fontweight="bold", transform=ax.transAxes, color="#2c3e50")
+    y -= 0.07
+    for kind, text in lines:
+        ax.text(0.0, y, text, ha="left", va="top", fontsize=13, transform=ax.transAxes, color=colors.get(kind, "#2c3e50"))
+        y -= 0.055
+
+    ax.set_ylim(0, 1)
+    ax.set_xlim(0, 1)
+    return _save_canvas(fig, output_path, f"월별 거래 내역 저장 완료: {output_path}", pad_inches=0.65, bbox="tight")
+
+
 def generate_month_reports(prefix: str,
                            output_dir: Path,
                            records: pd.DataFrame,
@@ -1162,6 +1256,7 @@ def generate_month_reports(prefix: str,
                            monthly_prices_df: Optional[pd.DataFrame] = None,) -> Dict[str, Path]:
     """특정 월의 모든 리포트(차트, 데이터)를 생성하고 파일 경로를 반환한다."""
     outputs: Dict[str, Path] = {}
+
     def save_title(key_name: Optional[str]) -> Optional[Path]:
         return _save_title(prefix, output_dir, key_name, outputs)
 
@@ -1193,6 +1288,11 @@ def generate_month_reports(prefix: str,
         plot_total_holdings(holdings_df, holdings_path)
         outputs["total_holdings"] = holdings_path
         save_title(CONTENT_TITLE_KEYS.get("total_holdings"))
+
+        trading_history_path = output_dir / f"{prefix}_trading_history.webp"
+        plot_monthly_trading_history(records, fx_series, month_end, trading_history_path)
+        outputs["trading_history"] = trading_history_path
+        save_title(CONTENT_TITLE_KEYS.get("trading_history"))
 
         for account in DETAIL_ACCOUNTS:
             detail_path = output_dir / f"{prefix}_{account}_detail.webp"
@@ -1435,6 +1535,7 @@ def main() -> None:
         "account_assets": "latest_account_assets.webp",
         "monthly_dividends": "latest_monthly_dividends.webp",
         "total_holdings": "latest_total_holdings.webp",
+        "trading_history": "latest_trading_history.webp",
     }
     for account in DETAIL_ACCOUNTS:
         latest_map[f"{account}_detail"] = f"latest_{account}_detail.webp"
