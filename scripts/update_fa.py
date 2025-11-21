@@ -88,8 +88,8 @@ ACCOUNT_TITLES = {
     "title_total_holdings": "◉ 실시간 보유종목 현황",
     "title_trading_history": "◉ 보유종목 거래내역",
     "title_monthly_dividends": "◉ 월별 배당금 및 분배금 현황 (최근 12개월)",
-    "title_usa_detail": "◉ 상세계좌: US Stock (SPLG:IEF:SGOV = 7:2:1)",
-    "title_kor1_detail": "◉ 상세계좌: Krean Stock1 (리츠)",
+    "title_usa_detail": "◉ 상세계좌: 미국주식 (SPYM:IEF:SGOV = 7:2:1)",
+    "title_kor1_detail": "◉ 상세계좌: 국내주식1 (리츠)",
     "title_sema_detail": "◉ 상세계좌: SEMA (S&P500-FD:SAVING = 7:3)",
     "title_irp_detail": "◉ 상세계좌: IRP (S&P500:KOFR = 7:3)",
     "title_psf1_detail": "◉ 상세계좌: 연금저축1 (S&P500:IEF:MMA = 7:2:1)",
@@ -669,7 +669,8 @@ def compute_positions(trades: pd.DataFrame, symbol_map: Dict[str, AssetConfig], 
             krw_flow = convert_to_krw(account, native_amount, trade_date, fx_series)
 
             total_qty += qty
-            total_cost += krw_flow
+            if qty > 0:
+                total_cost += krw_flow
 
             if total_qty <= 0:
                 total_qty = 0.0
