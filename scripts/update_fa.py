@@ -668,9 +668,14 @@ def compute_positions(trades: pd.DataFrame, symbol_map: Dict[str, AssetConfig], 
             native_amount = price * qty
             krw_flow = convert_to_krw(account, native_amount, trade_date, fx_series)
 
+            prev_qty = total_qty
             total_qty += qty
             if qty > 0:
                 total_cost += krw_flow
+            else:
+                if prev_qty > 0:
+                    avg_cost = total_cost / prev_qty if prev_qty else 0.0
+                    total_cost -= avg_cost * abs(qty)
 
             if total_qty <= 0:
                 total_qty = 0.0
@@ -1246,7 +1251,11 @@ def plot_monthly_trading_history(records: pd.DataFrame,
 
     ax.set_ylim(0, 1)
     ax.set_xlim(0, 1)
-    return _save_canvas(fig, output_path, f"월별 거래 내역 저장 완료: {output_path}", pad_inches=0.65, bbox="tight")
+    
+    _save_canvas(fig, output_path, f"월별 거래 내역 저장 완료: {output_path}", pad_inches=0.65, bbox="tight")
+    _crop_top_inches(output_path, inches=0.9)
+
+    return True
 
 
 def generate_month_reports(prefix: str,
