@@ -1,5 +1,6 @@
 import argparse
 import subprocess
+import sys
 import yaml
 from pathlib import Path
 
@@ -43,6 +44,11 @@ def parse_args() -> argparse.Namespace:
         "--config",
         action="store_true",
         help="Run rsync to sync config/ to NAS. (Default: skip rsync)",
+    )
+    parser.add_argument(
+        "--deploy",
+        action="store_true",
+        help="Run deploy.py --nas after syncing Git repositories.",
     )
     return parser.parse_args()
 
@@ -122,6 +128,9 @@ def main():
 
     git_push_blog(root_dir)
     git_sync_content(root_dir / "content")
+    if args.deploy:
+        print("deploy.py --nas 실행 중...")
+        run_process([sys.executable, "deploy.py", "--nas"], cwd=root_dir)
 
 if __name__ == "__main__":
     main()
