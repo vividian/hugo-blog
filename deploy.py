@@ -39,12 +39,24 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="최신 월간 보고서 대신 전체 자산현황 보고서를 다시 생성합니다.",
     )
+    parser.add_argument(
+        "--nas",
+        action="store_true",
+        help="NAS 모드로 실행하여 deploy-nas.py와 동일하게 동작합니다.",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     """메인 배포 로직을 실행합니다."""
     args = parse_args()
+    if args.nas:
+        nas_cmd = [PYTHON, "deploy-nas.py"]
+        if args.full:
+            nas_cmd.append("--full-portfolio")
+        run(nas_cmd, cwd=ROOT)
+        return 0
+
     config = load_config()
 
     try:
