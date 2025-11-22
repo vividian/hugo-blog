@@ -1219,7 +1219,9 @@ def plot_monthly_trading_history(records: pd.DataFrame,
                 f"{date_str} - (배당금) {account}: {symbol} 배당 {fmt_currency(div_amt)}원 수령{native_str}"
             ))
         elif has_invest:
-            invest_amt = convert_to_krw(row["계좌"], float(invest), date, fx_series)
+            invest_amt = float(str(invest).replace(",", "")) if invest else 0.0
+            if account in USD_ACCOUNTS:
+                invest_amt = convert_to_krw(row["계좌"], invest_amt, date, fx_series)
             invest_total += invest_amt
             lines.append((
                 "invest",
