@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import html
+import os
 import re
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -202,8 +203,17 @@ def build_replacement(match: re.Match[str], mapping: dict[str, dict[str, str]], 
 
 def convert_html(public_dir: Path, mapping: dict[str, dict[str, str]]) -> int:
     updated = 0
-    for html_file in public_dir.rglob("*.html"):
-        text = html_file.read_text(encoding="utf-8")
+    def iter_html_files(root: Path):
+        for dirpath, dirnames, filenames in os.walk(root, topdown=True):
+            for filename in filenames:
+                if filename.endswith(".html"):
+                    yield Path(dirpath) / filename
+
+    for html_file in iter_html_files(public_dir):
+        try:
+            text = html_file.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            continue
         body_match = re.search(r"(<body[^>]*>)(.*)(</body>)", text, flags=re.IGNORECASE | re.DOTALL)
         if not body_match:
             continue
