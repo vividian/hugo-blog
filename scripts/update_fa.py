@@ -1180,7 +1180,8 @@ def plot_monthly_trading_history(records: pd.DataFrame,
     for _, row in month_records.iterrows():
         date = pd.Timestamp(row["일자"])
         date_str = f"{date:%Y년 %m월 %d일}"
-        account = account_label(str(row.get("계좌", "")).strip())
+        acct_code = str(row.get("계좌", "")).strip()
+        account = account_label(acct_code)
         symbol = str(row.get("종목", "")).strip()
         qty = row.get("수량")
         price = row.get("단가")
@@ -1192,8 +1193,8 @@ def plot_monthly_trading_history(records: pd.DataFrame,
         has_invest = pd.notna(invest) and invest != 0
 
         if has_qty_price:
-            trade_amt = convert_to_krw(row["계좌"], float(qty) * float(price), date, fx_series)
-            unit_price = convert_to_krw(row["계좌"], float(price), date, fx_series)
+            trade_amt = convert_to_krw(acct_code, float(qty) * float(price), date, fx_series)
+            unit_price = convert_to_krw(acct_code, float(price), date, fx_series)
             if qty > 0:
                 buy_total += trade_amt
                 lines.append((
@@ -1206,18 +1207,18 @@ def plot_monthly_trading_history(records: pd.DataFrame,
                     "sell",
                     f"{date_str} - (매도) {account}: {symbol} {fmt_currency(abs(trade_amt))}원 매도 (단가 {fmt_currency(unit_price)}원, {abs(qty):g}주)"
                 ))
-        elif has_dividend:
-            div_amt = convert_to_krw(row["계좌"], float(dividend), date, fx_series)
+        if has_dividend:
+            div_amt = convert_to_krw(acct_code, float(dividend), date, fx_series)
             div_total += div_amt
-            native_str = "" if row["계좌"] not in USD_ACCOUNTS else f" ({dividend}달러)"
+            native_str = "" if acct_code not in USD_ACCOUNTS else f" ({dividend}달러)"
             lines.append((
                 "div",
                 f"{date_str} - (배당금) {account}: {symbol} 배당 {fmt_currency(div_amt)}원 수령{native_str}"
             ))
-        elif has_invest:
+        if has_invest:
             invest_amt = float(str(invest).replace(",", "")) if invest else 0.0
-            if account in USD_ACCOUNTS:
-                invest_amt = convert_to_krw(row["계좌"], invest_amt, date, fx_series)
+            if acct_code in USD_ACCOUNTS:
+                invest_amt = convert_to_krw(acct_code, invest_amt, date, fx_series)
             invest_total += invest_amt
             lines.append((
                 "invest",
