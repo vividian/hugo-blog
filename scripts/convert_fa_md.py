@@ -25,8 +25,8 @@ def _load_paths() -> tuple[Path, Path]:
         with CONFIG_PATH.open("r", encoding="utf-8") as fp:
             config = yaml.safe_load(fp) or {}
     paths = (config.get("financial_assets") or {}).get("paths") or {}
-    md_path = _resolve_path(paths.get("fa_md", {}))
-    yaml_path = _resolve_path(paths.get("fa_yaml", {}))
+    md_path = _resolve_path(paths.get("fa_md", "content/fa/fa.md"))
+    yaml_path = _resolve_path(paths.get("fa_yaml", "config/fa.yaml"))
     return md_path, yaml_path
 
 
