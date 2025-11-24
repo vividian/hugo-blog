@@ -729,7 +729,7 @@ def fetch_latest_prices(tickers: List[str]) -> Dict[str, Tuple[float, float]]:
 
 
 def build_holdings_df(records: pd.DataFrame, fx_series: pd.Series) -> pd.DataFrame:
-    """현재 보유 자산 현황(평가금, 투자금, 수익금) 데이터프레임을 생성한다."""
+    """현재 보유 자산 현황(평가금, 매수금, 수익금) 데이터프레임을 생성한다."""
     symbol_map = load_symbol_map()
     trades = extract_trades(records)
     positions = compute_positions(trades, symbol_map, fx_series)
@@ -751,7 +751,7 @@ def build_holdings_df(records: pd.DataFrame, fx_series: pd.Series) -> pd.DataFra
                 "계좌": pos.account,
                 "종목": pos.symbol,
                 "평가금": valuation,
-                "투자금": pos.cost,
+                "매수금": pos.cost,
                 "수익금": valuation - pos.cost,
                 "수량": pos.quantity,
                 "평단가": avg_price,
@@ -785,7 +785,7 @@ def build_holdings_df(records: pd.DataFrame, fx_series: pd.Series) -> pd.DataFra
                     "계좌": "sema",
                     "종목": symbol,
                     "평가금": valuation,
-                    "투자금": invested,
+                    "매수금": invested,
                     "수익금": valuation - invested,
                 }
             )
@@ -799,7 +799,7 @@ def build_holdings_df(records: pd.DataFrame, fx_series: pd.Series) -> pd.DataFra
         raise ValueError("평가금이 0보다 큰 종목이 없습니다.")
 
     df["수익률"] = df.apply(
-        lambda row: None if row["투자금"] == 0 else row["수익금"] / row["투자금"],
+        lambda row: None if row["매수금"] == 0 else row["수익금"] / row["매수금"],
         axis=1,
     )
 
@@ -853,17 +853,13 @@ def plot_account_detail(account: str,
 
     # 테이블 그리기
     table_df = account_holdings.copy()
-    table_df["수익률"] = table_df.apply(
-        lambda row: None if row["투자금"] == 0 else (row["수익금"] / row["투자금"]),
-        axis=1,
-    )
 
     # 종목별 데이터 테이블
-    main_data = table_df[["종목", "투자금", "평가금", "수익금", "수익률"]].copy()
-    main_data["투자금"] = main_data["투자금"].apply(lambda x: f"{x:,.0f}")
+    main_data = table_df[["종목", "매수금", "평가금", "수익금", "수익률"]].copy()
+    main_data["매수금"] = main_data["매수금"].apply(lambda x: f"{x:,.0f}")
     main_data["평가금"] = main_data["평가금"].apply(lambda x: f"{x:,.0f}")
     main_data["수익금"] = main_data["수익금"].apply(lambda x: f"{x:,.0f}")
-    main_data["수익률"] = main_data["수익률"].apply(lambda x: "-" if x is None else f"{x * 100:.2f}%")
+    main_data["수익률"] = main_data["수익률"].apply(lambda x: "-" if x is None or pd.isna(x) else f"{x * 100:.2f}%")
 
     main_data_rows = len(main_data)
     custom_height = {
