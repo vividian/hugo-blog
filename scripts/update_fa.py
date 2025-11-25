@@ -1076,26 +1076,54 @@ def plot_total_holdings(holdings_df: pd.DataFrame, output_path: Path) -> Path:
     if filtered.empty:
         raise ValueError("보유 중인 종목이 없습니다.")
 
-    row_count = len(filtered)
+    grouped = (
+        filtered.groupby("종목", as_index=False)
+        .agg(
+            {
+                "수량": "sum",
+                "매수금": "sum",
+                "평가금": "sum",
+                "수익금": "sum",
+                "현재가": "first",
+                "등락률": "first",
+            }
+        )
+    )
+    if grouped.empty:
+        raise ValueError("보유 중인 종목이 없습니다.")
+    grouped["평단가"] = grouped.apply(
+        lambda row: 0 if row["수량"] == 0 else row["매수금"] / row["수량"],
+        axis=1,
+    )
+    grouped["수익률"] = grouped.apply(
+        lambda row: None if row["매수금"] == 0 else row["수익금"] / row["매수금"],
+        axis=1,
+    )
+
+    grouped = grouped.sort_values("종목", ascending=True)
+
+    row_count = len(grouped)
     _configure_matplotlib()
     fig, ax = plt.subplots(figsize=(12, 12), dpi=FIG_DPI)
     fig.patch.set_facecolor(CANVAS_BG_COLOR)
     ax.axis("off")
 
-    columns = ["계좌", "종목", "보유수량", "평단가", "금액", "현재가", "수익금", "수익률", "등락률"]
-    formatted = filtered.copy()
-    formatted["계좌"] = formatted["계좌"].apply(account_label)
+    columns = ["종목", "보유수량", "평단가", "투자금", "현재가", "수익금", "수익률", "등락률"]
+    formatted = grouped.copy()
     formatted["보유수량"] = formatted["수량"].apply(lambda x: f"{x:,.2f}".rstrip("0").rstrip("."))
     fmt_currency = lambda val: "-" if pd.isna(val) else f"{val:,.0f}"
-    for col in ["평단가", "금액", "현재가", "수익금"]:
+    for col in ["평단가", "매수금", "현재가", "수익금"]:
         formatted[col] = formatted[col].apply(fmt_currency)
+
+    formatted = formatted.rename(columns={"매수금": "투자금"})
+
     def fmt_rate(val: Optional[float]) -> str:
         if val is None or pd.isna(val):
             return "-"
         sign = "+" if val > 0 else ""
         return f"{sign}{val * 100:.2f}%"
-    formatted["수익률"] = filtered["수익률"].apply(fmt_rate)
-    formatted["등락률"] = filtered["등락률"].apply(fmt_rate)
+    formatted["수익률"] = grouped["수익률"].apply(fmt_rate)
+    formatted["등락률"] = grouped["등락률"].apply(fmt_rate)
     display_df = formatted[columns]
 
     table = ax.table(
@@ -1115,9 +1143,9 @@ def plot_total_holdings(holdings_df: pd.DataFrame, output_path: Path) -> Path:
     gain_color = "#d63031"
     loss_color = "#0984e3"
 
-    profit_values = filtered["수익금"].to_list()
-    rate_values = filtered["수익률"].to_list()
-    change_values = filtered["등락률"].to_list()
+    profit_values = grouped["수익금"].to_list()
+    rate_values = grouped["수익률"].to_list()
+    change_values = grouped["등락률"].to_list()
 
     for (row, col), cell in table.get_celld().items():
         if row == 0:
