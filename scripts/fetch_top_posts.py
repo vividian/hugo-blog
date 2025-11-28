@@ -63,6 +63,22 @@ except ImportError:  # When executed as module
     from .config_utils import get_path, get_value
 
 
+# 제외할 경로 (양 끝 슬래시 여부에 관계없이 비교)
+EXCLUDED_PATHS = {
+    "/",
+    "/portfolio",
+    "/fa",
+    "/all",
+    "/daily",
+    "/dividends",
+    "/notes",
+    "/reviews",
+    "/search",
+    "/stocks",
+    "/synology",
+    "/tags",
+    "/travel",
+}
 # 스크립트의 루트 디렉토리 (blog 폴더)
 ROOT = Path(__file__).resolve().parents[1]
 # 인기글 데이터를 저장할 JSON 파일 경로
@@ -80,6 +96,13 @@ def normalize_title(title: str) -> str:
     for pattern in TITLE_SUFFIX_PATTERNS:
         normalized = pattern.sub("", normalized)
     return normalized.strip()
+
+
+def normalize_path(path: str) -> str:
+    """경로 비교 시 사용할 형태로 정규화한다."""
+    if not path or path == "/":
+        return "/"
+    return path[:-1] if path.endswith("/") else path
 
 
 def get_client(credentials_file: str) -> BetaAnalyticsDataClient:
@@ -153,8 +176,9 @@ def main() -> int:
     # 설정 파일에서 Google Analytics 관련 설정값 가져오기
     property_id = get_value("google_analytics.property_id")
     credentials_rel = get_value("google_analytics.credentials_file")
-    top_limit = int(get_value("google_analytics.top_limit", 5))
     date_range_days = int(get_value("google_analytics.date_range_days", 30))
+    output_limit = 5
+    fetch_limit = 20
 
     # 인증 정보 파일 경로 처리
     credentials_file = Path(credentials_rel or "")
@@ -177,12 +201,24 @@ def main() -> int:
 
     # GA 클라이언트 생성 및 리포트 가져오기
     client = get_client(str(credentials_file))
-    popular_pages = fetch_report(client, property_id, date_range_days, top_limit)
+    popular_pages = fetch_report(client, property_id, date_range_days, fetch_limit)
+    filtered_pages: list[dict[str, Any]] = []
+    seen_paths: set[str] = set()
+    for entry in popular_pages:
+        normalized = normalize_path(entry["page_path"])
+        if normalized in EXCLUDED_PATHS:
+            continue
+        if normalized in seen_paths:
+            continue
+        seen_paths.add(normalized)
+        filtered_pages.append(entry)
+        if len(filtered_pages) >= output_limit:
+            break
 
     # 결과를 JSON 파일로 저장
     DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
-    DATA_PATH.write_text(json.dumps(popular_pages, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"인기 글 데이터 갱신: {len(popular_pages)}개 -> {DATA_PATH}")
+    DATA_PATH.write_text(json.dumps(filtered_pages, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"인기 글 데이터 갱신: {len(filtered_pages)}개 -> {DATA_PATH}")
     return 0
 
 
