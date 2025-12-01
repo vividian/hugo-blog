@@ -21,6 +21,8 @@ markup:
   goldmark:
     renderer:
       unsafe: true
+    extensions:
+      typographer: true
   tableOfContents:
     startLevel: 1
   highlight:
