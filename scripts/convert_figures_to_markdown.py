@@ -21,6 +21,13 @@ FIGURE_PATTERN = re.compile(r"{{[<%]\s*figure\s+([^{}]+?)\s*[>%]}}")
 ATTR_PATTERN = re.compile(r'(\w+)\s*=\s*"([^"]*)"')
 
 
+def _normalize_src(src: str) -> str:
+    src = src.strip()
+    if src.startswith("/blog/"):
+        return Path(src).name
+    return src
+
+
 def replacement(match: re.Match) -> str:
     attr_text = match.group(1)
     attrs = dict(ATTR_PATTERN.findall(attr_text))
@@ -32,7 +39,7 @@ def replacement(match: re.Match) -> str:
     alt_text = alt or caption
 
     alt_escaped = alt_text.replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
-    src = src.strip()
+    src = _normalize_src(src)
 
     if not src:
         return match.group(0)
