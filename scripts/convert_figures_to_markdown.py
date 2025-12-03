@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import re
 import sys
 from pathlib import Path
@@ -23,15 +24,9 @@ ATTR_PATTERN = re.compile(r'(\w+)\s*=\s*"([^"]*)"')
 
 def _normalize_src(src: str) -> str:
     src = src.strip()
-    if not src:
-        return src
-
-    parsed = urlparse(src)
-    if parsed.scheme in {"http", "https"}:
-        return src
-
-    path_part = parsed.path or src
-    return Path(path_part).name
+    if src.startswith("/blog/"):
+        return Path(src).name
+    return src
 
 
 def replacement(match: re.Match) -> str:
@@ -62,12 +57,25 @@ def process_file(path: Path) -> bool:
     return True
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Convert Hugo figure shortcodes to Markdown images")
+    parser.add_argument(
+        "--content-dir",
+        type=Path,
+        help="변환 대상 content 경로 (기본값: config paths.content)",
+    )
+    return parser.parse_args()
+
+
 def main() -> int:
-    if not CONTENT_DIR.is_dir():
-        print(f"content 디렉터리를 찾을 수 없습니다: {CONTENT_DIR}", file=sys.stderr)
+    args = parse_args()
+    target_dir = args.content_dir.resolve() if args.content_dir else CONTENT_DIR
+
+    if not target_dir.is_dir():
+        print(f"content 디렉터리를 찾을 수 없습니다: {target_dir}", file=sys.stderr)
         return 1
 
-    files = sorted(CONTENT_DIR.rglob("*.md"))
+    files = sorted(target_dir.rglob("*.md"))
     total = 0
     for md_file in files:
         if process_file(md_file):

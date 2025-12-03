@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import posixpath
 import re
 import sys
 from pathlib import Path, PurePosixPath
@@ -96,13 +95,6 @@ def resolve_relative(base: PurePosixPath, target: PurePosixPath) -> PurePosixPat
     return PurePosixPath(*parts)
 
 
-def make_relative(base: PurePosixPath, target: PurePosixPath) -> str:
-    base_str = base.as_posix() or "."
-    target_str = target.as_posix()
-    rel = posixpath.relpath(target_str, start=base_str)
-    return rel if rel != "." else target.name
-
-
 def update_markdown(md_file: Path, base: Path, mapping: Dict[str, str]) -> bool:
     text = md_file.read_text(encoding="utf-8")
     changed = False
@@ -122,7 +114,7 @@ def update_markdown(md_file: Path, base: Path, mapping: Dict[str, str]) -> bool:
             for key in key_options:
                 if key in mapping:
                     dest = PurePosixPath(mapping[key])
-                    new_url = make_relative(md_dir_rel, dest)
+                    new_url = dest.name
                     changed = True
                     return match.group(0).replace(target, new_url, 1)
         return match.group(0)
