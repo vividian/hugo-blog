@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
@@ -1158,6 +1159,14 @@ def plot_total_holdings(holdings_df: pd.DataFrame, output_path: Path) -> Path:
     return True
 
 
+def _wrap_history_text(text: str, width: int = 68) -> List[str]:
+    """줄바꿈 없이 긴 거래 내역 문장을 적절한 길이로 감싼다."""
+    text = (text or "").strip()
+    if not text:
+        return [""]
+    return textwrap.wrap(text, width=width, break_long_words=False, expand_tabs=False)
+
+
 def plot_monthly_trading_history(records: pd.DataFrame,
                           fx_series: pd.Series,
                           month_end: pd.Timestamp,
@@ -1228,8 +1237,14 @@ def plot_monthly_trading_history(records: pd.DataFrame,
     summary = f"{period.year}년 {period.month:02d}월 투자금: {fmt_currency(invest_total)}원, 매수: {fmt_currency(buy_total)}원, 매도: {fmt_currency(sell_total)}원, 배당금: {fmt_currency(div_total)}원"
 
     _configure_matplotlib()
-    line_count = len(lines) + 1
-    fig_height = max(4.0, 1.0 + 0.35 * line_count)
+
+    wrapped_lines: List[Tuple[str, List[str]]] = []
+    for kind, text in lines:
+        wrapped_lines.append((kind, _wrap_history_text(text)))
+
+    total_wrapped = sum(len(parts) for _, parts in wrapped_lines)
+    line_count = max(total_wrapped + 1, 1)
+    fig_height = max(4.0, 0.35 * (line_count + 2))
     fig, ax = plt.subplots(figsize=(12, fig_height), dpi=FIG_DPI)
     fig.patch.set_facecolor(CANVAS_BG_COLOR)
     ax.axis("off")
@@ -1241,18 +1256,22 @@ def plot_monthly_trading_history(records: pd.DataFrame,
         "div": "#2c3e50",
     }
 
-    y = 0.95
-    ax.text(0.0, y, summary, ha="left", va="top", fontsize=14, fontweight="bold", transform=ax.transAxes, color="#2c3e50")
-    y -= 0.07
-    for kind, text in lines:
-        ax.text(0.0, y, text, ha="left", va="top", fontsize=13, transform=ax.transAxes, color=colors.get(kind, "#2c3e50"))
-        y -= 0.055
-
-    ax.set_ylim(0, 1)
+    line_step = 1.0
+    margin = 0.5
+    y_max = line_step * (line_count + 2 * margin)
     ax.set_xlim(0, 1)
-    
-    _save_canvas(fig, output_path, f"월별 거래 내역 저장 완료: {output_path}", pad_inches=0.65, bbox="tight")
-    _crop_top_inches(output_path, inches=0.9)
+    ax.set_ylim(0, y_max)
+
+    y = y_max - margin * line_step
+    ax.text(0.0, y, summary, ha="left", va="top", fontsize=14, fontweight="bold", color="#2c3e50")
+    y -= line_step
+
+    for kind, text_lines in wrapped_lines:
+        for line in text_lines:
+            ax.text(0.0, y, line, ha="left", va="top", fontsize=13, color=colors.get(kind, "#2c3e50"))
+            y -= line_step
+
+    _save_canvas(fig, output_path, f"월별 거래 내역 저장 완료: {output_path}", pad_inches=0.4, bbox="tight")
 
     return True
 
