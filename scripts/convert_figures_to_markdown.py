@@ -23,9 +23,15 @@ ATTR_PATTERN = re.compile(r'(\w+)\s*=\s*"([^"]*)"')
 
 def _normalize_src(src: str) -> str:
     src = src.strip()
-    if src.startswith("/blog/"):
-        return Path(src).name
-    return src
+    if not src:
+        return src
+
+    parsed = urlparse(src)
+    if parsed.scheme in {"http", "https"}:
+        return src
+
+    path_part = parsed.path or src
+    return Path(path_part).name
 
 
 def replacement(match: re.Match) -> str:
