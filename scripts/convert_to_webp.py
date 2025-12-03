@@ -40,11 +40,30 @@ def normalize_filename(path: Path) -> Path:
 
 
 def register_mapping(mapping: Dict[str, str], original: PurePosixPath, dest: PurePosixPath) -> None:
-    mapping[original.as_posix()] = dest.as_posix()
-    mapping[original.name] = dest.name
-    spaced = original.as_posix().replace("_", " ")
-    mapping[spaced] = dest.as_posix()
-    mapping[original.name.replace("_", " ")] = dest.name
+    def _set(key: str, value: str) -> None:
+        if key and key not in mapping:
+            mapping[key] = value
+
+    original_posix = original.as_posix()
+    dest_posix = dest.as_posix()
+
+    base_keys = [
+        original_posix,
+        original.name,
+        original_posix.replace("_", " "),
+        original.name.replace("_", " "),
+    ]
+    for key in base_keys:
+        _set(key, dest_posix if "/" in key else dest.name)
+
+    prefix_aliases = [
+        f"content/{original_posix}",
+        f"./content/{original_posix}",
+        f"blog/content/{original_posix}",
+        f"./blog/content/{original_posix}",
+    ]
+    for alias in prefix_aliases:
+        _set(alias, dest_posix)
 
 
 def convert_image(path: Path, base: Path, mapping: Dict[str, str]) -> bool:
@@ -117,6 +136,14 @@ def update_markdown(md_file: Path, base: Path, mapping: Dict[str, str]) -> bool:
                     new_url = dest.name
                     changed = True
                     return match.group(0).replace(target, new_url, 1)
+
+        if ("/" in target or "\\" in target) and not target.startswith(PREFIXES_TO_SKIP):
+            suffix = PurePosixPath(target).suffix.lower()
+            if suffix in VALID_EXTENSIONS or suffix == ".webp":
+                basename = PurePosixPath(target).name
+                if basename and basename != target:
+                    changed = True
+                    return match.group(0).replace(target, basename, 1)
         return match.group(0)
 
     text = OBSIDIAN_EMBED_PATTERN.sub(embed_repl, text)
