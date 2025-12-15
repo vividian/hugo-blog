@@ -93,7 +93,7 @@ ACCOUNT_TITLES = {
     "title_kor1_detail": "◉ 상세계좌: 국내주식1 (리츠)",
     "title_sema_detail": "◉ 상세계좌: SEMA (S&P500-FD:SAVING = 7:3)",
     "title_irp_detail": "◉ 상세계좌: IRP (S&P500:KOFR = 7:3)",
-    "title_psf1_detail": "◉ 상세계좌: 연금저축1 (S&P500:IEF:MMA = 7:2:1)",
+    "title_psf1_detail": "◉ 상세계좌: 연금저축1 (SCHD:QQQ:IEF:MMA = 4:3:2:1)",
     "title_isa1_detail": "◉ 상세계좌: ISA1",
     "title_psf2_detail": "◉ 상세계좌: 연금저축2 (SCHD:QQQ:IEF:MMA = 4:3:2:1)",
     "title_isa2_detail": "◉ 상세계좌: ISA2",
