@@ -1159,7 +1159,7 @@ def plot_total_holdings(holdings_df: pd.DataFrame, output_path: Path) -> Path:
     return True
 
 
-def _wrap_history_text(text: str, width: int = 68) -> List[str]:
+def _wrap_history_text(text: str, width: int = 90) -> List[str]:
     """줄바꿈 없이 긴 거래 내역 문장을 적절한 길이로 감싼다."""
     text = (text or "").strip()
     if not text:
