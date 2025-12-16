@@ -1322,7 +1322,14 @@ def generate_month_reports(prefix: str,
         outputs["trading_history"] = trading_history_path
         save_title(CONTENT_TITLE_KEYS.get("trading_history"))
 
+        valid_detail_accounts: List[str] = []
+        if not summary_df.empty and "평가금" in summary_df.columns:
+            valid_detail_accounts = summary_df.loc[summary_df["평가금"] > 0, "계좌"].astype(str).tolist()
+        valid_detail_set = set(valid_detail_accounts)
+
         for account in DETAIL_ACCOUNTS:
+            if account not in valid_detail_set:
+                continue
             detail_path = output_dir / f"{prefix}_{account}_detail.webp"
             if plot_account_detail(account, holdings_df, summary_df, detail_path):
                 outputs[f"{account}_detail"] = detail_path
