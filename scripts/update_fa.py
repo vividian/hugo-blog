@@ -84,6 +84,7 @@ FIG_RIGHT = 0.98
 FIG_TOP = 0.98
 FIG_BOTTOM = 0.06
 ACCOUNT_TITLES = {
+    "title_exchange_rate": "◉ 환율 (USD/KRW) 추세",
     "title_assets_trend": "◉ 계좌별 자산 추세",
     "title_account_assets": "◉ 전체 계좌별 자산 현황 (투자금, 평가금, 수익금 등)",
     "title_total_holdings": "◉ 실시간 보유종목 현황",
@@ -104,6 +105,7 @@ CONTENT_TITLE_KEYS = {
     "total_holdings": "title_total_holdings",
     "trading_history": "title_trading_history",
     "monthly_dividends": "title_monthly_dividends",
+    "exchange_rate": "title_exchange_rate",
 }
 
 @dataclass
@@ -208,10 +210,11 @@ def build_fx_series(records: pd.DataFrame, end: Optional[pd.Timestamp] = None) -
         else:
             start = earliest - pd.Timedelta(days=7)
 
+    today_buffer = pd.Timestamp.today().normalize() + pd.Timedelta(days=2)
     if end is None:
-        end = pd.Timestamp.today() + pd.Timedelta(days=2)
+        end = today_buffer
     else:
-        end = end + pd.Timedelta(days=2)
+        end = max(end + pd.Timedelta(days=2), today_buffer)
 
     data = yf.download(
         FX_TICKER,
@@ -589,6 +592,74 @@ def _crop_top_inches(image_path: Path, inches: float, dpi: int = FIG_DPI) -> Non
             cropped.save(image_path)
     except Exception as exc:
         print(f"(경고) 이미지 상단 자르기 실패: {image_path} ({exc})")
+
+
+def plot_exchange_rate_table(fx_series: pd.Series,
+                             reference_date: pd.Timestamp,
+                             output_path: Path) -> Path:
+    """최근 환율과 전일 증감, 직전 3년 평균 환율을 2행 3열 테이블로 그려 저장한다."""
+    _configure_matplotlib()
+    if fx_series.empty:
+        raise ValueError("환율 데이터가 없습니다.")
+
+    fx_series = fx_series.sort_index()
+    latest_date = pd.to_datetime(fx_series.index.max())
+    ref_date = pd.Timestamp(reference_date) if reference_date is not None else latest_date
+    window_end = min(ref_date, latest_date)
+    window_start = window_end - pd.DateOffset(years=3)
+    window_series = fx_series.loc[:window_end]
+    recent_series = window_series.loc[window_series.index >= window_start]
+    avg_3y = float(recent_series.mean()) if not recent_series.empty else float(window_series.mean())
+    current_rate = float(fx_series.iloc[-1])
+    prev_rate = float(fx_series.iloc[-2]) if len(fx_series) > 1 else current_rate
+    change = current_rate - prev_rate
+    change_pct = (change / prev_rate * 100) if prev_rate else 0.0
+
+    headers = ["환율(원/USD)", "증감", "직전 3년 평균 환율"]
+    values = [
+        f"{current_rate:,.2f}",
+        f"{change:+.2f} ({change_pct:+.2f}%)",
+        f"{avg_3y:,.2f}",
+    ]
+
+    fig, ax = plt.subplots(figsize=(12, 1.3), dpi=FIG_DPI)
+    fig.patch.set_facecolor(CANVAS_BG_COLOR)
+    ax.axis("off")
+
+    table = ax.table(
+        cellText=[headers, values],
+        cellLoc="center",
+        loc="center",
+        bbox=[0.0, 0.0, 1.0, 1.0],
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(16)
+    table.scale(1.1, 0.9)
+
+    header_color = "#2d3436"
+    even_color = "#fffdf5"
+    odd_color = "#f6f0e6"
+    gain_color = "#d63031"
+    loss_color = "#0984e3"
+
+    for (row, col), cell in table.get_celld().items():
+        cell.set_edgecolor("#dddddd")
+        if row == 0:
+            cell.set_facecolor(header_color)
+            cell.set_text_props(color="white", weight="bold")
+        else:
+            shade = even_color if col % 2 == 0 else odd_color
+            cell.set_facecolor(shade)
+            cell.set_text_props(color="#2c3e50", weight="bold")
+            if col == 1:
+                cell.set_facecolor(even_color)
+                color = gain_color if change > 0 else loss_color if change < 0 else "#2c3e50"
+                cell.set_text_props(color=color, weight="bold")
+
+    _save_canvas(fig, output_path, f"환율 테이블 저장 완료: {output_path}", pad_inches=0.25, bbox="tight")
+    _crop_top_inches(output_path, inches=0.2)
+
+    return True
 
 
 def plot_assets_trend(account_df: pd.DataFrame, output_path: Path) -> Path:
@@ -1281,7 +1352,8 @@ def generate_month_reports(prefix: str,
                            records: pd.DataFrame,
                            fx_series: pd.Series,
                            month_end: pd.Timestamp,
-                           monthly_prices_df: Optional[pd.DataFrame] = None,) -> Dict[str, Path]:
+                           monthly_prices_df: Optional[pd.DataFrame] = None,
+                           fx_series_for_exchange: Optional[pd.Series] = None,) -> Dict[str, Path]:
     """특정 월의 모든 리포트(차트, 데이터)를 생성하고 파일 경로를 반환한다."""
     outputs: Dict[str, Path] = {}
 
@@ -1309,6 +1381,18 @@ def generate_month_reports(prefix: str,
     plot_account_assets(display_df, summary_path)
     outputs["account_assets"] = summary_path
     save_title(CONTENT_TITLE_KEYS.get("account_assets"))
+
+    try:
+        exchange_rate_path = output_dir / f"{prefix}_exchange_rate.webp"
+        fx_for_exchange = fx_series_for_exchange if fx_series_for_exchange is not None else fx_series
+        if fx_for_exchange is None or fx_for_exchange.empty:
+            raise ValueError("환율 데이터가 없습니다.")
+        reference_date = pd.to_datetime(fx_for_exchange.index.max())
+        plot_exchange_rate_table(fx_for_exchange, reference_date, exchange_rate_path)
+        outputs["exchange_rate"] = exchange_rate_path
+        save_title(CONTENT_TITLE_KEYS.get("exchange_rate"))
+    except ValueError as exc:
+        print(f"(경고) {prefix} 환율 테이블 생성 실패: {exc}")
 
     try:
         holdings_df = build_holdings_df(records, fx_series)
@@ -1558,6 +1642,7 @@ def main() -> None:
             fx_series,
             month_end,
             monthly_prices_full,
+            fx_series_for_exchange=fx_series_full if idx == len(months) - 1 else fx_series,
         )
         if idx == len(months) - 1:
             latest_outputs = outputs
@@ -1568,6 +1653,7 @@ def main() -> None:
         "monthly_prices": "latest_monthly_prices.csv",
         "assets_trend": "latest_assets_trend.webp",
         "account_assets": "latest_account_assets.webp",
+        "exchange_rate": "latest_exchange_rate.webp",
         "monthly_dividends": "latest_monthly_dividends.webp",
         "total_holdings": "latest_total_holdings.webp",
         "trading_history": "latest_trading_history.webp",
