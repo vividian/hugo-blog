@@ -90,6 +90,9 @@ ACCOUNT_TITLES = {
     "title_total_holdings": "◉ 실시간 보유종목 현황",
     "title_trading_history": "◉ 보유종목 거래내역",
     "title_monthly_dividends": "◉ 월별 배당금 및 분배금 현황 (최근 12개월)",
+    "title_yearly_dividends": "◉ 연별 배당금 및 분배금 현황",
+    "title_yearly_return_investment": "◉ 연별 수익률 (투자금 기준)",
+    "title_yearly_return_valuation": "◉ 연별 수익률 (평가금 기준)",
     "title_usa_detail": "◉ 상세계좌: 미국주식 (SPYM:IEF:SGOV = 7:2:1)",
     "title_kor1_detail": "◉ 상세계좌: 국내주식1 (리츠)",
     "title_sema_detail": "◉ 상세계좌: SEMA (S&P500-FD:SAVING = 7:3)",
@@ -106,6 +109,9 @@ CONTENT_TITLE_KEYS = {
     "trading_history": "title_trading_history",
     "monthly_dividends": "title_monthly_dividends",
     "exchange_rate": "title_exchange_rate",
+    "yearly_dividends": "title_yearly_dividends",
+    "yearly_return_investment": "title_yearly_return_investment",
+    "yearly_return_valuation": "title_yearly_return_valuation",
 }
 
 @dataclass
@@ -1080,6 +1086,98 @@ def load_dividend_pivot(records: pd.DataFrame, fx_series: pd.Series, end_date: p
     return pivot
 
 
+def load_yearly_dividend_pivot(records: pd.DataFrame,
+                               fx_series: pd.Series,
+                               end_date: pd.Timestamp,
+                               years: int = 5) -> pd.DataFrame:
+    """최근 N년간의 연별, 종목별 배당금 피벗 테이블을 생성한다."""
+    df = records.copy()
+    df["배당"] = pd.to_numeric(df.get("배당"), errors="coerce")
+    dividends = df[(df["배당"].notna()) & (df["배당"] > 0)].copy()
+    if dividends.empty:
+        raise ValueError("배당 데이터가 없습니다.")
+
+    cutoff = (end_date - pd.DateOffset(years=years)).replace(month=1, day=1)
+    dividends = dividends[dividends["일자"] >= cutoff]
+    if dividends.empty:
+        raise ValueError("최근 배당 데이터가 없습니다.")
+
+    dividends["배당원화"] = dividends.apply(
+        lambda row: convert_to_krw(row["계좌"], row["배당"], row["일자"], fx_series),
+        axis=1,
+    )
+    dividends["연도"] = dividends["일자"].dt.to_period("Y").dt.to_timestamp()
+
+    pivot = (
+        dividends.groupby(["연도", "종목"])["배당원화"]
+        .sum()
+        .unstack(fill_value=0)
+        .sort_index()
+    )
+    pivot = pivot.loc[:, (pivot != 0).any(axis=0)]
+    return pivot
+
+
+def _build_investment_series(records: pd.DataFrame, fx_series: pd.Series) -> pd.Series:
+    """투자금 누적 시계열(원화)을 생성한다."""
+    invest_records = records[records["투자금"].notna()].copy()
+    if invest_records.empty:
+        return pd.Series(dtype=float)
+    invest_records = invest_records[["일자", "계좌", "투자금"]].copy()
+    invest_records["투자금원화"] = invest_records.apply(
+        lambda row: convert_to_krw(row["계좌"], row["투자금"], row["일자"], fx_series),
+        axis=1,
+    )
+    invest_records = invest_records.dropna(subset=["일자"])
+    daily = invest_records.groupby("일자")["투자금원화"].sum().sort_index()
+    return daily.cumsum()
+
+
+def build_yearly_returns(records: pd.DataFrame, fx_series: pd.Series, end_date: pd.Timestamp) -> pd.DataFrame:
+    """연말 기준 투자금/평가금 수익률 데이터를 계산한다."""
+    account_df = build_account_valuation_df(records, fx_series, end_date)
+    invest_series = _build_investment_series(records, fx_series)
+    year_start = pd.Timestamp(START_MONTH.year, 12, 31)
+    year_ends = pd.date_range(start=year_start, end=end_date, freq="YE")
+    if year_ends.empty:
+        raise ValueError("연도 기준 데이터가 없습니다.")
+
+    valuation_map: Dict[pd.Timestamp, float] = {}
+    invest_map: Dict[pd.Timestamp, float] = {}
+    for date in year_ends:
+        subset = account_df.loc[:date]
+        if subset.empty:
+            continue
+        valuation_map[date] = float(subset.iloc[-1].sum())
+        if not invest_series.empty:
+            invest_subset = invest_series.loc[:date]
+            invest_map[date] = float(invest_subset.iloc[-1]) if not invest_subset.empty else 0.0
+        else:
+            invest_map[date] = 0.0
+
+    dates = sorted(valuation_map.keys())
+    if len(dates) < 2:
+        raise ValueError("연별 수익률을 계산할 데이터가 충분하지 않습니다.")
+
+    rows = []
+    for idx in range(len(dates) - 1):
+        base_date = dates[idx]
+        next_date = dates[idx + 1]
+        valuation_base = valuation_map.get(base_date, 0.0)
+        valuation_next = valuation_map.get(next_date, 0.0)
+        invest_base = invest_map.get(base_date, 0.0)
+        invest_return = None if invest_base == 0 else (valuation_next - invest_base) / invest_base
+        valuation_return = None if valuation_base == 0 else (valuation_next - valuation_base) / valuation_base
+        rows.append(
+            {
+                "연도": base_date.year,
+                "투자금기준수익률": invest_return,
+                "평가금기준수익률": valuation_return,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def plot_monthly_dividends(pivot: pd.DataFrame, output_path: Path) -> Path:
     """월별 배당금 현황을 누적 막대 그래프로 그려 저장한다."""
     months = pivot.index.to_pydatetime()
@@ -1140,6 +1238,126 @@ def plot_monthly_dividends(pivot: pd.DataFrame, output_path: Path) -> Path:
     _crop_top_inches(output_path, inches=0.6)
 
     return True
+
+
+def plot_yearly_dividends(pivot: pd.DataFrame, output_path: Path) -> Path:
+    """연별 배당금 현황을 누적 막대 그래프로 그려 저장한다."""
+    years = pivot.index.to_pydatetime()
+    columns = pivot.columns.tolist()
+
+    _configure_matplotlib()
+    fig, ax = plt.subplots(figsize=(12, 6), dpi=FIG_DPI)
+    fig.patch.set_facecolor(CANVAS_BG_COLOR)
+    ax.set_facecolor(CANVAS_BG_COLOR)
+    bottoms = np.zeros(len(years))
+    colors = plt.colormaps["tab10"](np.linspace(0, 1, max(len(columns), 1)))
+
+    for col, color in zip(columns, colors):
+        values = pivot[col].values
+        ax.bar(
+            years,
+            values,
+            width=220,
+            bottom=bottoms,
+            label=col,
+            color=color,
+            edgecolor="white",
+        )
+        bottoms += values
+
+    totals = pivot.sum(axis=1).values
+    for i, total in enumerate(totals):
+        if total <= 0:
+            continue
+        ax.text(
+            years[i],
+            total + (total * 0.02),
+            f"{total:,.0f}",
+            ha="center",
+            va="bottom",
+            fontsize=12,
+            color="black",
+        )
+
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{int(x):,}"))
+    ax.xaxis.set_major_locator(mdates.YearLocator())
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
+    ax.tick_params(axis="x", rotation=0, labelsize=12)
+    ax.tick_params(axis="y", labelsize=12)
+    ax.grid(axis="y", linestyle="--", alpha=0.5)
+    for spine in ax.spines.values():
+        spine.set_color("#dddddd")
+    ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1), frameon=False)
+    _save_canvas(
+        fig,
+        output_path,
+        f"연별 배당 그래프 저장 완료: {output_path}",
+        pad_inches=0.65,
+        bbox="tight",
+    )
+    _crop_top_inches(output_path, inches=0.6)
+
+    return True
+
+
+def _plot_yearly_returns(years: List[int],
+                         returns: List[Optional[float]],
+                         output_path: Path,
+                         title: str) -> Path:
+    """연별 수익률 막대 그래프를 그려 저장한다."""
+    if not years:
+        raise ValueError("연별 수익률 데이터가 없습니다.")
+    values = [val * 100 if val is not None else None for val in returns]
+    labels = [str(year) for year in years]
+
+    _configure_matplotlib()
+    fig, ax = plt.subplots(figsize=(12, 5), dpi=FIG_DPI)
+    fig.patch.set_facecolor(CANVAS_BG_COLOR)
+    ax.set_facecolor(CANVAS_BG_COLOR)
+
+    colors = []
+    for val in values:
+        if val is None:
+            colors.append("#bdc3c7")
+        elif val >= 0:
+            colors.append("#d63031")
+        else:
+            colors.append("#0984e3")
+
+    ax.bar(labels, [v if v is not None else 0 for v in values], color=colors, edgecolor="white")
+    ax.axhline(0, color="#999999", linewidth=1)
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:.1f}%"))
+    ax.tick_params(axis="x", rotation=0, labelsize=12)
+    ax.tick_params(axis="y", labelsize=12)
+    ax.grid(axis="y", linestyle="--", alpha=0.5)
+    for spine in ax.spines.values():
+        spine.set_color("#dddddd")
+    _save_canvas(
+        fig,
+        output_path,
+        f"{title} 저장 완료: {output_path}",
+        pad_inches=0.55,
+        bbox="tight",
+    )
+    _crop_top_inches(output_path, inches=0.5)
+
+    return True
+
+
+def plot_yearly_return_investment(returns_df: pd.DataFrame, output_path: Path) -> Path:
+    """연별 수익률(투자금 기준)을 막대 그래프로 그려 저장한다."""
+    data = returns_df.dropna(subset=["투자금기준수익률"]).copy()
+    years = data["연도"].tolist()
+    returns = data["투자금기준수익률"].tolist()
+    return _plot_yearly_returns(years, returns, output_path, "연별 수익률(투자금 기준)")
+
+
+def plot_yearly_return_valuation(returns_df: pd.DataFrame, output_path: Path) -> Path:
+    """연별 수익률(평가금 기준)을 막대 그래프로 그려 저장한다."""
+    data = returns_df.dropna(subset=["평가금기준수익률"]).copy()
+    years = data["연도"].tolist()
+    returns = data["평가금기준수익률"].tolist()
+    return _plot_yearly_returns(years, returns, output_path, "연별 수익률(평가금 기준)")
 
 
 def plot_total_holdings(holdings_df: pd.DataFrame, output_path: Path) -> Path:
@@ -1432,6 +1650,29 @@ def generate_month_reports(prefix: str,
     except ValueError as exc:
         print(f"(경고) {prefix} 배당 그래프 생성 실패: {exc}")
 
+    try:
+        yearly_pivot = load_yearly_dividend_pivot(records, fx_series, month_end)
+        yearly_dividends_path = output_dir / f"{prefix}_yearly_dividends.webp"
+        plot_yearly_dividends(yearly_pivot, yearly_dividends_path)
+        outputs["yearly_dividends"] = yearly_dividends_path
+        save_title(CONTENT_TITLE_KEYS.get("yearly_dividends"))
+    except ValueError as exc:
+        print(f"(경고) {prefix} 연별 배당 그래프 생성 실패: {exc}")
+
+    try:
+        returns_df = build_yearly_returns(records, fx_series, month_end)
+        invest_path = output_dir / f"{prefix}_yearly_return_investment.webp"
+        plot_yearly_return_investment(returns_df, invest_path)
+        outputs["yearly_return_investment"] = invest_path
+        save_title(CONTENT_TITLE_KEYS.get("yearly_return_investment"))
+
+        valuation_path = output_dir / f"{prefix}_yearly_return_valuation.webp"
+        plot_yearly_return_valuation(returns_df, valuation_path)
+        outputs["yearly_return_valuation"] = valuation_path
+        save_title(CONTENT_TITLE_KEYS.get("yearly_return_valuation"))
+    except ValueError as exc:
+        print(f"(경고) {prefix} 연별 수익률 그래프 생성 실패: {exc}")
+
     return outputs
 
 
@@ -1655,6 +1896,9 @@ def main() -> None:
         "account_assets": "latest_account_assets.webp",
         "exchange_rate": "latest_exchange_rate.webp",
         "monthly_dividends": "latest_monthly_dividends.webp",
+        "yearly_dividends": "latest_yearly_dividends.webp",
+        "yearly_return_investment": "latest_yearly_return_investment.webp",
+        "yearly_return_valuation": "latest_yearly_return_valuation.webp",
         "total_holdings": "latest_total_holdings.webp",
         "trading_history": "latest_trading_history.webp",
     }
