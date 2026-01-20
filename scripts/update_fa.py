@@ -94,7 +94,7 @@ ACCOUNT_TITLES = {
     "title_yearly_return_investment": "◉ 연별 수익률 (투자금 기준)",
     "title_yearly_return_valuation": "◉ 연별 수익률 (평가금 기준)",
     "title_usa_detail": "◉ 상세계좌: 미국주식 (SPYM:IEF:SGOV = 7:2:1)",
-    "title_kor1_detail": "◉ 상세계좌: 국내주식1 (리츠)",
+    "title_kor1_detail": "◉ 상세계좌: 국내주식1",
     "title_sema_detail": "◉ 상세계좌: SEMA (S&P500-FD:SAVING = 7:3)",
     "title_irp_detail": "◉ 상세계좌: IRP (S&P500:KOFR = 7:3)",
     "title_psf1_detail": "◉ 상세계좌: 연금저축1 (SCHD:QQQ:IEF:MMA = 4:3:2:1)",
