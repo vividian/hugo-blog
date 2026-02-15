@@ -11,7 +11,6 @@ from urllib.parse import urlparse
 
 import pandas as pd
 import plotly.graph_objects as go
-import plotly.colors as pc
 import plotly.io as pio
 from plotly.subplots import make_subplots
 
@@ -29,14 +28,35 @@ TABLE_ROW_HEIGHT = 32
 TABLE_LINE_WIDTH = 1
 TABLE_PADDING_HEIGHT = 12
 FONT_FAMILY = "NanumSquareRound, 'Nanum Square', 'NanumSquareRound', sans-serif"
-PALETTE_PASTEL = pc.qualitative.Pastel
-PALETTE_LIGHT24 = pc.qualitative.Dark24
+CHART_COLORWAY = [
+    "#4E79A7",
+    "#59A14F",
+    "#F28E2B",
+    "#B07AA1",
+    "#E15759",
+    "#76B7B2",
+    "#EDC948",
+    "#9C755F",
+]
+THEME_BG = "#F7FAFC"
+THEME_BG_ALT = "#ECF2F7"
+THEME_BG_EMPH = "#DEE8F0"
+THEME_TEXT = "#1F2D3D"
+THEME_HEADER_BG = "#324A5F"
+THEME_BORDER = "#CAD5E0"
+THEME_GRID = "#D8E1EA"
+COLOR_GAIN = "#C0392B"
+COLOR_LOSS = "#2A6F97"
 DETAIL_TABLE_COLUMNWIDTH = [1.3, 1, 1, 0.9, 0.8]
 TABLE_HEADER_ALIGN = "center"
 EXCHANGE_RATE_TABLE_ALIGN = "center"
 ACCOUNT_ASSETS_TABLE_ALIGN = ["left", "right", "right", "right", "right", "right", "right"]
 TOTAL_HOLDINGS_TABLE_ALIGN = ["left", "left", "right", "right", "right", "right", "right", "right", "right"]
 DETAIL_TABLE_ALIGN = ["left", "right", "right", "right", "right"]
+
+
+def _palette_color(idx: int) -> str:
+    return CHART_COLORWAY[idx % len(CHART_COLORWAY)]
 
 
 @dataclass
@@ -113,29 +133,29 @@ def _build_exchange_rate_table(fx_series: pd.Series) -> go.Figure:
         f"{avg_3y:,.2f}",
     ]
 
-    gain_color = "#d63031"
-    loss_color = "#0984e3"
-    change_color = gain_color if change > 0 else loss_color if change < 0 else "#2c3e50"
+    gain_color = COLOR_GAIN
+    loss_color = COLOR_LOSS
+    change_color = gain_color if change > 0 else loss_color if change < 0 else THEME_TEXT
 
     fig = go.Figure(
         data=[
             go.Table(
                 header=dict(
                     values=headers,
-                    fill_color="#2d3436",
+                    fill_color=THEME_HEADER_BG,
                     font=dict(color="white", size=14, family=FONT_FAMILY),
                     align=TABLE_HEADER_ALIGN,
                     height=TABLE_HEADER_HEIGHT,
-                    line_color="#dddddd",
+                    line_color=THEME_BORDER,
                     line_width=TABLE_LINE_WIDTH,
                 ),
                 cells=dict(
                     values=[[values[0]], [values[1]], [values[2]]],
-                    fill_color=[["#fffdf5"], ["#fffdf5"], ["#f6f0e6"]],
-                    font=dict(color=["#2c3e50", change_color, "#2c3e50"], size=14, family=FONT_FAMILY),
+                    fill_color=[[THEME_BG], [THEME_BG], [THEME_BG_ALT]],
+                    font=dict(color=[THEME_TEXT, change_color, THEME_TEXT], size=14, family=FONT_FAMILY),
                     align=EXCHANGE_RATE_TABLE_ALIGN,
                     height=TABLE_ROW_HEIGHT,
-                    line_color="#dddddd",
+                    line_color=THEME_BORDER,
                     line_width=TABLE_LINE_WIDTH,
                 ),
             )
@@ -146,7 +166,7 @@ def _build_exchange_rate_table(fx_series: pd.Series) -> go.Figure:
         width=TABLE_WIDTH,
         margin=dict(l=0, r=0, t=0, b=0),
         font=dict(family=FONT_FAMILY),
-        paper_bgcolor="#fffdf5",
+        paper_bgcolor=THEME_BG,
     )
     return fig
 
@@ -161,20 +181,19 @@ def _build_assets_trend(account_df: pd.DataFrame) -> go.Figure:
                 y=account_df[column],
                 mode="lines+markers",
                 name=label,
-                line=dict(color=PALETTE_PASTEL[idx % len(PALETTE_PASTEL)]),
-                marker=dict(color=PALETTE_PASTEL[idx % len(PALETTE_PASTEL)]),
+                line=dict(color=_palette_color(idx)),
+                marker=dict(color=_palette_color(idx)),
                 hovertemplate="%{x|%Y-%m}: %{y:,.0f}<extra>%{fullData.name}</extra>",
             )
         )
     fig.update_layout(
-        template="plotly_white",
         height=420,
         margin=dict(l=40, r=20, t=20, b=40),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
         showlegend=False,
         font=dict(family=FONT_FAMILY),
-        paper_bgcolor="#fffdf5",
-        plot_bgcolor="#fffdf5",
+        paper_bgcolor=THEME_BG,
+        plot_bgcolor=THEME_BG,
     )
     fig.update_yaxes(tickformat=",.0f")
     return fig
@@ -187,29 +206,29 @@ def _build_account_assets_table(summary_df: pd.DataFrame) -> go.Figure:
     row_colors = []
     for idx, account in enumerate(display_df["계좌"].tolist()):
         if account == "합계":
-            row_colors.append("#e5e7eb")
+            row_colors.append(THEME_BG_EMPH)
         else:
-            row_colors.append("#fffdf5" if idx % 2 == 0 else "#f6f0e6")
+            row_colors.append(THEME_BG if idx % 2 == 0 else THEME_BG_ALT)
     fill_colors = [row_colors] * len(display_df.columns)
     fig = go.Figure(
         data=[
             go.Table(
                 header=dict(
                     values=list(display_df.columns),
-                    fill_color="#2d3436",
+                    fill_color=THEME_HEADER_BG,
                     font=dict(color="white", size=14, family=FONT_FAMILY),
                     align=TABLE_HEADER_ALIGN,
                     height=TABLE_HEADER_HEIGHT,
-                    line_color="#dddddd",
+                    line_color=THEME_BORDER,
                     line_width=TABLE_LINE_WIDTH,
                 ),
                 cells=dict(
                     values=values,
                     fill_color=fill_colors,
-                    font=dict(color="#2c3e50", size=13, family=FONT_FAMILY),
+                    font=dict(color=THEME_TEXT, size=13, family=FONT_FAMILY),
                     align=aligns,
                     height=TABLE_ROW_HEIGHT,
-                    line_color="#dddddd",
+                    line_color=THEME_BORDER,
                     line_width=TABLE_LINE_WIDTH,
                 ),
             )
@@ -220,7 +239,7 @@ def _build_account_assets_table(summary_df: pd.DataFrame) -> go.Figure:
         width=TABLE_WIDTH,
         margin=dict(l=0, r=0, t=0, b=0),
         font=dict(family=FONT_FAMILY),
-        paper_bgcolor="#fffdf5",
+        paper_bgcolor=THEME_BG,
     )
     return fig
 
@@ -267,7 +286,7 @@ def _build_total_holdings_table(holdings_df: pd.DataFrame) -> Optional[go.Figure
         return None
     values = [display_df[col].tolist() for col in display_df.columns]
     aligns = TOTAL_HOLDINGS_TABLE_ALIGN
-    row_colors = ["#fffdf5" if idx % 2 == 0 else "#f6f0e6" for idx in range(len(display_df))]
+    row_colors = [THEME_BG if idx % 2 == 0 else THEME_BG_ALT for idx in range(len(display_df))]
     fill_colors = [row_colors] * len(display_df.columns)
     fig = go.Figure(
         data=[
@@ -275,20 +294,20 @@ def _build_total_holdings_table(holdings_df: pd.DataFrame) -> Optional[go.Figure
                 columnwidth=[1, 1.5, 0.7, 0.9, 1.2, 0.9, 1.1, 0.9, 0.8],
                 header=dict(
                     values=list(display_df.columns),
-                    fill_color="#2d3436",
+                    fill_color=THEME_HEADER_BG,
                     font=dict(color="white", size=13, family=FONT_FAMILY),
                     align=TABLE_HEADER_ALIGN,
                     height=TABLE_HEADER_HEIGHT,
-                    line_color="#dddddd",
+                    line_color=THEME_BORDER,
                     line_width=TABLE_LINE_WIDTH,
                 ),
                 cells=dict(
                     values=values,
                     fill_color=fill_colors,
-                    font=dict(color="#2c3e50", size=12, family=FONT_FAMILY),
+                    font=dict(color=THEME_TEXT, size=12, family=FONT_FAMILY),
                     align=aligns,
                     height=TABLE_ROW_HEIGHT,
-                    line_color="#dddddd",
+                    line_color=THEME_BORDER,
                     line_width=TABLE_LINE_WIDTH,
                 ),
             )
@@ -299,7 +318,7 @@ def _build_total_holdings_table(holdings_df: pd.DataFrame) -> Optional[go.Figure
         width=TABLE_WIDTH,
         margin=dict(l=0, r=0, t=0, b=0),
         font=dict(family=FONT_FAMILY),
-        paper_bgcolor="#fffdf5",
+        paper_bgcolor=THEME_BG,
     )
     return fig
 
@@ -316,24 +335,23 @@ def _build_dividends_chart(pivot: pd.DataFrame) -> go.Figure:
                 x=pivot_sorted.index,
                 y=pivot_sorted[col],
                 name=col,
-                marker=dict(color=PALETTE_LIGHT24[idx % len(PALETTE_LIGHT24)]),
+                marker=dict(color=_palette_color(idx)),
             )
         )
     fig.update_layout(
-        template="plotly_white",
         barmode="stack",
         height=chart_height,
         margin=dict(l=40, r=20, t=20, b=30),
         showlegend=False,
         font=dict(family=FONT_FAMILY),
-        paper_bgcolor="#fffdf5",
-        plot_bgcolor="#fffdf5",
+        paper_bgcolor=THEME_BG,
+        plot_bgcolor=THEME_BG,
     )
     fig.update_yaxes(
         tickformat=",.0f",
         dtick=500_000,
         showgrid=True,
-        gridcolor="#e6e0d6",
+        gridcolor=THEME_GRID,
         zeroline=False,
     )
     if not pivot_sorted.empty:
@@ -355,20 +373,19 @@ def _build_yearly_dividends_chart(pivot: pd.DataFrame) -> go.Figure:
                 x=years,
                 y=pivot_sorted[col],
                 name=col,
-                marker=dict(color=PALETTE_PASTEL[idx % len(PALETTE_PASTEL)]),
+                marker=dict(color=_palette_color(idx)),
             )
         )
     fig.update_layout(
-        template="plotly_white",
         barmode="stack",
         height=350,
         margin=dict(l=40, r=20, t=20, b=30),
         showlegend=False,
         font=dict(family=FONT_FAMILY),
-        paper_bgcolor="#fffdf5",
-        plot_bgcolor="#fffdf5",
+        paper_bgcolor=THEME_BG,
+        plot_bgcolor=THEME_BG,
     )
-    fig.update_yaxes(tickformat=",.0f", showgrid=True, gridcolor="#e6e0d6", zeroline=False)
+    fig.update_yaxes(tickformat=",.0f", showgrid=True, gridcolor=THEME_GRID, zeroline=False)
     return fig
 
 
@@ -376,7 +393,7 @@ def _build_yearly_return_chart(returns_df: pd.DataFrame, column: str) -> go.Figu
     data = returns_df.dropna(subset=[column]).copy()
     years = data["연도"].astype(str).tolist()
     values = (data[column] * 100).tolist()
-    colors = ["#d63031" if val >= 0 else "#0984e3" for val in values]
+    colors = [COLOR_GAIN if val >= 0 else COLOR_LOSS for val in values]
 
     fig = go.Figure(
         data=[
@@ -388,15 +405,14 @@ def _build_yearly_return_chart(returns_df: pd.DataFrame, column: str) -> go.Figu
         ]
     )
     fig.update_layout(
-        template="plotly_white",
         height=320,
         margin=dict(l=40, r=20, t=20, b=30),
         showlegend=False,
         font=dict(family=FONT_FAMILY),
-        paper_bgcolor="#fffdf5",
-        plot_bgcolor="#fffdf5",
+        paper_bgcolor=THEME_BG,
+        plot_bgcolor=THEME_BG,
     )
-    fig.update_yaxes(tickformat=".1f", ticksuffix="%", showgrid=True, gridcolor="#e6e0d6", zeroline=True)
+    fig.update_yaxes(tickformat=".1f", ticksuffix="%", showgrid=True, gridcolor=THEME_GRID, zeroline=True)
     return fig
 
 
@@ -426,8 +442,8 @@ def _build_account_detail(account: str, holdings_df: pd.DataFrame) -> Optional[g
             "수익률": account_holdings["수익률"].apply(fmt_rate),
         }
     )
-    row_colors = [PALETTE_PASTEL[idx % len(PALETTE_PASTEL)] for idx in range(len(table_df))]
-    fill_colors = [row_colors] + [["#fffdf5"] * len(table_df) for _ in range(len(table_df.columns) - 1)]
+    row_colors = [_palette_color(idx) for idx in range(len(table_df))]
+    fill_colors = [row_colors] + [[THEME_BG] * len(table_df) for _ in range(len(table_df.columns) - 1)]
     fig = make_subplots(
         rows=1,
         cols=2,
@@ -451,20 +467,20 @@ def _build_account_detail(account: str, holdings_df: pd.DataFrame) -> Optional[g
             columnwidth=DETAIL_TABLE_COLUMNWIDTH,
             header=dict(
                 values=list(table_df.columns),
-                fill_color="#2d3436",
+                fill_color=THEME_HEADER_BG,
                 font=dict(color="white", size=13, family=FONT_FAMILY),
                 align=TABLE_HEADER_ALIGN,
                 height=TABLE_HEADER_HEIGHT,
-                line_color="#dddddd",
+                line_color=THEME_BORDER,
                 line_width=TABLE_LINE_WIDTH,
             ),
             cells=dict(
                 values=[table_df[col].tolist() for col in table_df.columns],
                 fill_color=fill_colors,
-                font=dict(color=["white"] + ["#2c3e50"] * (len(table_df.columns) - 1), size=12, family=FONT_FAMILY),
+                font=dict(color=["white"] + [THEME_TEXT] * (len(table_df.columns) - 1), size=12, family=FONT_FAMILY),
                 align=DETAIL_TABLE_ALIGN,
                 height=TABLE_ROW_HEIGHT,
-                line_color="#dddddd",
+                line_color=THEME_BORDER,
                 line_width=TABLE_LINE_WIDTH,
             ),
         ),
@@ -474,7 +490,7 @@ def _build_account_detail(account: str, holdings_df: pd.DataFrame) -> Optional[g
     fig.update_layout(
         height=_table_height(len(table_df), min_height=260),
         margin=dict(l=10, r=10, t=10, b=10),
-        paper_bgcolor="#fffdf5",
+        paper_bgcolor=THEME_BG,
         showlegend=False,
         font=dict(family=FONT_FAMILY),
     )
@@ -778,7 +794,7 @@ def main() -> None:
         "      font-style: normal;",
         "      font-display: swap;",
         "    }",
-        "    body { margin: 0; background: #fffdf5; font-family: \"NanumSquareRound\", \"Nanum Square\", sans-serif; color: #2c3e50; }",
+        f"    body {{ margin: 0; background: {THEME_BG}; font-family: \"NanumSquareRound\", \"Nanum Square\", sans-serif; color: {THEME_TEXT}; }}",
         "    .container { max-width: 660px; margin: 0 auto; padding: 12px 16px 40px; }",
         "    .section-title { font-size: 18px; font-weight: 700; margin: 20px 0 10px; }",
         "    .section-chart { margin: 6px 0 18px; display: flex; justify-content: flex-start; align-items: flex-start; }",
@@ -790,8 +806,8 @@ def main() -> None:
         "    .section-text { margin: 6px 0 18px; font-size: 14px; line-height: 1.45; }",
         "    .history-summary { font-weight: 700; margin-bottom: 8px; }",
         "    .history-line { margin: 4px 0; }",
-        "    .history-line.buy { color: #d63031; }",
-        "    .history-line.sell { color: #0984e3; }",
+        f"    .history-line.buy {{ color: {COLOR_GAIN}; }}",
+        f"    .history-line.sell {{ color: {COLOR_LOSS}; }}",
         "  </style>",
         "</head>",
         "<body>",
