@@ -14,6 +14,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 try:
@@ -100,6 +101,34 @@ def run_fa_refresh(run_as: str) -> None:
     run([PYTHON, "scripts/update_fa.py"], cwd=ROOT, run_as=run_as)
 
 
+def render_fa_index(run_as: str) -> Path:
+    hugo_exe = get_value("hugo.executable", "hugo")
+    hugo_args = get_value("hugo.args", []) or []
+    with tempfile.TemporaryDirectory(prefix="hugo_fa_") as temp_dir:
+        temp_path = Path(temp_dir)
+        run(
+            [
+                hugo_exe,
+                *hugo_args,
+                "--config",
+                "hugo.yaml,config/config.yaml",
+                "--renderSegments",
+                "fa",
+                "--destination",
+                str(temp_path),
+            ],
+            cwd=ROOT,
+            run_as=run_as,
+        )
+        rendered = temp_path / "fa" / "index.html"
+        if not rendered.is_file():
+            raise FileNotFoundError(f"렌더된 fa/index.html을 찾을 수 없습니다: {rendered}")
+        target = ROOT / "public" / "fa" / "index.html"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(rendered, target)
+        return target
+
+
 def sync_full_site(web_public: Path) -> None:
     public_dir = get_path("public")
     run(["rsync", "-a", "--delete", f"{public_dir}/", f"{web_public}/"], cwd=ROOT)
@@ -135,6 +164,9 @@ def sync_fa_artifacts(web_public: Path) -> None:
         ],
         cwd=ROOT,
     )
+    rendered_index = get_path("public") / "fa" / "index.html"
+    if rendered_index.is_file():
+        run(["rsync", "-a", str(rendered_index), str(fa_dst / "index.html")], cwd=ROOT)
 
 
 def apply_permissions(web_public: Path, owner: str) -> None:
@@ -197,6 +229,7 @@ def main() -> int:
     else:
         print("원격 변경 없음: update_fa + FA 산출물만 동기화합니다.")
         run_fa_refresh(args.run_as)
+        render_fa_index(args.run_as)
         sync_fa_artifacts(web_public)
 
     if not args.skip_permissions:

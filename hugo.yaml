@@ -105,4 +105,10 @@ params:
 outputs:
   home: ["HTML", "RSS", "JSON"]
 
+# 부분 렌더링 세그먼트
+segments:
+  fa:
+    includes:
+      - path: "{/fa,/fa/**}"
+
 # 민감한 설정(Analytics, Adsense, SSH 등)은 config.yaml에서 관리한다.
