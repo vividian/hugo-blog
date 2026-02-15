@@ -4,7 +4,7 @@
 Behavior:
 1) Fetch root/content repositories.
 2) If GitHub has new commits, hard-reset to origin and run full deploy.
-3) If no new commits, run only update_fa.py and sync FA artifacts only.
+3) If no new commits, refresh FA outputs and sync FA artifacts only.
 """
 
 from __future__ import annotations
@@ -97,8 +97,9 @@ def run_full_deploy(
 
 
 def run_fa_refresh(run_as: str) -> None:
-    # Git 변경이 없을 때는 시세 업데이트 전용 경로만 실행합니다.
+    # Git 변경이 없을 때도 FA 이미지/HTML 리포트를 함께 갱신합니다.
     run([PYTHON, "scripts/update_fa.py"], cwd=ROOT, run_as=run_as)
+    run([PYTHON, "scripts/update_fa_plotly.py"], cwd=ROOT, run_as=run_as)
 
 
 def render_fa_index(run_as: str) -> Path:
@@ -234,8 +235,10 @@ def main() -> int:
             args.run_as,
         )
         sync_full_site(web_public)
+        # Hugo full build에서는 content/fa/latest_fa.html이 누락될 수 있어 FA 산출물을 후동기화합니다.
+        sync_fa_artifacts(web_public)
     else:
-        print("원격 변경 없음: update_fa + FA 산출물만 동기화합니다.")
+        print("원격 변경 없음: update_fa/update_fa_plotly + FA 산출물만 동기화합니다.")
         run_fa_refresh(args.run_as)
         render_fa_index(args.run_as)
         sync_fa_artifacts(web_public)
