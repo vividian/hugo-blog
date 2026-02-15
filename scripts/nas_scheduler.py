@@ -106,6 +106,10 @@ def render_fa_index(run_as: str) -> Path:
     hugo_args = get_value("hugo.args", []) or []
     with tempfile.TemporaryDirectory(prefix="hugo_fa_") as temp_dir:
         temp_path = Path(temp_dir)
+        # root 스케줄러에서 실행될 때도 --run-as 사용자가 destination에 쓸 수 있어야 한다.
+        if run_as:
+            run(["chown", run_as, str(temp_path)], cwd=ROOT)
+            run(["chmod", "755", str(temp_path)], cwd=ROOT)
         run(
             [
                 hugo_exe,
@@ -114,6 +118,8 @@ def render_fa_index(run_as: str) -> Path:
                 "hugo.yaml,config/config.yaml",
                 "--renderSegments",
                 "fa",
+                "--noTimes",
+                "--noChmod",
                 "--destination",
                 str(temp_path),
             ],
