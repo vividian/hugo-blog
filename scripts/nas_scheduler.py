@@ -98,8 +98,21 @@ def run_full_deploy(
 
 def run_fa_refresh(run_as: str) -> None:
     # Git 변경이 없을 때도 FA 이미지/HTML 리포트를 함께 갱신합니다.
+    # HTML은 Hugo static 경로에 생성해 /fa/latest_fa.html 로 항상 서빙되게 합니다.
+    static_fa_dir = ROOT / "static" / "fa"
+    static_fa_dir.mkdir(parents=True, exist_ok=True)
+    latest_fa_html = static_fa_dir / "latest_fa.html"
     run([PYTHON, "scripts/update_fa.py"], cwd=ROOT, run_as=run_as)
-    run([PYTHON, "scripts/update_fa_plotly.py"], cwd=ROOT, run_as=run_as)
+    run(
+        [
+            PYTHON,
+            "scripts/update_fa_plotly.py",
+            "--output",
+            str(latest_fa_html),
+        ],
+        cwd=ROOT,
+        run_as=run_as,
+    )
 
 
 def render_fa_index(run_as: str) -> Path:
@@ -173,6 +186,13 @@ def sync_fa_artifacts(web_public: Path) -> None:
         ],
         cwd=ROOT,
     )
+    static_latest_html = ROOT / "static" / "fa" / "latest_fa.html"
+    if static_latest_html.is_file():
+        # 외부 스케줄러가 public -> web 동기화를 수행해도 파일이 사라지지 않도록 public에도 맞춰둡니다.
+        public_latest = get_path("public") / "fa" / "latest_fa.html"
+        public_latest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(static_latest_html, public_latest)
+        run(["rsync", "-a", str(static_latest_html), str(fa_dst / "latest_fa.html")], cwd=ROOT)
     rendered_index = get_path("public") / "fa" / "index.html"
     if rendered_index.is_file():
         run(["rsync", "-a", str(rendered_index), str(fa_dst / "index.html")], cwd=ROOT)
