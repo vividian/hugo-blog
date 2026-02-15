@@ -22,11 +22,11 @@ if str(ROOT_DIR) not in sys.path:
 from scripts import update_fa
 
 
-TABLE_WIDTH = 660
-TABLE_HEADER_HEIGHT = 34
-TABLE_ROW_HEIGHT = 32
+TABLE_WIDTH = 560
+TABLE_HEADER_HEIGHT = 30
+TABLE_ROW_HEIGHT = 28
 TABLE_LINE_WIDTH = 1
-TABLE_PADDING_HEIGHT = 12
+TABLE_PADDING_HEIGHT = 8
 FONT_FAMILY = "NanumSquareRound, 'Nanum Square', 'NanumSquareRound', sans-serif"
 CHART_COLORWAY = [
     "#4E79A7",
@@ -187,8 +187,8 @@ def _build_assets_trend(account_df: pd.DataFrame) -> go.Figure:
             )
         )
     fig.update_layout(
-        height=420,
-        margin=dict(l=40, r=20, t=20, b=40),
+        height=340,
+        margin=dict(l=28, r=12, t=12, b=26),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
         showlegend=False,
         font=dict(family=FONT_FAMILY),
@@ -324,7 +324,7 @@ def _build_total_holdings_table(holdings_df: pd.DataFrame) -> Optional[go.Figure
 
 
 def _build_dividends_chart(pivot: pd.DataFrame) -> go.Figure:
-    chart_height = 350
+    chart_height = 300
     pivot_sorted = pivot.sort_index()
     if len(pivot_sorted) > 12:
         pivot_sorted = pivot_sorted.tail(12)
@@ -341,7 +341,7 @@ def _build_dividends_chart(pivot: pd.DataFrame) -> go.Figure:
     fig.update_layout(
         barmode="stack",
         height=chart_height,
-        margin=dict(l=40, r=20, t=20, b=30),
+        margin=dict(l=28, r=12, t=12, b=22),
         showlegend=False,
         font=dict(family=FONT_FAMILY),
         paper_bgcolor=THEME_BG,
@@ -378,8 +378,8 @@ def _build_yearly_dividends_chart(pivot: pd.DataFrame) -> go.Figure:
         )
     fig.update_layout(
         barmode="stack",
-        height=350,
-        margin=dict(l=40, r=20, t=20, b=30),
+        height=300,
+        margin=dict(l=28, r=12, t=12, b=22),
         showlegend=False,
         font=dict(family=FONT_FAMILY),
         paper_bgcolor=THEME_BG,
@@ -405,8 +405,8 @@ def _build_yearly_return_chart(returns_df: pd.DataFrame, column: str) -> go.Figu
         ]
     )
     fig.update_layout(
-        height=320,
-        margin=dict(l=40, r=20, t=20, b=30),
+        height=270,
+        margin=dict(l=28, r=12, t=12, b=22),
         showlegend=False,
         font=dict(family=FONT_FAMILY),
         paper_bgcolor=THEME_BG,
@@ -795,17 +795,17 @@ def main() -> None:
         "      font-display: swap;",
         "    }",
         f"    body {{ margin: 0; background: {THEME_BG}; font-family: \"NanumSquareRound\", \"Nanum Square\", sans-serif; color: {THEME_TEXT}; }}",
-        "    .container { max-width: 660px; margin: 0 auto; padding: 12px 16px 40px; }",
-        "    .section-title { font-size: 18px; font-weight: 700; margin: 20px 0 10px; }",
-        "    .section-chart { margin: 6px 0 18px; display: flex; justify-content: flex-start; align-items: flex-start; }",
+        "    .container { max-width: 560px; margin: 0 auto; padding: 8px 10px 24px; }",
+        "    .section-title { font-size: 17px; font-weight: 700; margin: 14px 0 8px; }",
+        "    .section-chart { margin: 4px 0 12px; display: flex; justify-content: flex-start; align-items: flex-start; }",
         "    .table-chart { display: flex; justify-content: flex-start; }",
         "    .section-chart .plotly-graph-div { margin: 0 !important; }",
         "    .plotly-graph-div { overflow: hidden !important; }",
         "    .plotly-graph-div .svg-container { overflow: hidden !important; }",
         "    .plotly-graph-div .table text { dominant-baseline: middle; alignment-baseline: central; }",
-        "    .section-text { margin: 6px 0 18px; font-size: 14px; line-height: 1.45; }",
-        "    .history-summary { font-weight: 700; margin-bottom: 8px; }",
-        "    .history-line { margin: 4px 0; }",
+        "    .section-text { margin: 4px 0 12px; font-size: 13px; line-height: 1.4; }",
+        "    .history-summary { font-weight: 700; margin-bottom: 6px; }",
+        "    .history-line { margin: 3px 0; }",
         f"    .history-line.buy {{ color: {COLOR_GAIN}; }}",
         f"    .history-line.sell {{ color: {COLOR_LOSS}; }}",
         "  </style>",
