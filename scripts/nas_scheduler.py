@@ -149,7 +149,7 @@ def sync_fa_artifacts(web_public: Path) -> None:
     fa_dst = web_public / "fa"
     fa_dst.mkdir(parents=True, exist_ok=True)
 
-    # 최신 시세 반영에 필요한 산출물(webp/csv/json)만 복사합니다.
+    # 최신 시세 반영에 필요한 산출물(webp/csv/json/html)만 복사합니다.
     run(
         [
             "rsync",
@@ -163,6 +163,8 @@ def sync_fa_artifacts(web_public: Path) -> None:
             "*.csv",
             "--include",
             "*.json",
+            "--include",
+            "*.html",
             "--exclude",
             "*",
             f"{fa_src}/",
