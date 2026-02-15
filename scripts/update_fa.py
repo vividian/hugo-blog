@@ -268,12 +268,31 @@ def convert_to_krw(account: str,
     return value
 
 
-def get_monthly_prices(end_date: pd.Timestamp) -> Optional[pd.DataFrame]:
-    """fa.yaml에 정의된 모든 종목의 월말 종가 데이터를 가져온다."""
+def get_monthly_prices(end_date: pd.Timestamp, records: Optional[pd.DataFrame] = None) -> Optional[pd.DataFrame]:
+    """월말 종가 데이터를 가져온다.
+
+    records가 주어지면 실제 거래내역(수량/단가 존재, non-sema)에 사용된 종목만 조회한다.
+    """
     fa_data = load_symbol_map()
     tickers_map: Dict[str, str] = {}
-    for config in fa_data.values():
-        tickers_map[config.ticker] = config.abbrev or config.name
+
+    if records is not None and not records.empty:
+        traded = records[
+            (records["수량"].notna())
+            & (records["단가"].notna())
+            & (records["수량"] != 0)
+            & (records["계좌"] != "sema")
+        ]
+        for symbol in traded["종목"].dropna().astype(str):
+            config = fa_data.get(symbol)
+            if not config:
+                continue
+            tickers_map[config.ticker] = config.abbrev or config.name
+
+    # 거래내역 기반 대상이 비어 있으면 기존 방식으로 전체 종목을 조회한다.
+    if not tickers_map:
+        for config in fa_data.values():
+            tickers_map[config.ticker] = config.abbrev or config.name
 
     if not tickers_map:
         print("fa.yaml에 종목 정보가 없습니다.")
@@ -1863,7 +1882,7 @@ def main() -> None:
         months = months[-1:]
     latest_period = months[-1] if len(months) else None
 
-    monthly_prices_full = get_monthly_prices(latest_date)
+    monthly_prices_full = get_monthly_prices(latest_date, records)
 
     latest_outputs: Dict[str, Path] = {}
     for idx, period in enumerate(months):
