@@ -30,6 +30,9 @@ YOUTUBE_ID_PATTERN = re.compile(r"^[\w\-]{11}$")
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"}
 SIZE_PATTERN = re.compile(r"^(?P<width>\d+)(?:x(?P<height>\d+))?$", re.IGNORECASE)
 FRONT_MATTER_PATTERN = re.compile(r"^---\s*\n.*?\n---\s*\n", re.DOTALL)
+SKIP_BLOCK_PATTERN = re.compile(
+    r"(?is)<(script|style|pre|code)(?:\s[^>]*)?>.*?</\1>"
+)
 
 
 def slugify(value: str) -> str:
@@ -219,17 +222,33 @@ def convert_html(public_dir: Path, mapping: dict[str, dict[str, str]]) -> int:
             continue
         body_start = body_match.start(2)
         body_end = body_match.end(2)
+        body_text = text[body_start:body_end]
+
+        changed = False
 
         def repl(mt: re.Match[str]) -> str:
-            allow = body_start <= mt.start() < body_end
-            replacement, changed = build_replacement(mt, mapping, allow_embed=allow)
-            if changed:
-                repl.changed = True  # type: ignore[attr-defined]
+            nonlocal changed
+            replacement, did_change = build_replacement(mt, mapping, allow_embed=True)
+            if did_change:
+                changed = True
             return replacement
 
-        repl.changed = False  # type: ignore[attr-defined]
-        new_text = WIKILINK_PATTERN.sub(repl, text)
-        if repl.changed:
+        chunks: list[str] = []
+        cursor = 0
+        for skip in SKIP_BLOCK_PATTERN.finditer(body_text):
+            plain_segment = body_text[cursor : skip.start()]
+            if plain_segment:
+                chunks.append(WIKILINK_PATTERN.sub(repl, plain_segment))
+            chunks.append(skip.group(0))
+            cursor = skip.end()
+
+        tail = body_text[cursor:]
+        if tail:
+            chunks.append(WIKILINK_PATTERN.sub(repl, tail))
+
+        new_body = "".join(chunks)
+        if changed:
+            new_text = text[:body_start] + new_body + text[body_end:]
             updated += 1
             html_file.write_text(new_text, encoding="utf-8")
     return updated
