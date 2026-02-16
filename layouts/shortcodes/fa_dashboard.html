@@ -1,6 +1,23 @@
-{{- $path := "data/fa/latest_fa_fragment.html" -}}
-{{- if fileExists $path -}}
-  {{- readFile $path | safeHTML -}}
+{{- $fragmentPath := "data/fa/latest_fa_fragment.html" -}}
+{{- $legacyPath := "content/fa/latest_fa.html" -}}
+{{- if fileExists $fragmentPath -}}
+  {{- readFile $fragmentPath | safeHTML -}}
+{{- else if fileExists $legacyPath -}}
+  {{- $legacyRaw := readFile $legacyPath -}}
+  {{- $legacyBody := replaceRE `(?is)^.*<body[^>]*>` `` $legacyRaw -}}
+  {{- $legacyBody = replaceRE `(?is)</body>.*$` `` $legacyBody -}}
+  {{- $legacyStyles := findRE `(?is)<style[^>]*>.*?</style>` $legacyRaw -}}
+  {{- if gt (len $legacyStyles) 0 -}}
+    {{- $styleText := delimit $legacyStyles "\n" -}}
+    {{- $styleText = replaceRE `(?is):root\s*\{[^}]*\}` `` $styleText -}}
+    {{- $styleText = replaceRE `(?is)body\s*\{[^}]*\}` `` $styleText -}}
+    {{- $styleText | safeHTML -}}
+  {{- end -}}
+  {{- if ne $legacyBody $legacyRaw -}}
+    {{- $legacyBody | safeHTML -}}
+  {{- else -}}
+    {{- $legacyRaw | safeHTML -}}
+  {{- end -}}
 {{- else -}}
   <div class="fa-dashboard-empty">
     대시보드 파일이 아직 생성되지 않았습니다. `scripts/update_fa_plotly.py`를 먼저 실행해 주세요.
