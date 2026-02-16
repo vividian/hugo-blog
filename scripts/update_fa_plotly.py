@@ -29,7 +29,7 @@ TABLE_HEADER_HEIGHT = 30
 TABLE_ROW_HEIGHT = 28
 TABLE_LINE_WIDTH = 1
 TABLE_PADDING_HEIGHT = 8
-FONT_FAMILY = "NanumSquareRound, 'Nanum Square', 'NanumSquareRound', sans-serif"
+FONT_FAMILY = "Roboto, sans-serif"
 CHART_COLORWAY = [
     "#4E79A7",
     "#59A14F",
@@ -1031,7 +1031,7 @@ def _wrap_standalone_html(content_html: str, title: str) -> str:
             f"  <title>{html.escape(title)}</title>",
             "  <style>",
             "    :root { color-scheme: light dark; }",
-            "    body { margin: 0; font-family: \"NanumSquareRound\", \"Nanum Square\", sans-serif; }",
+            "    body { margin: 0; font-family: \"Roboto\", sans-serif; }",
             "    .fa-standalone-wrap { max-width: 1240px; margin: 0 auto; padding: 18px 16px 32px; }",
             "  </style>",
             "</head>",
