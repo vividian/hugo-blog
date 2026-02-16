@@ -55,6 +55,14 @@ EXCHANGE_RATE_TABLE_ALIGN = "center"
 ACCOUNT_ASSETS_TABLE_ALIGN = ["left", "right", "right", "right", "right", "right", "right"]
 TOTAL_HOLDINGS_TABLE_ALIGN = ["left", "left", "right", "right", "right", "right", "right", "right", "right"]
 DETAIL_TABLE_ALIGN = ["left", "right", "right", "right", "right"]
+MARKET_KPI_CONFIG = [
+    {"label": "S&P500", "ticker": "^GSPC", "decimals": 2},
+    {"label": "나스닥100", "ticker": "^NDX", "decimals": 2},
+    {"label": "SCHD", "ticker": "SCHD", "decimals": 2},
+    {"label": "미국채10년물", "ticker": "^TNX", "decimals": 2, "scale": 0.1, "value_suffix": "%", "delta_suffix": "%p"},
+    {"label": "코스피", "ticker": "^KS11", "decimals": 2},
+    {"label": "코스닥", "ticker": "^KQ11", "decimals": 2},
+]
 
 
 def _palette_color(idx: int) -> str:
@@ -737,6 +745,55 @@ def _fmt_pct(value: Optional[float]) -> str:
     return f"{value:+.2f}%"
 
 
+def _fmt_number(value: Optional[float], decimals: int = 2, suffix: str = "") -> str:
+    if value is None:
+        return "-"
+    if decimals <= 0:
+        return f"{value:,.0f}{suffix}"
+    return f"{value:,.{decimals}f}{suffix}"
+
+
+def _build_change_text(
+    current: Optional[float],
+    previous: Optional[float],
+    *,
+    decimals: int = 2,
+    delta_suffix: str = "",
+) -> Tuple[str, str]:
+    if current is None or previous is None:
+        return "-", ""
+    delta = current - previous
+    state = "positive" if delta > 0 else "negative" if delta < 0 else ""
+    pct_text = ""
+    if previous != 0:
+        pct = (delta / previous) * 100.0
+        pct_text = f" ({pct:+.2f}%)"
+    delta_text = _fmt_number(delta, decimals, delta_suffix)
+    if delta > 0 and not delta_text.startswith("+"):
+        delta_text = f"+{delta_text}"
+    return f"증감 {delta_text}{pct_text}", state
+
+
+def _fetch_market_snapshots() -> Dict[str, Tuple[Optional[float], Optional[float]]]:
+    tickers = [cfg["ticker"] for cfg in MARKET_KPI_CONFIG]
+    try:
+        raw = update_fa.fetch_latest_prices(tickers)
+    except Exception:
+        raw = {}
+
+    snapshots: Dict[str, Tuple[Optional[float], Optional[float]]] = {}
+    for cfg in MARKET_KPI_CONFIG:
+        ticker = cfg["ticker"]
+        scale = float(cfg.get("scale", 1.0))
+        price_pair = raw.get(ticker)
+        if price_pair is None:
+            snapshots[ticker] = (None, None)
+            continue
+        last_price, prev_price = price_pair
+        snapshots[ticker] = (last_price * scale, prev_price * scale)
+    return snapshots
+
+
 def _kpi_card(label: str, value: str, sub: str = "", state: str = "") -> str:
     state_class = f" {state}" if state else ""
     return (
@@ -768,6 +825,8 @@ def _build_kpi_row(data: ReportData) -> str:
         monthly_div = _as_float(data.dividends_pivot.sort_index().iloc[-1].sum())
 
     fx = _as_float(data.fx_series_full.iloc[-1]) if not data.fx_series_full.empty else None
+    fx_prev = _as_float(data.fx_series_full.iloc[-2]) if len(data.fx_series_full) > 1 else fx
+    fx_change_text, fx_state = _build_change_text(fx, fx_prev, decimals=2)
     month_label = data.month_end.strftime("%Y.%m")
 
     cards = [
@@ -786,9 +845,35 @@ def _build_kpi_row(data: ReportData) -> str:
             "positive" if (return_rate or 0) > 0 else "negative" if (return_rate or 0) < 0 else "",
         ),
         _kpi_card("월 배당금", _fmt_krw(monthly_div), f"{month_label} 합계"),
-        _kpi_card("USD/KRW", f"{fx:,.2f}" if fx is not None else "-", "현재 환율"),
+        _kpi_card("USD/KRW", _fmt_number(fx, 2), fx_change_text, fx_state),
     ]
     return "<div class=\"fa-kpi-grid\">" + "".join(cards) + "</div>"
+
+
+def _build_market_kpi_row() -> str:
+    snapshots = _fetch_market_snapshots()
+    cards: List[str] = []
+    for cfg in MARKET_KPI_CONFIG:
+        ticker = cfg["ticker"]
+        decimals = int(cfg.get("decimals", 2))
+        value_suffix = str(cfg.get("value_suffix", ""))
+        delta_suffix = str(cfg.get("delta_suffix", value_suffix))
+        current, previous = snapshots.get(ticker, (None, None))
+        change_text, state = _build_change_text(
+            current,
+            previous,
+            decimals=decimals,
+            delta_suffix=delta_suffix,
+        )
+        cards.append(
+            _kpi_card(
+                str(cfg["label"]),
+                _fmt_number(current, decimals, value_suffix),
+                change_text,
+                state,
+            )
+        )
+    return "<div class=\"fa-kpi-grid fa-kpi-grid-market\">" + "".join(cards) + "</div>"
 
 
 def _dashboard_card(title: str, body_html: str, extra_class: str = "") -> str:
@@ -810,7 +895,6 @@ def _build_dashboard_fragment(data: ReportData) -> str:
         plotly_included = True
         return rendered
 
-    exchange_fig = _build_exchange_rate_table(data.fx_series_full)
     assets_fig = _build_assets_trend(data.account_df)
     account_fig = _build_account_assets_table(data.summary_df)
     holdings_fig = _build_total_holdings_table(data.holdings_df)
@@ -842,10 +926,8 @@ def _build_dashboard_fragment(data: ReportData) -> str:
         f"<div class=\"fa-hero-meta\">업데이트: {html.escape(data.month_end.strftime('%Y-%m-%d'))}</div>"
         "</section>",
         _build_kpi_row(data),
-        "<div class=\"fa-grid fa-grid-2\">"
-        + _dashboard_card(update_fa.ACCOUNT_TITLES.get("title_exchange_rate", "환율"), fig_html(exchange_fig))
-        + _dashboard_card(update_fa.ACCOUNT_TITLES.get("title_assets_trend", "자산 추이"), fig_html(assets_fig))
-        + "</div>",
+        _build_market_kpi_row(),
+        _dashboard_card(update_fa.ACCOUNT_TITLES.get("title_assets_trend", "자산 추이"), fig_html(assets_fig), extra_class="fa-card-wide"),
         _dashboard_card(update_fa.ACCOUNT_TITLES.get("title_account_assets", "계좌 요약"), fig_html(account_fig)),
     ]
 
@@ -1034,7 +1116,7 @@ def _wrap_standalone_html(content_html: str, title: str) -> str:
             "  <style>",
             "    :root { color-scheme: light dark; }",
             "    body { margin: 0; font-family: \"Roboto\", sans-serif; }",
-            "    .fa-standalone-wrap { max-width: 1240px; margin: 0 auto; padding: 18px 16px 32px; }",
+            "    .fa-standalone-wrap { max-width: 900px; margin: 0 auto; padding: 18px 16px 32px; }",
             "  </style>",
             "</head>",
             "<body>",
