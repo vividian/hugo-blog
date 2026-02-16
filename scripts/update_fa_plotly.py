@@ -22,7 +22,6 @@ if str(ROOT_DIR) not in sys.path:
 from scripts import update_fa
 
 
-TABLE_WIDTH = 560
 TABLE_HEADER_HEIGHT = 30
 TABLE_ROW_HEIGHT = 28
 TABLE_LINE_WIDTH = 1
@@ -163,7 +162,6 @@ def _build_exchange_rate_table(fx_series: pd.Series) -> go.Figure:
     )
     fig.update_layout(
         height=_table_height(1, min_height=120),
-        width=TABLE_WIDTH,
         margin=dict(l=0, r=0, t=0, b=0),
         font=dict(family=FONT_FAMILY),
         paper_bgcolor=THEME_BG,
@@ -236,7 +234,6 @@ def _build_account_assets_table(summary_df: pd.DataFrame) -> go.Figure:
     )
     fig.update_layout(
         height=_table_height(len(display_df), min_height=220),
-        width=TABLE_WIDTH,
         margin=dict(l=0, r=0, t=0, b=0),
         font=dict(family=FONT_FAMILY),
         paper_bgcolor=THEME_BG,
@@ -315,7 +312,6 @@ def _build_total_holdings_table(holdings_df: pd.DataFrame) -> Optional[go.Figure
     )
     fig.update_layout(
         height=_table_height(len(display_df), min_height=260),
-        width=TABLE_WIDTH,
         margin=dict(l=0, r=0, t=0, b=0),
         font=dict(family=FONT_FAMILY),
         paper_bgcolor=THEME_BG,
@@ -944,8 +940,16 @@ html.dark .fa-dashboard {
   --fa-kpi-bg: #12161d;
   --fa-shadow: none;
 }
-.fa-dashboard .plotly-graph-div .svg-container { overflow: hidden !important; }
-.fa-dashboard .plotly-graph-div .table text { dominant-baseline: middle; alignment-baseline: central; }
+.fa-dashboard .plotly-graph-div .svg-container { overflow: visible !important; }
+.fa-dashboard .plotly-graph-div .main-svg text {
+  line-height: 1 !important;
+}
+.fa-dashboard .plotly-graph-div .table text {
+  dominant-baseline: middle !important;
+  alignment-baseline: middle !important;
+}
+.fa-dashboard .plotly-graph-div .table .cells text { fill: #1f2d3d !important; }
+.fa-dashboard .plotly-graph-div .table .header text { fill: #ffffff !important; }
 .fa-hero { margin: 6px 0 12px; }
 .fa-hero-title { font-size: 1.4rem; font-weight: 700; }
 .fa-hero-meta { margin-top: 4px; color: var(--fa-muted); font-size: 0.92rem; }
