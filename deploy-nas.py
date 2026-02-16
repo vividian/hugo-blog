@@ -81,11 +81,12 @@ def build_site(full_portfolio: bool) -> Path:
     """
     사이트 빌드 전체 과정을 수행하고, 빌드된 `public` 디렉터리의 경로를 반환합니다.
     1. 포트폴리오 데이터 업데이트 (`update_fa.py`)
-    2. 인기 포스트 데이터 업데이트 (`fetch_top_posts.py`)
-    3. 임시 디렉터리 생성 및 원본 콘텐츠 복사
-    4. 콘텐츠 전처리 (이미지 변환, 위키링크 변환 등)
-    5. Hugo 빌드 실행
-    6. 빌드 후처리 (public 디렉터리 내 위키링크 변환)
+    2. 포트폴리오 대시보드 HTML 업데이트 (`update_fa_plotly.py`)
+    3. 인기 포스트 데이터 업데이트 (`fetch_top_posts.py`)
+    4. 임시 디렉터리 생성 및 원본 콘텐츠 복사
+    5. 콘텐츠 전처리 (이미지 변환, 위키링크 변환 등)
+    6. Hugo 빌드 실행
+    7. 빌드 후처리 (public 디렉터리 내 위키링크 변환)
     """
     # 1. 포트폴리오 데이터 업데이트
     try:
@@ -98,7 +99,14 @@ def build_site(full_portfolio: bool) -> Path:
     except subprocess.CalledProcessError as exc:
         print(f"(경고) 포트폴리오 계산 실패: {exc}")
 
-    # 2. 인기 포스트 데이터 업데이트
+    # 2. 포트폴리오 대시보드 HTML 업데이트
+    try:
+        run_python("scripts/update_fa_plotly.py")
+    except subprocess.CalledProcessError as exc:
+        print(f"(경고) 포트폴리오 대시보드 생성 실패: {exc}")
+        print("(경고) 기존 latest_fa.html을 유지하고 배포를 계속합니다.")
+
+    # 3. 인기 포스트 데이터 업데이트
     try:
         fetch_top_posts.main()
     except SystemExit as exc:
@@ -114,7 +122,7 @@ def build_site(full_portfolio: bool) -> Path:
     # 빌드 전 메타데이터 디렉터리 정리
     clean_metadata_dirs([content_dir, data_dir, public_dir])
 
-    # 3. 임시 디렉터리 내에서 빌드 수행
+    # 4. 임시 디렉터리 내에서 빌드 수행
     with tempfile.TemporaryDirectory(prefix=temp_prefix) as temp_dir:
         temp_path = Path(temp_dir)
         # 원본 콘텐츠를 임시 디렉터리로 복사 (rsync 사용)
@@ -126,7 +134,7 @@ def build_site(full_portfolio: bool) -> Path:
             f"{temp_path}/",
         ])
 
-        # 4. 콘텐츠 전처리 스크립트 실행
+        # 5. 콘텐츠 전처리 스크립트 실행
         run_python("scripts/convert_to_webp.py", "--content-dir", str(content_dir))
         run_python("scripts/convert_wikilinks.py", "--content-dir", str(temp_path))
         run_python("scripts/replace_ad_marker.py", "--content-dir", str(temp_path))
@@ -134,7 +142,7 @@ def build_site(full_portfolio: bool) -> Path:
         # 임시 디렉터리 내 메타데이터 정리
         clean_metadata_dirs([temp_path])
 
-        # 5. Hugo 빌드 실행
+        # 6. Hugo 빌드 실행
         hugo_exe = get_value("hugo.executable", "hugo")
         hugo_args = get_value("hugo.args", []) or []
         # hugo.yaml + config/config.yaml 병합 사용
@@ -148,7 +156,7 @@ def build_site(full_portfolio: bool) -> Path:
         ]
         run(hugo_cmd)
 
-        # 6. 빌드 후처리
+        # 7. 빌드 후처리
         run_python("scripts/convert_wikilinks.py", "--public-dir", str(public_dir))
 
     return public_dir
