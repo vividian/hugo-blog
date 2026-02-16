@@ -582,7 +582,9 @@ def _render_figure_html(fig: go.Figure, *, include_js: bool) -> str:
     return pio.to_html(
         fig,
         full_html=False,
-        include_plotlyjs="inline" if include_js else False,
+        # Hugo canonifyURLs가 inline Plotly 번들 내부의 "/<a href=/" 정규식을
+        # 절대 URL로 치환해 스크립트를 깨뜨릴 수 있어 CDN 로드 방식으로 고정합니다.
+        include_plotlyjs="cdn" if include_js else False,
         config={
             "displayModeBar": False,
             "responsive": True,
