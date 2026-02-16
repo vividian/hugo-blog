@@ -109,6 +109,6 @@ outputs:
 segments:
   fa:
     includes:
-      - path: "{/fa,/fa/**}"
+      - path: "{/fa,/fa/**,/latest_fa_dashboard,/latest_fa_dashboard/**}"
 
 # 민감한 설정(Analytics, Adsense, SSH 등)은 config.yaml에서 관리한다.

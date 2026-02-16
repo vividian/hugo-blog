@@ -686,16 +686,26 @@ def _default_keys() -> List[str]:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Build a single Plotly HTML report")
+    parser = argparse.ArgumentParser(description="Build FA dashboard HTML outputs")
     parser.add_argument(
         "--index",
         type=Path,
-        help="Path to fa index.md (default: <static_dir>/index.md)",
+        help="Deprecated. Kept for backward compatibility.",
     )
     parser.add_argument(
         "--output",
         type=Path,
-        help="Output HTML path (default: <static_dir>/latest_fa.html)",
+        help="Standalone HTML output path (default: <static_dir>/latest_fa.html)",
+    )
+    parser.add_argument(
+        "--fragment-output",
+        type=Path,
+        help="Fragment HTML path for Hugo shortcode (default: <root>/data/fa/latest_fa_fragment.html)",
+    )
+    parser.add_argument(
+        "--no-standalone",
+        action="store_true",
+        help="Only write fragment output and skip standalone HTML output",
     )
     parser.add_argument(
         "--title",
@@ -705,153 +715,351 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _as_float(value: object) -> Optional[float]:
+    try:
+        if value is None or pd.isna(value):
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _fmt_krw(value: Optional[float]) -> str:
+    if value is None:
+        return "-"
+    return f"{value:,.0f}원"
+
+
+def _fmt_pct(value: Optional[float]) -> str:
+    if value is None:
+        return "-"
+    return f"{value:+.2f}%"
+
+
+def _kpi_card(label: str, value: str, sub: str = "", state: str = "") -> str:
+    state_class = f" {state}" if state else ""
+    return (
+        f"<div class=\"fa-kpi-card{state_class}\">"
+        f"<div class=\"fa-kpi-label\">{html.escape(label)}</div>"
+        f"<div class=\"fa-kpi-value\">{html.escape(value)}</div>"
+        f"<div class=\"fa-kpi-sub\">{html.escape(sub)}</div>"
+        "</div>"
+    )
+
+
+def _build_kpi_row(data: ReportData) -> str:
+    total_row = None
+    if not data.summary_df.empty and "계좌" in data.summary_df.columns:
+        total_match = data.summary_df[data.summary_df["계좌"] == "합계"]
+        if not total_match.empty:
+            total_row = total_match.iloc[-1]
+
+    invest = _as_float(total_row["투자금"]) if total_row is not None and "투자금" in total_row else None
+    valuation = _as_float(total_row["평가금"]) if total_row is not None and "평가금" in total_row else None
+    profit = _as_float(total_row["수익금"]) if total_row is not None and "수익금" in total_row else None
+    return_rate = _as_float(total_row["수익률"]) if total_row is not None and "수익률" in total_row else None
+
+    if return_rate is not None and abs(return_rate) <= 1.0:
+        return_rate *= 100.0
+
+    monthly_div = None
+    if data.dividends_pivot is not None and not data.dividends_pivot.empty:
+        monthly_div = _as_float(data.dividends_pivot.sort_index().iloc[-1].sum())
+
+    fx = _as_float(data.fx_series_full.iloc[-1]) if not data.fx_series_full.empty else None
+    month_label = data.month_end.strftime("%Y.%m")
+
+    cards = [
+        _kpi_card("총 평가금", _fmt_krw(valuation), f"{month_label} 기준"),
+        _kpi_card("총 투자금", _fmt_krw(invest), f"{month_label} 누적"),
+        _kpi_card(
+            "총 수익금",
+            _fmt_krw(profit),
+            "실현+평가",
+            "positive" if (profit or 0) > 0 else "negative" if (profit or 0) < 0 else "",
+        ),
+        _kpi_card(
+            "총 수익률",
+            _fmt_pct(return_rate),
+            "투자금 대비",
+            "positive" if (return_rate or 0) > 0 else "negative" if (return_rate or 0) < 0 else "",
+        ),
+        _kpi_card("월 배당금", _fmt_krw(monthly_div), f"{month_label} 합계"),
+        _kpi_card("USD/KRW", f"{fx:,.2f}" if fx is not None else "-", "현재 환율"),
+    ]
+    return "<div class=\"fa-kpi-grid\">" + "".join(cards) + "</div>"
+
+
+def _dashboard_card(title: str, body_html: str, extra_class: str = "") -> str:
+    klass = f"fa-card {extra_class}".strip()
+    return (
+        f"<section class=\"{klass}\">"
+        f"<header class=\"fa-card-head\"><h2>{html.escape(title)}</h2></header>"
+        f"<div class=\"fa-card-body\">{body_html}</div>"
+        "</section>"
+    )
+
+
+def _build_dashboard_fragment(data: ReportData) -> str:
+    plotly_included = False
+
+    def fig_html(fig: go.Figure) -> str:
+        nonlocal plotly_included
+        rendered = _render_figure_html(fig, include_js=not plotly_included)
+        plotly_included = True
+        return rendered
+
+    exchange_fig = _build_exchange_rate_table(data.fx_series_full)
+    assets_fig = _build_assets_trend(data.account_df)
+    account_fig = _build_account_assets_table(data.summary_df)
+    holdings_fig = _build_total_holdings_table(data.holdings_df)
+    monthly_div_fig = (
+        _build_dividends_chart(data.dividends_pivot)
+        if data.dividends_pivot is not None and not data.dividends_pivot.empty
+        else None
+    )
+    yearly_div_fig = (
+        _build_yearly_dividends_chart(data.yearly_dividends_pivot)
+        if data.yearly_dividends_pivot is not None and not data.yearly_dividends_pivot.empty
+        else None
+    )
+    yearly_return_invest_fig = (
+        _build_yearly_return_chart(data.yearly_returns_df, "투자금기준수익률")
+        if data.yearly_returns_df is not None and not data.yearly_returns_df.empty
+        else None
+    )
+    yearly_return_valuation_fig = (
+        _build_yearly_return_chart(data.yearly_returns_df, "평가금기준수익률")
+        if data.yearly_returns_df is not None and not data.yearly_returns_df.empty
+        else None
+    )
+    trading_summary, trading_lines = _build_trading_history(data.records, data.fx_series_month, data.month_end)
+
+    blocks: List[str] = [
+        "<section class=\"fa-hero\">"
+        f"<div class=\"fa-hero-title\">{html.escape(data.month_end.strftime('%Y년 %m월 자산 대시보드'))}</div>"
+        f"<div class=\"fa-hero-meta\">업데이트: {html.escape(data.month_end.strftime('%Y-%m-%d'))}</div>"
+        "</section>",
+        _build_kpi_row(data),
+        "<div class=\"fa-grid fa-grid-2\">"
+        + _dashboard_card(update_fa.ACCOUNT_TITLES.get("title_exchange_rate", "환율"), fig_html(exchange_fig))
+        + _dashboard_card(update_fa.ACCOUNT_TITLES.get("title_assets_trend", "자산 추이"), fig_html(assets_fig))
+        + "</div>",
+        _dashboard_card(update_fa.ACCOUNT_TITLES.get("title_account_assets", "계좌 요약"), fig_html(account_fig)),
+    ]
+
+    if holdings_fig is not None:
+        blocks.append(
+            _dashboard_card(
+                update_fa.ACCOUNT_TITLES.get("title_total_holdings", "보유 종목"),
+                fig_html(holdings_fig),
+                extra_class="fa-card-wide",
+            )
+        )
+
+    div_cards: List[str] = []
+    if monthly_div_fig is not None:
+        div_cards.append(
+            _dashboard_card(
+                update_fa.ACCOUNT_TITLES.get("title_monthly_dividends", "월별 배당"),
+                fig_html(monthly_div_fig),
+            )
+        )
+    if yearly_div_fig is not None:
+        div_cards.append(
+            _dashboard_card(
+                update_fa.ACCOUNT_TITLES.get("title_yearly_dividends", "연별 배당"),
+                fig_html(yearly_div_fig),
+            )
+        )
+    if div_cards:
+        blocks.append("<div class=\"fa-grid fa-grid-2\">" + "".join(div_cards) + "</div>")
+
+    return_cards: List[str] = []
+    if yearly_return_invest_fig is not None:
+        return_cards.append(
+            _dashboard_card(
+                update_fa.ACCOUNT_TITLES.get("title_yearly_return_investment", "연별 수익률(투자금 기준)"),
+                fig_html(yearly_return_invest_fig),
+            )
+        )
+    if yearly_return_valuation_fig is not None:
+        return_cards.append(
+            _dashboard_card(
+                update_fa.ACCOUNT_TITLES.get("title_yearly_return_valuation", "연별 수익률(평가금 기준)"),
+                fig_html(yearly_return_valuation_fig),
+            )
+        )
+    if return_cards:
+        blocks.append("<div class=\"fa-grid fa-grid-2\">" + "".join(return_cards) + "</div>")
+
+    if trading_summary or trading_lines:
+        blocks.append(
+            _dashboard_card(
+                update_fa.ACCOUNT_TITLES.get("title_trading_history", "거래 내역"),
+                f"<div class=\"section-text\">{_render_history_html(trading_summary, trading_lines)}</div>",
+                extra_class="fa-card-wide",
+            )
+        )
+
+    details: List[str] = []
+    for account in data.valid_detail_accounts:
+        fig = _build_account_detail(account, data.holdings_df)
+        if fig is None:
+            continue
+        detail_title = update_fa.ACCOUNT_TITLES.get(
+            f"title_{account}_detail", f"상세계좌: {update_fa.account_label(account)}"
+        )
+        details.append(
+            "<details class=\"fa-detail-item\">"
+            f"<summary>{html.escape(detail_title)}</summary>"
+            f"<div class=\"fa-detail-chart\">{fig_html(fig)}</div>"
+            "</details>"
+        )
+    if details:
+        blocks.append(
+            _dashboard_card(
+                "상세 계좌",
+                "<div class=\"fa-detail-list\">" + "".join(details) + "</div>",
+                extra_class="fa-card-wide",
+            )
+        )
+
+    styles = """
+<style>
+.fa-dashboard {
+  --fa-card-bg: #ffffff;
+  --fa-card-border: #d8dee8;
+  --fa-text: #1f2d3d;
+  --fa-muted: #6b7280;
+  --fa-kpi-bg: #f7fafc;
+  --fa-shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
+  color: var(--fa-text);
+}
+html.dark .fa-dashboard {
+  --fa-card-bg: #171b22;
+  --fa-card-border: #2a3342;
+  --fa-text: #e5e7eb;
+  --fa-muted: #9ca3af;
+  --fa-kpi-bg: #12161d;
+  --fa-shadow: none;
+}
+.fa-dashboard .plotly-graph-div .svg-container { overflow: hidden !important; }
+.fa-dashboard .plotly-graph-div .table text { dominant-baseline: middle; alignment-baseline: central; }
+.fa-hero { margin: 6px 0 12px; }
+.fa-hero-title { font-size: 1.4rem; font-weight: 700; }
+.fa-hero-meta { margin-top: 4px; color: var(--fa-muted); font-size: 0.92rem; }
+.fa-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  margin: 10px 0 14px;
+}
+@media (max-width: 1200px) { .fa-kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .fa-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.fa-kpi-card {
+  border: 1px solid var(--fa-card-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--fa-kpi-bg);
+  box-shadow: var(--fa-shadow);
+}
+.fa-kpi-label { color: var(--fa-muted); font-size: 0.82rem; }
+.fa-kpi-value { margin-top: 4px; font-weight: 700; font-size: 1.08rem; }
+.fa-kpi-sub { margin-top: 2px; color: var(--fa-muted); font-size: 0.78rem; }
+.fa-kpi-card.positive .fa-kpi-value { color: #b42318; }
+.fa-kpi-card.negative .fa-kpi-value { color: #1d4ed8; }
+html.dark .fa-kpi-card.positive .fa-kpi-value { color: #f87171; }
+html.dark .fa-kpi-card.negative .fa-kpi-value { color: #60a5fa; }
+.fa-grid { display: grid; gap: 12px; margin: 12px 0; }
+.fa-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 1000px) { .fa-grid-2 { grid-template-columns: 1fr; } }
+.fa-card {
+  border: 1px solid var(--fa-card-border);
+  border-radius: 12px;
+  background: var(--fa-card-bg);
+  box-shadow: var(--fa-shadow);
+  overflow: hidden;
+}
+.fa-card-head { padding: 12px 14px; border-bottom: 1px solid var(--fa-card-border); }
+.fa-card-head h2 { margin: 0; font-size: 1.06rem; }
+.fa-card-body { padding: 10px 12px 12px; }
+.fa-card-wide { margin: 12px 0; }
+.section-text { margin: 0; font-size: 13px; line-height: 1.45; }
+.history-summary { font-weight: 700; margin-bottom: 6px; }
+.history-line { margin: 3px 0; color: var(--fa-text); }
+.history-line.buy { color: #b42318; }
+.history-line.sell { color: #1d4ed8; }
+html.dark .history-line.buy { color: #f87171; }
+html.dark .history-line.sell { color: #60a5fa; }
+.fa-detail-list { display: grid; gap: 10px; }
+.fa-detail-item {
+  border: 1px solid var(--fa-card-border);
+  border-radius: 10px;
+  background: transparent;
+}
+.fa-detail-item > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 10px 12px;
+  font-weight: 600;
+  border-bottom: 1px solid transparent;
+}
+.fa-detail-item[open] > summary { border-bottom-color: var(--fa-card-border); }
+.fa-detail-item > summary::-webkit-details-marker { display: none; }
+.fa-detail-chart { padding: 8px 10px 10px; }
+</style>
+"""
+    return "<div class=\"fa-dashboard\">" + styles + "".join(blocks) + "</div>"
+
+
+def _wrap_standalone_html(content_html: str, title: str) -> str:
+    return "\n".join(
+        [
+            "<!doctype html>",
+            "<html lang=\"ko\">",
+            "<head>",
+            "  <meta charset=\"utf-8\">",
+            "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">",
+            f"  <title>{html.escape(title)}</title>",
+            "  <style>",
+            "    :root { color-scheme: light dark; }",
+            "    body { margin: 0; font-family: \"NanumSquareRound\", \"Nanum Square\", sans-serif; }",
+            "    .fa-standalone-wrap { max-width: 1240px; margin: 0 auto; padding: 18px 16px 32px; }",
+            "  </style>",
+            "</head>",
+            "<body>",
+            "  <div class=\"fa-standalone-wrap\">",
+            content_html,
+            "  </div>",
+            "</body>",
+            "</html>",
+            "",
+        ]
+    )
+
+
 def main() -> None:
     args = parse_args()
     static_dir = update_fa.PATHS.get("static_dir", ROOT_DIR / "content/fa")
-    index_path = args.index or (static_dir / "index.md")
     output_path = args.output or (static_dir / "latest_fa.html")
+    fragment_path = args.fragment_output or (ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html")
 
     records = update_fa.read_trading_records()
     if records.empty:
         raise ValueError("Trading records are empty.")
     data = _build_report_data(records)
 
-    keys = []
-    if index_path.exists():
-        keys = _extract_image_keys(index_path.read_text(encoding="utf-8"))
-    if not keys:
-        keys = _default_keys()
+    dashboard_fragment = _build_dashboard_fragment(data)
+    fragment_path.parent.mkdir(parents=True, exist_ok=True)
+    fragment_path.write_text(dashboard_fragment, encoding="utf-8")
+    print(f"Dashboard fragment saved: {fragment_path}")
 
-    sections: List[str] = []
-    plotly_included = False
-
-    for key in keys:
-        if key.startswith("title_"):
-            sections.append(_render_title(key))
-            continue
-
-        fig: Optional[go.Figure] = None
-        custom_html: Optional[str] = None
-
-        if key == "exchange_rate":
-            fig = _build_exchange_rate_table(data.fx_series_full)
-        elif key == "assets_trend":
-            fig = _build_assets_trend(data.account_df)
-        elif key == "account_assets":
-            fig = _build_account_assets_table(data.summary_df)
-        elif key == "total_holdings":
-            fig = _build_total_holdings_table(data.holdings_df)
-        elif key == "monthly_dividends":
-            if data.dividends_pivot is not None and not data.dividends_pivot.empty:
-                fig = _build_dividends_chart(data.dividends_pivot)
-        elif key == "yearly_dividends":
-            if data.yearly_dividends_pivot is not None and not data.yearly_dividends_pivot.empty:
-                fig = _build_yearly_dividends_chart(data.yearly_dividends_pivot)
-        elif key == "yearly_return_investment":
-            if data.yearly_returns_df is not None and not data.yearly_returns_df.empty:
-                fig = _build_yearly_return_chart(data.yearly_returns_df, "투자금기준수익률")
-        elif key == "yearly_return_valuation":
-            if data.yearly_returns_df is not None and not data.yearly_returns_df.empty:
-                fig = _build_yearly_return_chart(data.yearly_returns_df, "평가금기준수익률")
-        elif key == "trading_history":
-            summary, lines = _build_trading_history(data.records, data.fx_series_month, data.month_end)
-            custom_html = _render_history_html(summary, lines)
-        elif key.endswith("_detail"):
-            account = key.replace("_detail", "")
-            if account in data.valid_detail_accounts:
-                fig = _build_account_detail(account, data.holdings_df)
-
-        if fig is not None:
-            is_table_section = key in {"exchange_rate", "account_assets", "total_holdings"}
-            section_class = "section-chart table-chart" if is_table_section else "section-chart"
-            sections.append(
-                f"<div class=\"{section_class}\">{_render_figure_html(fig, include_js=not plotly_included)}</div>"
-            )
-            plotly_included = True
-        elif custom_html:
-            sections.append(f"<div class=\"section-text\">{custom_html}</div>")
-
-    html_output = [
-        "<!doctype html>",
-        "<html lang=\"ko\">",
-        "<head>",
-        "  <meta charset=\"utf-8\">",
-        "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">",
-        f"  <title>{html.escape(args.title)}</title>",
-        "  <style>",
-        "    :root { color-scheme: light; }",
-        "    @font-face {",
-        "      font-family: \"NanumSquareRound\";",
-        "      src: url(\"/fonts/NanumSquareRoundR.ttf\") format(\"truetype\");",
-        "      font-weight: 400;",
-        "      font-style: normal;",
-        "      font-display: swap;",
-        "    }",
-        "    @font-face {",
-        "      font-family: \"NanumSquareRound\";",
-        "      src: url(\"/fonts/NanumSquareRoundEB.ttf\") format(\"truetype\");",
-        "      font-weight: 700;",
-        "      font-style: normal;",
-        "      font-display: swap;",
-        "    }",
-        f"    body {{ margin: 0; background: {THEME_BG}; font-family: \"NanumSquareRound\", \"Nanum Square\", sans-serif; color: {THEME_TEXT}; }}",
-        "    .container { max-width: 560px; margin: 0 auto; padding: 8px 10px 24px; }",
-        "    .section-title { font-size: 17px; font-weight: 700; margin: 14px 0 8px; }",
-        "    .section-chart { margin: 4px 0 12px; display: flex; justify-content: flex-start; align-items: flex-start; }",
-        "    .table-chart { display: flex; justify-content: flex-start; }",
-        "    .section-chart .plotly-graph-div { margin: 0 !important; }",
-        "    .plotly-graph-div { overflow: hidden !important; }",
-        "    .plotly-graph-div .svg-container { overflow: hidden !important; }",
-        "    .plotly-graph-div .table text { dominant-baseline: middle; alignment-baseline: central; }",
-        "    .section-text { margin: 4px 0 12px; font-size: 13px; line-height: 1.4; }",
-        "    .history-summary { font-weight: 700; margin-bottom: 6px; }",
-        "    .history-line { margin: 3px 0; }",
-        f"    .history-line.buy {{ color: {COLOR_GAIN}; }}",
-        f"    .history-line.sell {{ color: {COLOR_LOSS}; }}",
-        "  </style>",
-        "</head>",
-        "<body>",
-        "  <div class=\"container\">",
-        "\n".join(sections),
-        "  </div>",
-        "  <script>",
-        "    (function () {",
-        "      function docHeight() {",
-        "        var body = document.body;",
-        "        var html = document.documentElement;",
-        "        return Math.max(",
-        "          body ? body.scrollHeight : 0,",
-        "          body ? body.offsetHeight : 0,",
-        "          html ? html.clientHeight : 0,",
-        "          html ? html.scrollHeight : 0,",
-        "          html ? html.offsetHeight : 0",
-        "        );",
-        "      }",
-        "      function resizeIframe() {",
-        "        var frame = window.frameElement;",
-        "        if (!frame) return;",
-        "        frame.style.overflow = \"hidden\";",
-        "        frame.setAttribute(\"scrolling\", \"no\");",
-        "        frame.style.height = String(docHeight() + 16) + \"px\";",
-        "      }",
-        "      window.addEventListener(\"load\", resizeIframe);",
-        "      window.addEventListener(\"resize\", resizeIframe);",
-        "      if (typeof ResizeObserver !== \"undefined\") {",
-        "        var observer = new ResizeObserver(function () { resizeIframe(); });",
-        "        observer.observe(document.body);",
-        "      }",
-        "      setTimeout(resizeIframe, 50);",
-        "      setTimeout(resizeIframe, 300);",
-        "      setTimeout(resizeIframe, 1000);",
-        "    })();",
-        "  </script>",
-        "</body>",
-        "</html>",
-        "",
-    ]
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text("\n".join(html_output), encoding="utf-8")
-    print(f"HTML saved: {output_path}")
+    if not args.no_standalone:
+        standalone_html = _wrap_standalone_html(dashboard_fragment, args.title)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(standalone_html, encoding="utf-8")
+        print(f"HTML saved: {output_path}")
 
 
 if __name__ == "__main__":

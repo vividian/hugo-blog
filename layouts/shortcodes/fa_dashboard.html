@@ -1,0 +1,8 @@
+{{- $path := "data/fa/latest_fa_fragment.html" -}}
+{{- if fileExists $path -}}
+  {{- readFile $path | safeHTML -}}
+{{- else -}}
+  <div class="fa-dashboard-empty">
+    대시보드 파일이 아직 생성되지 않았습니다. `scripts/update_fa_plotly.py`를 먼저 실행해 주세요.
+  </div>
+{{- end -}}

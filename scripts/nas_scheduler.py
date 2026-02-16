@@ -132,6 +132,13 @@ def render_fa_index(run_as: str) -> Path:
         target = ROOT / "public" / "fa" / "index.html"
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(rendered, target)
+
+        # 세그먼트 렌더에 latest_fa.html이 포함된 경우 함께 반영합니다.
+        rendered_latest = temp_path / "fa" / "latest_fa.html"
+        if rendered_latest.is_file():
+            latest_target = ROOT / "public" / "fa" / "latest_fa.html"
+            latest_target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(rendered_latest, latest_target)
         return target
 
 
@@ -173,6 +180,9 @@ def sync_fa_artifacts(web_public: Path) -> None:
     rendered_index = get_path("public") / "fa" / "index.html"
     if rendered_index.is_file():
         run(["rsync", "-a", str(rendered_index), str(fa_dst / "index.html")], cwd=ROOT)
+    rendered_latest = get_path("public") / "fa" / "latest_fa.html"
+    if rendered_latest.is_file():
+        run(["rsync", "-a", str(rendered_latest), str(fa_dst / "latest_fa.html")], cwd=ROOT)
 
 
 def apply_permissions(web_public: Path, owner: str) -> None:
