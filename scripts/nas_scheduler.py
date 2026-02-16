@@ -99,6 +99,7 @@ def run_full_deploy(
 def run_fa_refresh(run_as: str) -> None:
     # Git 변경이 없을 때는 시세 업데이트 전용 경로만 실행합니다.
     run([PYTHON, "scripts/update_fa.py"], cwd=ROOT, run_as=run_as)
+    run([PYTHON, "scripts/update_fa_plotly.py"], cwd=ROOT, run_as=run_as)
 
 
 def render_fa_index(run_as: str) -> Path:
