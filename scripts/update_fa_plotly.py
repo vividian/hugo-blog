@@ -21,6 +21,9 @@ if str(ROOT_DIR) not in sys.path:
 
 from scripts import update_fa
 
+DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
+LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
+
 
 TABLE_HEADER_HEIGHT = 30
 TABLE_ROW_HEIGHT = 28
@@ -696,7 +699,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--fragment-output",
         type=Path,
-        help="Fragment HTML path for Hugo shortcode (default: <root>/data/fa/latest_fa_fragment.html)",
+        help="Fragment HTML path for Hugo shortcode (default: <root>/generated/fa/latest_fa_fragment.html)",
     )
     parser.add_argument(
         "--no-standalone",
@@ -1043,11 +1046,20 @@ def _wrap_standalone_html(content_html: str, title: str) -> str:
     )
 
 
+def _remove_legacy_fragment(current_fragment_path: Path) -> None:
+    if LEGACY_FRAGMENT_PATH == current_fragment_path:
+        return
+    if not LEGACY_FRAGMENT_PATH.exists():
+        return
+    LEGACY_FRAGMENT_PATH.unlink()
+    print(f"Removed legacy fragment: {LEGACY_FRAGMENT_PATH}")
+
+
 def main() -> None:
     args = parse_args()
     static_dir = update_fa.PATHS.get("static_dir", ROOT_DIR / "content/fa")
     output_path = args.output or (static_dir / "latest_fa.html")
-    fragment_path = args.fragment_output or (ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html")
+    fragment_path = args.fragment_output or DEFAULT_FRAGMENT_PATH
 
     records = update_fa.read_trading_records()
     if records.empty:
@@ -1058,6 +1070,7 @@ def main() -> None:
     fragment_path.parent.mkdir(parents=True, exist_ok=True)
     fragment_path.write_text(dashboard_fragment, encoding="utf-8")
     print(f"Dashboard fragment saved: {fragment_path}")
+    _remove_legacy_fragment(fragment_path)
 
     if not args.no_standalone:
         standalone_html = _wrap_standalone_html(dashboard_fragment, args.title)

@@ -1,4 +1,4 @@
-{{- $fragmentPath := "data/fa/latest_fa_fragment.html" -}}
+{{- $fragmentPath := "generated/fa/latest_fa_fragment.html" -}}
 {{- $legacyPath := "content/fa/latest_fa.html" -}}
 {{- if fileExists $fragmentPath -}}
   {{- readFile $fragmentPath | safeHTML -}}
