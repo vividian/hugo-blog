@@ -217,6 +217,17 @@ def convert_html(public_dir: Path, mapping: dict[str, dict[str, str]]) -> int:
             text = html_file.read_text(encoding="utf-8")
         except FileNotFoundError:
             continue
+
+        # Plotly inline script(대용량 JS)를 포함한 페이지는 정규식 치환 과정에서
+        # 스크립트가 손상될 수 있어 위키링크 변환에서 제외합니다.
+        lowered = text.lower()
+        if (
+            html_file.name == "latest_fa.html"
+            or "plotly.newplot(" in lowered
+            or "plotly-graph-div" in lowered
+        ):
+            continue
+
         body_match = re.search(r"(<body[^>]*>)(.*)(</body>)", text, flags=re.IGNORECASE | re.DOTALL)
         if not body_match:
             continue
