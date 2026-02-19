@@ -1161,35 +1161,55 @@ def build_yearly_returns(records: pd.DataFrame, fx_series: pd.Series, end_date: 
     if year_ends.empty:
         raise ValueError("연도 기준 데이터가 없습니다.")
 
-    valuation_map: Dict[pd.Timestamp, float] = {}
-    invest_map: Dict[pd.Timestamp, float] = {}
-    for date in year_ends:
-        subset = account_df.loc[:date]
+    def _last_total_valuation(at: pd.Timestamp) -> Optional[float]:
+        subset = account_df.loc[:at]
         if subset.empty:
-            continue
-        valuation_map[date] = float(subset.iloc[-1].sum())
-        if not invest_series.empty:
-            invest_subset = invest_series.loc[:date]
-            invest_map[date] = float(invest_subset.iloc[-1]) if not invest_subset.empty else 0.0
-        else:
-            invest_map[date] = 0.0
+            return None
+        return float(subset.iloc[-1].sum())
 
-    dates = sorted(valuation_map.keys())
-    if len(dates) < 2:
+    def _last_total_investment(at: pd.Timestamp) -> float:
+        if invest_series.empty:
+            return 0.0
+        subset = invest_series.loc[:at]
+        return float(subset.iloc[-1]) if not subset.empty else 0.0
+
+    first_checkpoint_date = pd.Timestamp(START_MONTH)
+    first_valuation = _last_total_valuation(first_checkpoint_date)
+    if first_valuation is None:
+        if account_df.empty:
+            raise ValueError("연별 수익률을 계산할 데이터가 충분하지 않습니다.")
+        first_checkpoint_date = pd.Timestamp(account_df.index.min())
+        first_valuation = float(account_df.iloc[0].sum())
+    first_investment = _last_total_investment(first_checkpoint_date)
+
+    checkpoints: List[Tuple[pd.Timestamp, float, float]] = [
+        (first_checkpoint_date, first_valuation, first_investment)
+    ]
+    for date in year_ends:
+        valuation = _last_total_valuation(date)
+        if valuation is None:
+            continue
+        investment = _last_total_investment(date)
+        checkpoints.append((pd.Timestamp(date), valuation, investment))
+
+    if len(checkpoints) < 2:
         raise ValueError("연별 수익률을 계산할 데이터가 충분하지 않습니다.")
 
     rows = []
-    for idx in range(len(dates) - 1):
-        base_date = dates[idx]
-        next_date = dates[idx + 1]
-        valuation_base = valuation_map.get(base_date, 0.0)
-        valuation_next = valuation_map.get(next_date, 0.0)
-        invest_base = invest_map.get(base_date, 0.0)
-        invest_return = None if invest_base == 0 else (valuation_next - invest_base) / invest_base
-        valuation_return = None if valuation_base == 0 else (valuation_next - valuation_base) / valuation_base
+    for idx in range(1, len(checkpoints)):
+        prev_date, valuation_prev, invest_prev = checkpoints[idx - 1]
+        curr_date, valuation_curr, invest_curr = checkpoints[idx]
+        if curr_date <= prev_date:
+            continue
+
+        prev_profit = valuation_prev - invest_prev
+        curr_profit = valuation_curr - invest_curr
+        period_profit = curr_profit - prev_profit
+        invest_return = None if invest_prev == 0 else period_profit / invest_prev
+        valuation_return = None if valuation_prev == 0 else period_profit / valuation_prev
         rows.append(
             {
-                "연도": base_date.year,
+                "연도": curr_date.year,
                 "투자금기준수익률": invest_return,
                 "평가금기준수익률": valuation_return,
             }

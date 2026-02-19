@@ -940,41 +940,39 @@ def _build_dashboard_fragment(data: ReportData) -> str:
             )
         )
 
-    div_cards: List[str] = []
     if monthly_div_fig is not None:
-        div_cards.append(
+        blocks.append(
             _dashboard_card(
                 update_fa.ACCOUNT_TITLES.get("title_monthly_dividends", "월별 배당"),
                 fig_html(monthly_div_fig),
-            )
+                extra_class="fa-card-wide",
+            ),
         )
     if yearly_div_fig is not None:
-        div_cards.append(
+        blocks.append(
             _dashboard_card(
                 update_fa.ACCOUNT_TITLES.get("title_yearly_dividends", "연별 배당"),
                 fig_html(yearly_div_fig),
-            )
+                extra_class="fa-card-wide",
+            ),
         )
-    if div_cards:
-        blocks.append("<div class=\"fa-grid fa-grid-2\">" + "".join(div_cards) + "</div>")
 
-    return_cards: List[str] = []
     if yearly_return_invest_fig is not None:
-        return_cards.append(
+        blocks.append(
             _dashboard_card(
                 update_fa.ACCOUNT_TITLES.get("title_yearly_return_investment", "연별 수익률(투자금 기준)"),
                 fig_html(yearly_return_invest_fig),
-            )
+                extra_class="fa-card-wide",
+            ),
         )
     if yearly_return_valuation_fig is not None:
-        return_cards.append(
+        blocks.append(
             _dashboard_card(
                 update_fa.ACCOUNT_TITLES.get("title_yearly_return_valuation", "연별 수익률(평가금 기준)"),
                 fig_html(yearly_return_valuation_fig),
-            )
+                extra_class="fa-card-wide",
+            ),
         )
-    if return_cards:
-        blocks.append("<div class=\"fa-grid fa-grid-2\">" + "".join(return_cards) + "</div>")
 
     if trading_summary or trading_lines:
         blocks.append(
