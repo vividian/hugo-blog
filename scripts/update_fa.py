@@ -806,17 +806,26 @@ def fetch_latest_prices(tickers: List[str]) -> Dict[str, Tuple[float, float]]:
     )
     if data.empty:
         return {}
+        
     adj_close = data["Adj Close"] if "Adj Close" in data.columns else data
+    if adj_close.index.tz is not None:
+        adj_close.index = adj_close.index.tz_localize(None)
+    adj_close.index = adj_close.index.normalize()
+    
     if isinstance(adj_close, pd.Series):
-        series = adj_close.ffill().dropna()
+        series = adj_close[~adj_close.index.duplicated(keep="last")]
+        series = series.ffill().dropna()
         if series.empty:
             return {}
         last_price = float(series.iloc[-1])
         prev_price = float(series.iloc[-2]) if len(series) > 1 else last_price
         return {tickers[0]: (last_price, prev_price)}
-    filled = adj_close.ffill()
+        
+    adj_close = adj_close[~adj_close.index.duplicated(keep="last")]
+    filled = adj_close.ffill().dropna()
     if filled.empty:
         return {}
+        
     last_row = filled.iloc[-1]
     prev_row = filled.iloc[-2] if len(filled) > 1 else last_row
     return {
