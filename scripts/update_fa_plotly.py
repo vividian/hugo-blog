@@ -59,7 +59,7 @@ MARKET_KPI_CONFIG = [
     {"label": "S&P500", "ticker": "^GSPC", "decimals": 2},
     {"label": "나스닥100", "ticker": "^NDX", "decimals": 2},
     {"label": "SCHD", "ticker": "SCHD", "decimals": 2},
-    {"label": "미국채10년물", "ticker": "^TNX", "decimals": 2, "scale": 0.1, "value_suffix": "%", "delta_suffix": "%p"},
+    {"label": "IEF", "ticker": "IEF", "decimals": 2},
     {"label": "코스피", "ticker": "^KS11", "decimals": 2},
     {"label": "코스닥", "ticker": "^KQ11", "decimals": 2},
 ]
