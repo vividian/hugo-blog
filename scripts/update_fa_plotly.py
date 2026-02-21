@@ -794,13 +794,25 @@ def _fetch_market_snapshots() -> Dict[str, Tuple[Optional[float], Optional[float
     return snapshots
 
 
+import re
+
 def _kpi_card(label: str, value: str, sub: str = "", state: str = "") -> str:
     state_class = f" {state}" if state else ""
+    
+    def _colorize(text: str) -> str:
+        t = html.escape(text)
+        t = re.sub(r'(\+[0-9.,]+%?p?)', r'<span class="fa-text-positive">\1</span>', t)
+        t = re.sub(r'(-[0-9.,]+%?p?)', r'<span class="fa-text-negative">\1</span>', t)
+        return t
+
+    val_html = _colorize(value)
+    sub_html = _colorize(sub)
+
     return (
         f"<div class=\"fa-kpi-card{state_class}\">"
         f"<div class=\"fa-kpi-label\">{html.escape(label)}</div>"
-        f"<div class=\"fa-kpi-value\">{html.escape(value)}</div>"
-        f"<div class=\"fa-kpi-sub\">{html.escape(sub)}</div>"
+        f"<div class=\"fa-kpi-value\">{val_html}</div>"
+        f"<div class=\"fa-kpi-sub\">{sub_html}</div>"
         "</div>"
     )
 
@@ -1056,10 +1068,10 @@ html.dark .fa-dashboard {
 .fa-kpi-label { color: var(--fa-muted); font-size: 0.82rem; }
 .fa-kpi-value { margin-top: 4px; font-weight: 700; font-size: 1.08rem; }
 .fa-kpi-sub { margin-top: 2px; color: var(--fa-muted); font-size: 0.78rem; }
-.fa-kpi-card.positive .fa-kpi-value { color: #b42318; }
-.fa-kpi-card.negative .fa-kpi-value { color: #1d4ed8; }
-html.dark .fa-kpi-card.positive .fa-kpi-value { color: #f87171; }
-html.dark .fa-kpi-card.negative .fa-kpi-value { color: #60a5fa; }
+.fa-text-positive { color: #b42318; }
+.fa-text-negative { color: #1d4ed8; }
+html.dark .fa-text-positive { color: #f87171; }
+html.dark .fa-text-negative { color: #60a5fa; }
 .fa-grid { display: grid; gap: 12px; margin: 12px 0; }
 .fa-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 @media (max-width: 1000px) { .fa-grid-2 { grid-template-columns: 1fr; } }
