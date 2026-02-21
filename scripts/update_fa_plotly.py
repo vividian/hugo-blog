@@ -113,6 +113,21 @@ def _extract_image_keys(markdown_text: str) -> List[str]:
     return keys
 
 
+
+def _apply_html_colors(values_matrix: list) -> list:
+    """Plotly 테이블 값 내의 증감(+/-) 수치에 인라인 HTML 색상을 적용한다."""
+    import pandas as pd
+    import re
+    def _color(v: Any) -> Any:
+        if pd.isna(v) and not isinstance(v, str):
+            return v
+        s = str(v)
+        s = re.sub(r'(?<!<span style="color: #b42318;">)(\+[0-9.,]+%?p?)', r'<span style="color: #b42318;">\1</span>', s)
+        s = re.sub(r'(?<!<span style="color: #1d4ed8;">)(-[0-9.,]+%?p?)', r'<span style="color: #1d4ed8;">\1</span>', s)
+        return s
+    
+    return [[_color(val) for val in col] for col in values_matrix]
+
 def _table_height(row_count: int, *, min_height: int = 180) -> int:
     height = (
         TABLE_HEADER_HEIGHT
@@ -160,7 +175,7 @@ def _build_exchange_rate_table(fx_series: pd.Series) -> go.Figure:
                     line_width=TABLE_LINE_WIDTH,
                 ),
                 cells=dict(
-                    values=[[values[0]], [values[1]], [values[2]]],
+                    values=_apply_html_colors([[values[0]], [values[1]], [values[2]]]),
                     fill_color=[[THEME_BG], [THEME_BG], [THEME_BG_ALT]],
                     font=dict(color=[THEME_TEXT, change_color, THEME_TEXT], size=14, family=FONT_FAMILY),
                     align=EXCHANGE_RATE_TABLE_ALIGN,
@@ -211,6 +226,7 @@ def _build_assets_trend(account_df: pd.DataFrame) -> go.Figure:
 def _build_account_assets_table(summary_df: pd.DataFrame) -> go.Figure:
     display_df = update_fa.format_summary_table(summary_df)
     values = [display_df[col].tolist() for col in display_df.columns]
+    values = _apply_html_colors(values)
     aligns = ACCOUNT_ASSETS_TABLE_ALIGN
     row_colors = []
     for idx, account in enumerate(display_df["계좌"].tolist()):
@@ -293,6 +309,7 @@ def _build_total_holdings_table(holdings_df: pd.DataFrame) -> Optional[go.Figure
     if display_df.empty:
         return None
     values = [display_df[col].tolist() for col in display_df.columns]
+    values = _apply_html_colors(values)
     aligns = TOTAL_HOLDINGS_TABLE_ALIGN
     row_colors = [THEME_BG if idx % 2 == 0 else THEME_BG_ALT for idx in range(len(display_df))]
     fill_colors = [row_colors] * len(display_df.columns)
@@ -482,7 +499,7 @@ def _build_account_detail(account: str, holdings_df: pd.DataFrame) -> Optional[g
                 line_width=TABLE_LINE_WIDTH,
             ),
             cells=dict(
-                values=[table_df[col].tolist() for col in table_df.columns],
+                values=_apply_html_colors([table_df[col].tolist() for col in table_df.columns]),
                 fill_color=fill_colors,
                 font=dict(color=["white"] + [THEME_TEXT] * (len(table_df.columns) - 1), size=12, family=FONT_FAMILY),
                 align=DETAIL_TABLE_ALIGN,
