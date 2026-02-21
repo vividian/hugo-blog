@@ -1214,8 +1214,17 @@ def build_yearly_returns(records: pd.DataFrame, fx_series: pd.Series, end_date: 
         prev_profit = valuation_prev - invest_prev
         curr_profit = valuation_curr - invest_curr
         period_profit = curr_profit - prev_profit
-        invest_return = None if invest_prev == 0 else period_profit / invest_prev
-        valuation_return = None if valuation_prev == 0 else period_profit / valuation_prev
+        
+        # 연중 발생한 외부 현금흐름(순입금액)
+        net_flow = invest_curr - invest_prev
+        
+        # Modified Dietz(일 단위 대신 연중 평잔 근사) 방식의 기초 자본 계산
+        base_invest = invest_prev + (net_flow / 2)
+        base_valuation = valuation_prev + (net_flow / 2)
+        
+        invest_return = None if base_invest <= 0 else period_profit / base_invest
+        valuation_return = None if base_valuation <= 0 else period_profit / base_valuation
+        
         rows.append(
             {
                 "연도": curr_date.year,
