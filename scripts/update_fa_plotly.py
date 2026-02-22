@@ -367,19 +367,31 @@ def _build_dividends_chart(pivot: pd.DataFrame) -> go.Figure:
     if len(pivot_sorted) > 12:
         pivot_sorted = pivot_sorted.tail(12)
     fig = go.Figure()
+    
+    # 각 인덱스(월별)마다 총합을 미리 계산합니다.
+    totals = pivot_sorted.sum(axis=1)
+
     for idx, col in enumerate(pivot.columns):
+        # 마지막 항목에서만 막대 상단에 총합 텍스트를 출력하도록 설정
+        is_last = idx == len(pivot.columns) - 1
+        texts = [f"{totals.iloc[i]:,.0f}" if is_last else "" for i in range(len(pivot_sorted))]
+
         fig.add_trace(
             go.Bar(
                 x=pivot_sorted.index,
                 y=pivot_sorted[col],
                 name=col,
                 marker=dict(color=_palette_color(idx)),
+                text=texts,
+                textposition="outside" if is_last else "none",
+                textfont=dict(size=11, color=THEME_TEXT),
+                cliponaxis=False
             )
         )
     fig.update_layout(
         barmode="stack",
         height=chart_height,
-        margin=dict(l=28, r=12, t=12, b=22),
+        margin=dict(l=28, r=12, t=30, b=22),
         showlegend=False,
         font=dict(family=FONT_FAMILY),
         paper_bgcolor=THEME_BG,
@@ -405,19 +417,30 @@ def _build_yearly_dividends_chart(pivot: pd.DataFrame) -> go.Figure:
     fig = go.Figure()
     pivot_sorted = pivot.sort_index()
     years = pd.to_datetime(pivot_sorted.index).strftime("%Y").tolist()
+    
+    # 각 연도별로 총 배당금 합계 계산
+    totals = pivot_sorted.sum(axis=1)
+
     for idx, col in enumerate(pivot_sorted.columns):
+        is_last = idx == len(pivot_sorted.columns) - 1
+        texts = [f"{totals.iloc[i]:,.0f}" if is_last else "" for i in range(len(pivot_sorted))]
+
         fig.add_trace(
             go.Bar(
                 x=years,
                 y=pivot_sorted[col],
                 name=col,
                 marker=dict(color=_palette_color(idx)),
+                text=texts,
+                textposition="outside" if is_last else "none",
+                textfont=dict(size=11, color=THEME_TEXT),
+                cliponaxis=False
             )
         )
     fig.update_layout(
         barmode="stack",
         height=300,
-        margin=dict(l=28, r=12, t=12, b=22),
+        margin=dict(l=28, r=12, t=30, b=22),
         showlegend=False,
         font=dict(family=FONT_FAMILY),
         paper_bgcolor=THEME_BG,
