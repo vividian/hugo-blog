@@ -114,19 +114,35 @@ def _extract_image_keys(markdown_text: str) -> List[str]:
 
 
 
-def _apply_html_colors(values_matrix: list) -> list:
-    """Plotly 테이블 값 내의 증감(+/-) 수치에 인라인 HTML 색상을 적용한다."""
+def _build_font_colors(values_matrix: list, default_col_colors: list) -> list:
+    """Plotly 테이블 셀별로 텍스트 색상을 계산한다 (+는 빨간색, -는 파란색)."""
     import pandas as pd
     import re
-    def _color(v: Any) -> Any:
-        if pd.isna(v) and not isinstance(v, str):
-            return v
-        s = str(v)
-        s = re.sub(r'(?<!<span style="color: #b42318;">)(\+[0-9.,]+%?p?)', r'<span style="color: #b42318;">\1</span>', s)
-        s = re.sub(r'(?<!<span style="color: #1d4ed8;">)(-[0-9.,]+%?p?)', r'<span style="color: #1d4ed8;">\1</span>', s)
-        return s
+    color_matrix = []
     
-    return [[_color(val) for val in col] for col in values_matrix]
+    for c_idx, col_values in enumerate(values_matrix):
+        default_color = default_col_colors[c_idx] if c_idx < len(default_col_colors) else default_col_colors[-1]
+        col_colors = []
+        for val in col_values:
+            if pd.isna(val) and not isinstance(val, str):
+                col_colors.append(default_color)
+                continue
+            s_val = str(val).strip()
+            # 숫자로 구성되어 있고(문자 포함 x), + 또는 - 가 포함된 경우 색상 적용 (날짜 제외)
+            has_letters = bool(re.search(r'[a-zA-Z가-힣]', s_val))
+            is_date = bool(re.search(r'^\d{4}-\d{2}-\d{2}', s_val))
+            
+            if not has_letters and not is_date:
+                if '+' in s_val:
+                    col_colors.append('#b42318')
+                elif '-' in s_val:
+                    col_colors.append('#1d4ed8')
+                else:
+                    col_colors.append(default_color)
+            else:
+                col_colors.append(default_color)
+        color_matrix.append(col_colors)
+    return color_matrix
 
 def _table_height(row_count: int, *, min_height: int = 180) -> int:
     height = (
@@ -175,7 +191,7 @@ def _build_exchange_rate_table(fx_series: pd.Series) -> go.Figure:
                     line_width=TABLE_LINE_WIDTH,
                 ),
                 cells=dict(
-                    values=_apply_html_colors([[values[0]], [values[1]], [values[2]]]),
+                    values=[[values[0]], [values[1]], [values[2]]],
                     fill_color=[[THEME_BG], [THEME_BG], [THEME_BG_ALT]],
                     font=dict(color=[THEME_TEXT, change_color, THEME_TEXT], size=14, family=FONT_FAMILY),
                     align=EXCHANGE_RATE_TABLE_ALIGN,
@@ -226,7 +242,6 @@ def _build_assets_trend(account_df: pd.DataFrame) -> go.Figure:
 def _build_account_assets_table(summary_df: pd.DataFrame) -> go.Figure:
     display_df = update_fa.format_summary_table(summary_df)
     values = [display_df[col].tolist() for col in display_df.columns]
-    values = _apply_html_colors(values)
     aligns = ACCOUNT_ASSETS_TABLE_ALIGN
     row_colors = []
     for idx, account in enumerate(display_df["계좌"].tolist()):
@@ -250,7 +265,7 @@ def _build_account_assets_table(summary_df: pd.DataFrame) -> go.Figure:
                 cells=dict(
                     values=values,
                     fill_color=fill_colors,
-                    font=dict(color=THEME_TEXT, size=13, family=FONT_FAMILY),
+                    font=dict(color=_build_font_colors(values, [THEME_TEXT] * len(values)), size=13, family=FONT_FAMILY),
                     align=aligns,
                     height=TABLE_ROW_HEIGHT,
                     line_color=THEME_BORDER,
@@ -309,7 +324,6 @@ def _build_total_holdings_table(holdings_df: pd.DataFrame) -> Optional[go.Figure
     if display_df.empty:
         return None
     values = [display_df[col].tolist() for col in display_df.columns]
-    values = _apply_html_colors(values)
     aligns = TOTAL_HOLDINGS_TABLE_ALIGN
     row_colors = [THEME_BG if idx % 2 == 0 else THEME_BG_ALT for idx in range(len(display_df))]
     fill_colors = [row_colors] * len(display_df.columns)
@@ -329,7 +343,7 @@ def _build_total_holdings_table(holdings_df: pd.DataFrame) -> Optional[go.Figure
                 cells=dict(
                     values=values,
                     fill_color=fill_colors,
-                    font=dict(color=THEME_TEXT, size=12, family=FONT_FAMILY),
+                    font=dict(color=_build_font_colors(values, [THEME_TEXT] * len(values)), size=12, family=FONT_FAMILY),
                     align=aligns,
                     height=TABLE_ROW_HEIGHT,
                     line_color=THEME_BORDER,
@@ -499,9 +513,9 @@ def _build_account_detail(account: str, holdings_df: pd.DataFrame) -> Optional[g
                 line_width=TABLE_LINE_WIDTH,
             ),
             cells=dict(
-                values=_apply_html_colors([table_df[col].tolist() for col in table_df.columns]),
+                values=[table_df[col].tolist() for col in table_df.columns],
                 fill_color=fill_colors,
-                font=dict(color=["white"] + [THEME_TEXT] * (len(table_df.columns) - 1), size=12, family=FONT_FAMILY),
+                font=dict(color=_build_font_colors([table_df[col].tolist() for col in table_df.columns], ["white"] + [THEME_TEXT] * (len(table_df.columns) - 1)), size=12, family=FONT_FAMILY),
                 align=DETAIL_TABLE_ALIGN,
                 height=TABLE_ROW_HEIGHT,
                 line_color=THEME_BORDER,
