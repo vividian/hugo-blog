@@ -822,16 +822,15 @@ def fetch_latest_prices(tickers: List[str]) -> Dict[str, Tuple[float, float]]:
         return {tickers[0]: (last_price, prev_price)}
         
     adj_close = adj_close[~adj_close.index.duplicated(keep="last")]
-    filled = adj_close.ffill().dropna()
-    if filled.empty:
-        return {}
-        
-    last_row = filled.iloc[-1]
-    prev_row = filled.iloc[-2] if len(filled) > 1 else last_row
-    return {
-        col: (float(last_row[col]), float(prev_row[col]))
-        for col in last_row.index
-    }
+    result = {}
+    for col in adj_close.columns:
+        series = adj_close[col].dropna()
+        if series.empty:
+            continue
+        last_price = float(series.iloc[-1])
+        prev_price = float(series.iloc[-2]) if len(series) > 1 else last_price
+        result[col] = (last_price, prev_price)
+    return result
 
 
 def build_holdings_df(records: pd.DataFrame, fx_series: pd.Series) -> pd.DataFrame:
