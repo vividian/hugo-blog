@@ -61,8 +61,8 @@ FINANCIALASSETS_YAML_PATH = PATHS["yaml"]
 FX_TICKER = "USDKRW=X"  # 환율 조회를 위한 티커
 START_MONTH = pd.Timestamp("2022-02-28")  # 데이터 분석 시작 월
 USD_ACCOUNTS = {"usa"}  # 달러 기반 계좌
-ACCOUNT_ORDER = ["usa", "kor1", "sema", "irp", "psf1", "isa1", "psf2", "isa2"]  # 계좌 표시 순서
-DETAIL_ACCOUNTS = ["usa", "kor1", "sema", "irp", "psf1", "isa1", "psf2", "isa2"]  # 상세 내역을 표시할 계좌
+ACCOUNT_ORDER = ["usa", "kor1", "kor2", "sema", "irp", "psf1", "isa1", "psf2", "isa2"]  # 계좌 표시 순서
+DETAIL_ACCOUNTS = ["usa", "kor1", "kor2", "sema", "irp", "psf1", "isa1", "psf2", "isa2"]  # 상세 내역을 표시할 계좌
 ACCOUNT_LABELS = {
     "usa": "미국 주식",
     "kor1": "국내 주식1",
@@ -96,6 +96,7 @@ ACCOUNT_TITLES = {
     "title_yearly_return_valuation": "◉ 연별 수익률 (평가금 기준)",
     "title_usa_detail": "◉ 상세계좌: 미국주식 (SPYM:IEF:SGOV = 7:2:1)",
     "title_kor1_detail": "◉ 상세계좌: 국내주식1",
+    "title_kor2_detail": "◉ 상세계좌: 국내주식2",
     "title_sema_detail": "◉ 상세계좌: SEMA (S&P500-FD:SAVING = 7:3)",
     "title_irp_detail": "◉ 상세계좌: IRP (S&P500:KOFR = 7:3)",
     "title_psf1_detail": "◉ 상세계좌: 연금저축1 (SCHD:QQQ:IEF:MMA = 4:3:2:1)",
