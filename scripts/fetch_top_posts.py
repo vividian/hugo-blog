@@ -12,10 +12,14 @@ Output:
 from __future__ import annotations
 
 import json
+import os
 import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
+
+# macOS 환경에서 gRPC의 c-ares DNS 리졸버 오류를 방지하기 위해 기본 시스템 리졸버 사용
+os.environ["GRPC_DNS_RESOLVER"] = "native"
 
 def _ensure_metadata_backport() -> None:
     try:

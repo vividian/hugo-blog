@@ -69,6 +69,7 @@ ACCOUNT_LABELS = {
     "sema": "공제회",
     "irp": "IRP",
     "psf1": "연금저축1",
+    "kor2": "국내 주식2",    
     "isa1": "ISA1",
     "psf2": "연금저축2",
     "isa2": "ISA2",
