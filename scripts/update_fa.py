@@ -745,7 +745,7 @@ def plot_assets_trend(account_df: pd.DataFrame, output_path: Path) -> Path:
     ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{x:,.0f}"))
     ax.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%y%m"))
-    ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1), frameon=False, fontsize=11)
+    ax.legend(loc="upper left", frameon=False, fontsize=12)
     ax.grid(True, axis="y", linestyle="--", alpha=0.7)
     for spine in ax.spines.values():
         spine.set_color("#dddddd")
