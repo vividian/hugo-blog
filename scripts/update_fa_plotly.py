@@ -80,7 +80,6 @@ class ReportData:
     holdings_df: pd.DataFrame
     dividends_pivot: Optional[pd.DataFrame]
     yearly_dividends_pivot: Optional[pd.DataFrame]
-    yearly_returns_df: Optional[pd.DataFrame]
     valid_detail_accounts: Sequence[str]
 
 
@@ -450,31 +449,6 @@ def _build_yearly_dividends_chart(pivot: pd.DataFrame) -> go.Figure:
     return fig
 
 
-def _build_yearly_return_chart(returns_df: pd.DataFrame, column: str) -> go.Figure:
-    data = returns_df.dropna(subset=[column]).copy()
-    years = data["연도"].astype(str).tolist()
-    values = (data[column] * 100).tolist()
-    colors = [COLOR_GAIN if val >= 0 else COLOR_LOSS for val in values]
-
-    fig = go.Figure(
-        data=[
-            go.Bar(
-                x=years,
-                y=values,
-                marker=dict(color=colors),
-            )
-        ]
-    )
-    fig.update_layout(
-        height=270,
-        margin=dict(l=28, r=12, t=12, b=22),
-        showlegend=False,
-        font=dict(family=FONT_FAMILY),
-        paper_bgcolor=THEME_BG,
-        plot_bgcolor=THEME_BG,
-    )
-    fig.update_yaxes(tickformat=".1f", ticksuffix="%", showgrid=True, gridcolor=THEME_GRID, zeroline=True)
-    return fig
 
 
 def _build_account_detail(account: str, holdings_df: pd.DataFrame) -> Optional[go.Figure]:
@@ -681,11 +655,6 @@ def _build_report_data(records: pd.DataFrame) -> ReportData:
     except ValueError:
         yearly_dividends_pivot = None
 
-    try:
-        yearly_returns_df = update_fa.build_yearly_returns(records_upto, fx_series_month, month_end)
-    except ValueError:
-        yearly_returns_df = None
-
     valid_detail_accounts = []
     if not summary_df.empty and "평가금" in summary_df.columns:
         valid_detail_accounts = summary_df.loc[
@@ -703,7 +672,6 @@ def _build_report_data(records: pd.DataFrame) -> ReportData:
         holdings_df=holdings_df,
         dividends_pivot=dividends_pivot,
         yearly_dividends_pivot=yearly_dividends_pivot,
-        yearly_returns_df=yearly_returns_df,
         valid_detail_accounts=valid_detail_accounts,
     )
 
@@ -729,10 +697,6 @@ def _default_keys() -> List[str]:
         "monthly_dividends",
         "title_yearly_dividends",
         "yearly_dividends",
-        "title_yearly_return_investment",
-        "yearly_return_investment",
-        "title_yearly_return_valuation",
-        "yearly_return_valuation",
         "title_usa_detail",
         "usa_detail",
         "title_sema_detail",
@@ -974,16 +938,6 @@ def _build_dashboard_fragment(data: ReportData) -> str:
         if data.yearly_dividends_pivot is not None and not data.yearly_dividends_pivot.empty
         else None
     )
-    yearly_return_invest_fig = (
-        _build_yearly_return_chart(data.yearly_returns_df, "투자금기준수익률")
-        if data.yearly_returns_df is not None and not data.yearly_returns_df.empty
-        else None
-    )
-    yearly_return_valuation_fig = (
-        _build_yearly_return_chart(data.yearly_returns_df, "평가금기준수익률")
-        if data.yearly_returns_df is not None and not data.yearly_returns_df.empty
-        else None
-    )
     trading_summary, trading_lines = _build_trading_history(data.records, data.fx_series_month, data.month_end)
 
     blocks: List[str] = [
@@ -1019,23 +973,6 @@ def _build_dashboard_fragment(data: ReportData) -> str:
             _dashboard_card(
                 update_fa.ACCOUNT_TITLES.get("title_yearly_dividends", "연별 배당"),
                 fig_html(yearly_div_fig),
-                extra_class="fa-card-wide",
-            ),
-        )
-
-    if yearly_return_invest_fig is not None:
-        blocks.append(
-            _dashboard_card(
-                update_fa.ACCOUNT_TITLES.get("title_yearly_return_investment", "연별 수익률(투자금 기준)"),
-                fig_html(yearly_return_invest_fig),
-                extra_class="fa-card-wide",
-            ),
-        )
-    if yearly_return_valuation_fig is not None:
-        blocks.append(
-            _dashboard_card(
-                update_fa.ACCOUNT_TITLES.get("title_yearly_return_valuation", "연별 수익률(평가금 기준)"),
-                fig_html(yearly_return_valuation_fig),
                 extra_class="fa-card-wide",
             ),
         )

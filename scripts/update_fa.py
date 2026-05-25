@@ -87,13 +87,12 @@ FIG_BOTTOM = 0.06
 ACCOUNT_TITLES = {
     "title_exchange_rate": "◉ 환율 (USD/KRW) 추세",
     "title_assets_trend": "◉ 계좌별 자산 추세",
+    "title_assets_investment_trend": "◉ 누적 투자금 vs 평가금 추세",
     "title_account_assets": "◉ 전체 계좌별 자산 현황 (투자금, 평가금, 수익금 등)",
     "title_total_holdings": "◉ 실시간 보유종목 현황",
     "title_trading_history": "◉ 보유종목 거래내역",
     "title_monthly_dividends": "◉ 월별 배당금 및 분배금 현황 (최근 12개월)",
     "title_yearly_dividends": "◉ 연별 배당금 및 분배금 현황",
-    "title_yearly_return_investment": "◉ 연별 수익률 (투자금 기준)",
-    "title_yearly_return_valuation": "◉ 연별 수익률 (평가금 기준)",
     "title_usa_detail": "◉ 상세계좌: 미국주식 (SPYM:IEF:SGOV = 7:2:1)",
     "title_kor1_detail": "◉ 상세계좌: 국내주식1",
     "title_kor2_detail": "◉ 상세계좌: 국내주식2",
@@ -106,14 +105,13 @@ ACCOUNT_TITLES = {
 }
 CONTENT_TITLE_KEYS = {
     "assets_trend": "title_assets_trend",
+    "assets_investment_trend": "title_assets_investment_trend",
     "account_assets": "title_account_assets",
     "total_holdings": "title_total_holdings",
     "trading_history": "title_trading_history",
     "monthly_dividends": "title_monthly_dividends",
     "exchange_rate": "title_exchange_rate",
     "yearly_dividends": "title_yearly_dividends",
-    "yearly_return_investment": "title_yearly_return_investment",
-    "yearly_return_valuation": "title_yearly_return_valuation",
 }
 
 @dataclass
@@ -574,15 +572,49 @@ def plot_title_image(title_key: str, output_path: Path) -> Path:
 def _save_title(prefix: str,
                 output_dir: Path,
                 title_key: Optional[str],
-                outputs: Dict[str, Path]) -> Optional[Path]:
-    """주어진 제목 키에 해당하는 제목 이미지를 저장하고 outputs에 등록한다."""
-    if not title_key:
+                outputs: Dict[str, Path],
+                graph_path: Optional[Path] = None) -> Optional[Path]:
+    """주어진 제목 키를 해당하는 그래프 이미지 상단에 병합한다. (독립 파일 미생성)"""
+    if not title_key or not graph_path or not graph_path.exists():
         return None
-    filename = f"{prefix}_{title_key}.webp"
-    title_path = output_dir / filename
-    plot_title_image(title_key, title_path)
-    outputs[title_key] = title_path
-    return title_path
+    
+    # 임시 타이틀 파일 경로
+    temp_title_path = graph_path.with_name(f"temp_title_{title_key}_{prefix}.webp")
+    plot_title_image(title_key, temp_title_path)
+    
+    try:
+        with Image.open(temp_title_path) as img_title, Image.open(graph_path) as img_graph:
+            w_graph, h_graph = img_graph.size
+            w_title, h_title = img_title.size
+            
+            # 타이틀 이미지 비율을 유지하면서 그래프 가로폭에 맞춰 리사이즈
+            new_h_title = int(h_title * (w_graph / w_title))
+            
+            if hasattr(Image, "Resampling"):
+                resample_filter = Image.Resampling.LANCZOS
+            else:
+                resample_filter = Image.ANTIALIAS  # 구 버전 PIL 호환
+                
+            img_title_resized = img_title.resize((w_graph, new_h_title), resample_filter)
+            
+            # 수직 결합된 새 이미지 생성 (배경색 CANVAS_BG_COLOR)
+            merged_img = Image.new("RGBA", (w_graph, new_h_title + h_graph), color=CANVAS_BG_COLOR)
+            merged_img.paste(img_title_resized, (0, 0))
+            merged_img.paste(img_graph, (0, new_h_title))
+            
+            # 기존 그래프 파일에 덮어쓰기
+            if graph_path.suffix.lower() == ".webp":
+                merged_img.convert("RGB").save(graph_path, "WEBP", quality=90)
+            else:
+                merged_img.convert("RGB").save(graph_path, quality=90)
+            print(f"타이틀 병합 완료: {graph_path} (제목: {ACCOUNT_TITLES.get(title_key, title_key)})")
+    except Exception as exc:
+        print(f"(경고) 타이틀 병합 실패: {graph_path} ({exc})")
+    finally:
+        if temp_title_path.exists():
+            temp_title_path.unlink()
+            
+    return graph_path
 
 
 def _save_canvas(fig: plt.Figure,
@@ -732,6 +764,64 @@ def plot_assets_trend(account_df: pd.DataFrame, output_path: Path) -> Path:
         f"계좌 추세 그래프 저장 완료: {output_path}",
         pad_inches=0.65,
         # bbox=None,
+        bbox="tight",
+    )
+    _crop_top_inches(output_path, inches=0.5)
+
+    return True
+
+
+def plot_assets_investment_trend(account_df: pd.DataFrame, invest_series: pd.Series, output_path: Path) -> Path:
+    """누적 투자금과 누적 평가금 추세를 선 그래프로 그려 저장한다."""
+    _configure_matplotlib()
+    fig, ax = plt.subplots(figsize=(12, 6), dpi=FIG_DPI)
+    fig.patch.set_facecolor(CANVAS_BG_COLOR)
+    ax.set_facecolor(CANVAS_BG_COLOR)
+
+    # 1. 평가금 누적합 시계열 구하기
+    total_valuation = account_df.sum(axis=1)
+    
+    # 2. 투자금 누적합 시계열 정렬
+    invest_aligned = align_series(invest_series, account_df.index)
+
+    # 3. 그래프 그리기
+    ax.plot(
+        account_df.index,
+        invest_aligned,
+        label="누적 투자금",
+        color="#2c3e50",
+        linestyle="-",
+        linewidth=2,
+    )
+    ax.plot(
+        account_df.index,
+        total_valuation,
+        label="누적 평가금",
+        color="#d63031",
+        linestyle="-",
+        linewidth=2,
+    )
+
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{x:,.0f}"))
+    ax.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%y%m"))
+    ax.legend(loc="upper left", frameon=False, fontsize=12)
+    ax.grid(True, axis="y", linestyle="--", alpha=0.7)
+    for spine in ax.spines.values():
+        spine.set_color("#dddddd")
+
+    # y축 한도 조정
+    y_min = min(np.nanmin(invest_aligned), np.nanmin(total_valuation))
+    y_max = max(np.nanmax(invest_aligned), np.nanmax(total_valuation))
+    pad = (y_max - y_min) * 0.1 if y_max > y_min else max(abs(y_max), 1.0) * 0.1
+    ax.set_ylim(max(0, y_min - pad), y_max + pad)
+    fig.autofmt_xdate(rotation=30)
+
+    _save_canvas(
+        fig,
+        output_path,
+        f"투자금 vs 평가금 추세 그래프 저장 완료: {output_path}",
+        pad_inches=0.65,
         bbox="tight",
     )
     _crop_top_inches(output_path, inches=0.5)
@@ -1153,87 +1243,14 @@ def _build_investment_series(records: pd.DataFrame, fx_series: pd.Series) -> pd.
     if invest_records.empty:
         return pd.Series(dtype=float)
     invest_records = invest_records[["일자", "계좌", "투자금"]].copy()
-    invest_records["투자금원화"] = invest_records.apply(
-        lambda row: convert_to_krw(row["계좌"], row["투자금"], row["일자"], fx_series),
-        axis=1,
-    )
+    # 투자금은 csv 상에 이미 원화(KRW)로 기입되어 있으므로 환율을 곱하지 않고 그대로 사용합니다.
+    invest_records["투자금원화"] = invest_records["투자금"]
     invest_records = invest_records.dropna(subset=["일자"])
     daily = invest_records.groupby("일자")["투자금원화"].sum().sort_index()
     return daily.cumsum()
 
 
-def build_yearly_returns(records: pd.DataFrame, fx_series: pd.Series, end_date: pd.Timestamp) -> pd.DataFrame:
-    """연말 기준 투자금/평가금 수익률 데이터를 계산한다."""
-    account_df = build_account_valuation_df(records, fx_series, end_date)
-    invest_series = _build_investment_series(records, fx_series)
-    year_start = pd.Timestamp(START_MONTH.year, 12, 31)
-    year_ends = pd.date_range(start=year_start, end=end_date, freq="YE")
-    if year_ends.empty:
-        raise ValueError("연도 기준 데이터가 없습니다.")
 
-    def _last_total_valuation(at: pd.Timestamp) -> Optional[float]:
-        subset = account_df.loc[:at]
-        if subset.empty:
-            return None
-        return float(subset.iloc[-1].sum())
-
-    def _last_total_investment(at: pd.Timestamp) -> float:
-        if invest_series.empty:
-            return 0.0
-        subset = invest_series.loc[:at]
-        return float(subset.iloc[-1]) if not subset.empty else 0.0
-
-    first_checkpoint_date = pd.Timestamp(START_MONTH)
-    first_valuation = _last_total_valuation(first_checkpoint_date)
-    if first_valuation is None:
-        if account_df.empty:
-            raise ValueError("연별 수익률을 계산할 데이터가 충분하지 않습니다.")
-        first_checkpoint_date = pd.Timestamp(account_df.index.min())
-        first_valuation = float(account_df.iloc[0].sum())
-    first_investment = _last_total_investment(first_checkpoint_date)
-
-    checkpoints: List[Tuple[pd.Timestamp, float, float]] = [
-        (first_checkpoint_date, first_valuation, first_investment)
-    ]
-    for date in year_ends:
-        valuation = _last_total_valuation(date)
-        if valuation is None:
-            continue
-        investment = _last_total_investment(date)
-        checkpoints.append((pd.Timestamp(date), valuation, investment))
-
-    if len(checkpoints) < 2:
-        raise ValueError("연별 수익률을 계산할 데이터가 충분하지 않습니다.")
-
-    rows = []
-    for idx in range(1, len(checkpoints)):
-        prev_date, valuation_prev, invest_prev = checkpoints[idx - 1]
-        curr_date, valuation_curr, invest_curr = checkpoints[idx]
-        if curr_date <= prev_date:
-            continue
-
-        prev_profit = valuation_prev - invest_prev
-        curr_profit = valuation_curr - invest_curr
-        period_profit = curr_profit - prev_profit
-        
-        # 연중 발생한 외부 현금흐름(순입금액)
-        net_flow = invest_curr - invest_prev
-        
-        # Modified Dietz(일 단위 대신 연중 평잔 근사) 방식의 기초 자본 계산
-        base_invest = invest_prev + (net_flow / 2)
-        base_valuation = valuation_prev + (net_flow / 2)
-        
-        invest_return = None if base_invest <= 0 else period_profit / base_invest
-        valuation_return = None if base_valuation <= 0 else period_profit / base_valuation
-        
-        rows.append(
-            {
-                "연도": curr_date.year,
-                "투자금기준수익률": invest_return,
-                "평가금기준수익률": valuation_return,
-            }
-        )
-    return pd.DataFrame(rows)
 
 
 def plot_monthly_dividends(pivot: pd.DataFrame, output_path: Path) -> Path:
@@ -1358,64 +1375,6 @@ def plot_yearly_dividends(pivot: pd.DataFrame, output_path: Path) -> Path:
     return True
 
 
-def _plot_yearly_returns(years: List[int],
-                         returns: List[Optional[float]],
-                         output_path: Path,
-                         title: str) -> Path:
-    """연별 수익률 막대 그래프를 그려 저장한다."""
-    if not years:
-        raise ValueError("연별 수익률 데이터가 없습니다.")
-    values = [val * 100 if val is not None else None for val in returns]
-    labels = [str(year) for year in years]
-
-    _configure_matplotlib()
-    fig, ax = plt.subplots(figsize=(12, 5), dpi=FIG_DPI)
-    fig.patch.set_facecolor(CANVAS_BG_COLOR)
-    ax.set_facecolor(CANVAS_BG_COLOR)
-
-    colors = []
-    for val in values:
-        if val is None:
-            colors.append("#bdc3c7")
-        elif val >= 0:
-            colors.append("#d63031")
-        else:
-            colors.append("#0984e3")
-
-    ax.bar(labels, [v if v is not None else 0 for v in values], color=colors, edgecolor="white")
-    ax.axhline(0, color="#999999", linewidth=1)
-    ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:.1f}%"))
-    ax.tick_params(axis="x", rotation=0, labelsize=12)
-    ax.tick_params(axis="y", labelsize=12)
-    ax.grid(axis="y", linestyle="--", alpha=0.5)
-    for spine in ax.spines.values():
-        spine.set_color("#dddddd")
-    _save_canvas(
-        fig,
-        output_path,
-        f"{title} 저장 완료: {output_path}",
-        pad_inches=0.55,
-        bbox="tight",
-    )
-    _crop_top_inches(output_path, inches=0.5)
-
-    return True
-
-
-def plot_yearly_return_investment(returns_df: pd.DataFrame, output_path: Path) -> Path:
-    """연별 수익률(투자금 기준)을 막대 그래프로 그려 저장한다."""
-    data = returns_df.dropna(subset=["투자금기준수익률"]).copy()
-    years = data["연도"].tolist()
-    returns = data["투자금기준수익률"].tolist()
-    return _plot_yearly_returns(years, returns, output_path, "연별 수익률(투자금 기준)")
-
-
-def plot_yearly_return_valuation(returns_df: pd.DataFrame, output_path: Path) -> Path:
-    """연별 수익률(평가금 기준)을 막대 그래프로 그려 저장한다."""
-    data = returns_df.dropna(subset=["평가금기준수익률"]).copy()
-    years = data["연도"].tolist()
-    returns = data["평가금기준수익률"].tolist()
-    return _plot_yearly_returns(years, returns, output_path, "연별 수익률(평가금 기준)")
 
 
 def plot_total_holdings(holdings_df: pd.DataFrame, output_path: Path) -> Path:
@@ -1573,8 +1532,7 @@ def plot_monthly_trading_history(records: pd.DataFrame,
             ))
         if has_invest:
             invest_amt = float(str(invest).replace(",", "")) if invest else 0.0
-            if acct_code in USD_ACCOUNTS:
-                invest_amt = convert_to_krw(acct_code, invest_amt, date, fx_series)
+            # 투자금은 csv 상에 이미 원화(KRW)로 기입되어 있으므로 환율을 곱하지 않고 그대로 사용합니다.
             invest_total += invest_amt
             lines.append((
                 "invest",
@@ -1633,8 +1591,8 @@ def generate_month_reports(prefix: str,
     """특정 월의 모든 리포트(차트, 데이터)를 생성하고 파일 경로를 반환한다."""
     outputs: Dict[str, Path] = {}
 
-    def save_title(key_name: Optional[str]) -> Optional[Path]:
-        return _save_title(prefix, output_dir, key_name, outputs)
+    def save_title(key_name: Optional[str], graph_path: Optional[Path] = None) -> Optional[Path]:
+        return _save_title(prefix, output_dir, key_name, outputs, graph_path)
 
     price_path = output_dir / f"{prefix}_monthly_prices.csv"
     if monthly_prices_df is not None and not monthly_prices_df.empty:
@@ -1649,14 +1607,20 @@ def generate_month_reports(prefix: str,
     valuation_path = output_dir / f"{prefix}_financialassets_trend.webp"
     plot_assets_trend(account_df, valuation_path)
     outputs["assets_trend"] = valuation_path
-    save_title(CONTENT_TITLE_KEYS.get("assets_trend"))
+    save_title(CONTENT_TITLE_KEYS.get("assets_trend"), valuation_path)
+
+    invest_series = _build_investment_series(records, fx_series)
+    invest_trend_path = output_dir / f"{prefix}_assets_investment_trend.webp"
+    plot_assets_investment_trend(account_df, invest_series, invest_trend_path)
+    outputs["assets_investment_trend"] = invest_trend_path
+    save_title(CONTENT_TITLE_KEYS.get("assets_investment_trend"), invest_trend_path)
 
     summary_df = build_account_assets(records, account_df, fx_series)
     summary_path = output_dir / f"{prefix}_account_assets.webp"
     display_df = format_summary_table(summary_df)
     plot_account_assets(display_df, summary_path)
     outputs["account_assets"] = summary_path
-    save_title(CONTENT_TITLE_KEYS.get("account_assets"))
+    save_title(CONTENT_TITLE_KEYS.get("account_assets"), summary_path)
 
     try:
         exchange_rate_path = output_dir / f"{prefix}_exchange_rate.webp"
@@ -1666,7 +1630,7 @@ def generate_month_reports(prefix: str,
         reference_date = pd.to_datetime(fx_for_exchange.index.max())
         plot_exchange_rate_table(fx_for_exchange, reference_date, exchange_rate_path)
         outputs["exchange_rate"] = exchange_rate_path
-        save_title(CONTENT_TITLE_KEYS.get("exchange_rate"))
+        save_title(CONTENT_TITLE_KEYS.get("exchange_rate"), exchange_rate_path)
     except ValueError as exc:
         print(f"(경고) {prefix} 환율 테이블 생성 실패: {exc}")
 
@@ -1675,12 +1639,12 @@ def generate_month_reports(prefix: str,
         holdings_path = output_dir / f"{prefix}_total_holdings.webp"
         plot_total_holdings(holdings_df, holdings_path)
         outputs["total_holdings"] = holdings_path
-        save_title(CONTENT_TITLE_KEYS.get("total_holdings"))
+        save_title(CONTENT_TITLE_KEYS.get("total_holdings"), holdings_path)
 
         trading_history_path = output_dir / f"{prefix}_trading_history.webp"
         plot_monthly_trading_history(records, fx_series, month_end, trading_history_path)
         outputs["trading_history"] = trading_history_path
-        save_title(CONTENT_TITLE_KEYS.get("trading_history"))
+        save_title(CONTENT_TITLE_KEYS.get("trading_history"), trading_history_path)
 
         valid_detail_accounts: List[str] = []
         if not summary_df.empty and "평가금" in summary_df.columns:
@@ -1695,7 +1659,7 @@ def generate_month_reports(prefix: str,
                 outputs[f"{account}_detail"] = detail_path
                 detail_title_key = f"title_{account}_detail"
                 if detail_title_key in ACCOUNT_TITLES:
-                    save_title(detail_title_key)
+                    save_title(detail_title_key, detail_path)
     except ValueError as exc:
         print(f"(경고) {prefix} 보유 종목 그래프 생성 실패: {exc}")
 
@@ -1704,7 +1668,7 @@ def generate_month_reports(prefix: str,
         dividends_path = output_dir / f"{prefix}_monthly_dividends.webp"
         plot_monthly_dividends(pivot, dividends_path)
         outputs["monthly_dividends"] = dividends_path
-        save_title(CONTENT_TITLE_KEYS.get("monthly_dividends"))
+        save_title(CONTENT_TITLE_KEYS.get("monthly_dividends"), dividends_path)
     except ValueError as exc:
         print(f"(경고) {prefix} 배당 그래프 생성 실패: {exc}")
 
@@ -1713,23 +1677,9 @@ def generate_month_reports(prefix: str,
         yearly_dividends_path = output_dir / f"{prefix}_yearly_dividends.webp"
         plot_yearly_dividends(yearly_pivot, yearly_dividends_path)
         outputs["yearly_dividends"] = yearly_dividends_path
-        save_title(CONTENT_TITLE_KEYS.get("yearly_dividends"))
+        save_title(CONTENT_TITLE_KEYS.get("yearly_dividends"), yearly_dividends_path)
     except ValueError as exc:
         print(f"(경고) {prefix} 연별 배당 그래프 생성 실패: {exc}")
-
-    try:
-        returns_df = build_yearly_returns(records, fx_series, month_end)
-        invest_path = output_dir / f"{prefix}_yearly_return_investment.webp"
-        plot_yearly_return_investment(returns_df, invest_path)
-        outputs["yearly_return_investment"] = invest_path
-        save_title(CONTENT_TITLE_KEYS.get("yearly_return_investment"))
-
-        valuation_path = output_dir / f"{prefix}_yearly_return_valuation.webp"
-        plot_yearly_return_valuation(returns_df, valuation_path)
-        outputs["yearly_return_valuation"] = valuation_path
-        save_title(CONTENT_TITLE_KEYS.get("yearly_return_valuation"))
-    except ValueError as exc:
-        print(f"(경고) {prefix} 연별 수익률 그래프 생성 실패: {exc}")
 
     return outputs
 
@@ -1951,24 +1901,16 @@ def main() -> None:
     latest_map = {
         "monthly_prices": "latest_monthly_prices.csv",
         "assets_trend": "latest_assets_trend.webp",
+        "assets_investment_trend": "latest_assets_investment_trend.webp",
         "account_assets": "latest_account_assets.webp",
         "exchange_rate": "latest_exchange_rate.webp",
         "monthly_dividends": "latest_monthly_dividends.webp",
         "yearly_dividends": "latest_yearly_dividends.webp",
-        "yearly_return_investment": "latest_yearly_return_investment.webp",
-        "yearly_return_valuation": "latest_yearly_return_valuation.webp",
         "total_holdings": "latest_total_holdings.webp",
         "trading_history": "latest_trading_history.webp",
     }
     for account in DETAIL_ACCOUNTS:
         latest_map[f"{account}_detail"] = f"latest_{account}_detail.webp"
-    for title_key in CONTENT_TITLE_KEYS.values():
-        latest_map[title_key] = f"latest_{title_key}.webp"
-    for account in DETAIL_ACCOUNTS:
-        detail_title_key = f"title_{account}_detail"
-        if detail_title_key in ACCOUNT_TITLES:
-            latest_map[detail_title_key] = f"latest_{detail_title_key}.webp"
-
     for key, latest_name in latest_map.items():
         path = latest_outputs.get(key)
         if path and path.exists():
