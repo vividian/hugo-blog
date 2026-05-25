@@ -1032,7 +1032,6 @@ def _build_dashboard_fragment(data: ReportData) -> str:
             )
         )
 
-    details: List[str] = []
     for account in data.valid_detail_accounts:
         fig = _build_account_detail(account, data.holdings_df)
         if fig is None:
@@ -1040,17 +1039,10 @@ def _build_dashboard_fragment(data: ReportData) -> str:
         detail_title = update_fa.ACCOUNT_TITLES.get(
             f"title_{account}_detail", f"상세계좌: {update_fa.account_label(account)}"
         )
-        details.append(
-            "<details class=\"fa-detail-item\">"
-            f"<summary>{html.escape(detail_title)}</summary>"
-            f"<div class=\"fa-detail-chart\">{fig_html(fig)}</div>"
-            "</details>"
-        )
-    if details:
         blocks.append(
             _dashboard_card(
-                "상세 계좌",
-                "<div class=\"fa-detail-list\">" + "".join(details) + "</div>",
+                detail_title,
+                fig_html(fig),
                 extra_class="fa-card-wide",
             )
         )
