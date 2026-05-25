@@ -81,6 +81,7 @@ class ReportData:
     dividends_pivot: Optional[pd.DataFrame]
     yearly_dividends_pivot: Optional[pd.DataFrame]
     valid_detail_accounts: Sequence[str]
+    invest_series: pd.Series
 
 
 def _extract_image_keys(markdown_text: str) -> List[str]:
@@ -218,10 +219,9 @@ def _build_assets_trend(account_df: pd.DataFrame) -> go.Figure:
             go.Scatter(
                 x=account_df.index,
                 y=account_df[column],
-                mode="lines+markers",
+                mode="lines",
                 name=label,
-                line=dict(color=_palette_color(idx)),
-                marker=dict(color=_palette_color(idx)),
+                line=dict(color=_palette_color(idx), width=2),
                 hovertemplate="%{x|%Y-%m}: %{y:,.0f}<extra>%{fullData.name}</extra>",
             )
         )
@@ -234,7 +234,45 @@ def _build_assets_trend(account_df: pd.DataFrame) -> go.Figure:
         paper_bgcolor=THEME_BG,
         plot_bgcolor=THEME_BG,
     )
-    fig.update_yaxes(tickformat=",.0f")
+    fig.update_yaxes(tickformat=",.0f", rangemode="tozero")
+    return fig
+
+
+def _build_assets_investment_trend(account_df: pd.DataFrame, invest_series: pd.Series) -> go.Figure:
+    fig = go.Figure()
+    total_valuation = account_df.sum(axis=1)
+    invest_aligned = update_fa.align_series(invest_series, account_df.index)
+    
+    fig.add_trace(
+        go.Scatter(
+            x=account_df.index,
+            y=invest_aligned,
+            mode="lines",
+            name="누적 투자금",
+            line=dict(color="#2c3e50", width=2),
+            hovertemplate="%{x|%Y-%m}: %{y:,.0f}<extra>누적 투자금</extra>",
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=account_df.index,
+            y=total_valuation,
+            mode="lines",
+            name="누적 평가금",
+            line=dict(color="#d63031", width=2),
+            hovertemplate="%{x|%Y-%m}: %{y:,.0f}<extra>누적 평가금</extra>",
+        )
+    )
+    fig.update_layout(
+        height=340,
+        margin=dict(l=28, r=12, t=12, b=26),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+        showlegend=True,
+        font=dict(family=FONT_FAMILY),
+        paper_bgcolor=THEME_BG,
+        plot_bgcolor=THEME_BG,
+    )
+    fig.update_yaxes(tickformat=",.0f", rangemode="tozero")
     return fig
 
 
@@ -615,6 +653,9 @@ def _render_history_html(summary: str, lines: List[Tuple[str, str]]) -> str:
 
 
 def _render_figure_html(fig: go.Figure, *, include_js: bool) -> str:
+    # 임의의 드래그/핀치 줌 및 확대 조작을 강제로 차단하고 고정(Lock)시킵니다.
+    fig.update_xaxes(fixedrange=True)
+    fig.update_yaxes(fixedrange=True)
     return pio.to_html(
         fig,
         full_html=False,
@@ -662,6 +703,8 @@ def _build_report_data(records: pd.DataFrame) -> ReportData:
             "계좌",
         ].astype(str).tolist()
 
+    invest_series = update_fa._build_investment_series(records_upto, fx_series_month)
+
     return ReportData(
         month_end=month_end,
         records=records_upto,
@@ -673,6 +716,7 @@ def _build_report_data(records: pd.DataFrame) -> ReportData:
         dividends_pivot=dividends_pivot,
         yearly_dividends_pivot=yearly_dividends_pivot,
         valid_detail_accounts=valid_detail_accounts,
+        invest_series=invest_series,
     )
 
 
@@ -925,6 +969,7 @@ def _build_dashboard_fragment(data: ReportData) -> str:
         plotly_included = True
         return rendered
 
+    assets_investment_fig = _build_assets_investment_trend(data.account_df, data.invest_series)
     assets_fig = _build_assets_trend(data.account_df)
     account_fig = _build_account_assets_table(data.summary_df)
     holdings_fig = _build_total_holdings_table(data.holdings_df)
@@ -947,6 +992,7 @@ def _build_dashboard_fragment(data: ReportData) -> str:
         "</section>",
         _build_kpi_row(data),
         _build_market_kpi_row(),
+        _dashboard_card(update_fa.ACCOUNT_TITLES.get("title_assets_investment_trend", "누적 투자금 vs 평가금 추세"), fig_html(assets_investment_fig), extra_class="fa-card-wide"),
         _dashboard_card(update_fa.ACCOUNT_TITLES.get("title_assets_trend", "자산 추이"), fig_html(assets_fig), extra_class="fa-card-wide"),
         _dashboard_card(update_fa.ACCOUNT_TITLES.get("title_account_assets", "계좌 요약"), fig_html(account_fig)),
     ]
