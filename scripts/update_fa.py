@@ -739,14 +739,13 @@ def plot_assets_trend(account_df: pd.DataFrame, output_path: Path) -> Path:
             label=label,
             color=color_map[idx],
             linestyle="-",
-            marker="o",
-            markersize=3,
+            linewidth=2,
         )
 
     ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{x:,.0f}"))
     ax.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%y%m"))
-    ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1), frameon=False)
+    ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1), frameon=False, fontsize=11)
     ax.grid(True, axis="y", linestyle="--", alpha=0.7)
     for spine in ax.spines.values():
         spine.set_color("#dddddd")
@@ -754,7 +753,7 @@ def plot_assets_trend(account_df: pd.DataFrame, output_path: Path) -> Path:
     y_min = np.nanmin(account_df.values)
     y_max = np.nanmax(account_df.values)
     pad = (y_max - y_min) * 0.1 if y_max > y_min else max(abs(y_max), 1.0) * 0.1
-    ax.set_ylim(y_min - pad, y_max + pad)
+    ax.set_ylim(max(0, y_min - pad), y_max + pad)
     fig.autofmt_xdate(rotation=30)
 
     # fig.subplots_adjust(top=0.85, bottom=0.12, left=0.1, right=0.9)
