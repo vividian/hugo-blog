@@ -40,13 +40,13 @@ CHART_COLORWAY = [
     "#EDC948",
     "#9C755F",
 ]
-THEME_BG = "#F7FAFC"
-THEME_BG_ALT = "#ECF2F7"
-THEME_BG_EMPH = "#DEE8F0"
-THEME_TEXT = "#1F2D3D"
+THEME_BG = "rgba(0,0,0,0)"
+THEME_BG_ALT = "rgba(110,110,110,0.05)"
+THEME_BG_EMPH = "rgba(110,110,110,0.12)"
+THEME_TEXT = "var(--fa-text)"
 THEME_HEADER_BG = "#324A5F"
-THEME_BORDER = "#CAD5E0"
-THEME_GRID = "#D8E1EA"
+THEME_BORDER = "rgba(110,110,110,0.2)"
+THEME_GRID = "rgba(110,110,110,0.15)"
 COLOR_GAIN = "#C0392B"
 COLOR_LOSS = "#2A6F97"
 DETAIL_TABLE_COLUMNWIDTH = [1.3, 1, 1, 0.9, 0.8]
@@ -184,7 +184,7 @@ def _build_exchange_rate_table(fx_series: pd.Series) -> go.Figure:
                 header=dict(
                     values=headers,
                     fill_color=THEME_HEADER_BG,
-                    font=dict(color="white", size=14, family=FONT_FAMILY),
+                    font=dict(color="white", size=17, family=FONT_FAMILY),
                     align=TABLE_HEADER_ALIGN,
                     height=TABLE_HEADER_HEIGHT,
                     line_color=THEME_BORDER,
@@ -193,7 +193,7 @@ def _build_exchange_rate_table(fx_series: pd.Series) -> go.Figure:
                 cells=dict(
                     values=[[values[0]], [values[1]], [values[2]]],
                     fill_color=[[THEME_BG], [THEME_BG], [THEME_BG_ALT]],
-                    font=dict(color=[THEME_TEXT, change_color, THEME_TEXT], size=14, family=FONT_FAMILY),
+                    font=dict(color=[THEME_TEXT, change_color, THEME_TEXT], size=17, family=FONT_FAMILY),
                     align=EXCHANGE_RATE_TABLE_ALIGN,
                     height=TABLE_ROW_HEIGHT,
                     line_color=THEME_BORDER,
@@ -205,7 +205,7 @@ def _build_exchange_rate_table(fx_series: pd.Series) -> go.Figure:
     fig.update_layout(
         height=_table_height(1, min_height=120),
         margin=dict(l=0, r=0, t=0, b=0),
-        font=dict(family=FONT_FAMILY),
+        font=dict(family=FONT_FAMILY, size=17),
         paper_bgcolor=THEME_BG,
     )
     return fig
@@ -227,14 +227,15 @@ def _build_assets_trend(account_df: pd.DataFrame) -> go.Figure:
         )
     fig.update_layout(
         height=340,
-        margin=dict(l=28, r=12, t=12, b=26),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
-        showlegend=False,
-        font=dict(family=FONT_FAMILY),
+        margin=dict(l=28, r=12, t=40, b=26),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0, font=dict(size=15)),
+        showlegend=True,
+        font=dict(family=FONT_FAMILY, size=15),
         paper_bgcolor=THEME_BG,
         plot_bgcolor=THEME_BG,
     )
-    fig.update_yaxes(tickformat=",.0f", rangemode="tozero")
+    fig.update_xaxes(tickfont=dict(size=14, family=FONT_FAMILY))
+    fig.update_yaxes(tickformat=",.0f", rangemode="tozero", tickfont=dict(size=14, family=FONT_FAMILY))
     return fig
 
 
@@ -265,14 +266,15 @@ def _build_assets_investment_trend(account_df: pd.DataFrame, invest_series: pd.S
     )
     fig.update_layout(
         height=340,
-        margin=dict(l=28, r=12, t=12, b=26),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+        margin=dict(l=28, r=12, t=40, b=26),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0, font=dict(size=15)),
         showlegend=True,
-        font=dict(family=FONT_FAMILY),
+        font=dict(family=FONT_FAMILY, size=15),
         paper_bgcolor=THEME_BG,
         plot_bgcolor=THEME_BG,
     )
-    fig.update_yaxes(tickformat=",.0f", rangemode="tozero")
+    fig.update_xaxes(tickfont=dict(size=14, family=FONT_FAMILY))
+    fig.update_yaxes(tickformat=",.0f", rangemode="tozero", tickfont=dict(size=14, family=FONT_FAMILY))
     return fig
 
 
@@ -293,7 +295,7 @@ def _build_account_assets_table(summary_df: pd.DataFrame) -> go.Figure:
                 header=dict(
                     values=list(display_df.columns),
                     fill_color=THEME_HEADER_BG,
-                    font=dict(color="white", size=14, family=FONT_FAMILY),
+                    font=dict(color="white", size=17, family=FONT_FAMILY),
                     align=TABLE_HEADER_ALIGN,
                     height=TABLE_HEADER_HEIGHT,
                     line_color=THEME_BORDER,
@@ -302,7 +304,7 @@ def _build_account_assets_table(summary_df: pd.DataFrame) -> go.Figure:
                 cells=dict(
                     values=values,
                     fill_color=fill_colors,
-                    font=dict(color=_build_font_colors(values, [THEME_TEXT] * len(values)), size=13, family=FONT_FAMILY),
+                    font=dict(color=_build_font_colors(values, [THEME_TEXT] * len(values)), size=16, family=FONT_FAMILY),
                     align=aligns,
                     height=TABLE_ROW_HEIGHT,
                     line_color=THEME_BORDER,
@@ -314,7 +316,7 @@ def _build_account_assets_table(summary_df: pd.DataFrame) -> go.Figure:
     fig.update_layout(
         height=_table_height(len(display_df), min_height=220),
         margin=dict(l=0, r=0, t=0, b=0),
-        font=dict(family=FONT_FAMILY),
+        font=dict(family=FONT_FAMILY, size=16),
         paper_bgcolor=THEME_BG,
     )
     return fig
@@ -371,7 +373,7 @@ def _build_total_holdings_table(holdings_df: pd.DataFrame) -> Optional[go.Figure
                 header=dict(
                     values=list(display_df.columns),
                     fill_color=THEME_HEADER_BG,
-                    font=dict(color="white", size=13, family=FONT_FAMILY),
+                    font=dict(color="white", size=16, family=FONT_FAMILY),
                     align=TABLE_HEADER_ALIGN,
                     height=TABLE_HEADER_HEIGHT,
                     line_color=THEME_BORDER,
@@ -380,7 +382,7 @@ def _build_total_holdings_table(holdings_df: pd.DataFrame) -> Optional[go.Figure
                 cells=dict(
                     values=values,
                     fill_color=fill_colors,
-                    font=dict(color=_build_font_colors(values, [THEME_TEXT] * len(values)), size=12, family=FONT_FAMILY),
+                    font=dict(color=_build_font_colors(values, [THEME_TEXT] * len(values)), size=15, family=FONT_FAMILY),
                     align=aligns,
                     height=TABLE_ROW_HEIGHT,
                     line_color=THEME_BORDER,
@@ -392,7 +394,7 @@ def _build_total_holdings_table(holdings_df: pd.DataFrame) -> Optional[go.Figure
     fig.update_layout(
         height=_table_height(len(display_df), min_height=260),
         margin=dict(l=0, r=0, t=0, b=0),
-        font=dict(family=FONT_FAMILY),
+        font=dict(family=FONT_FAMILY, size=15),
         paper_bgcolor=THEME_BG,
     )
     return fig
@@ -421,7 +423,7 @@ def _build_dividends_chart(pivot: pd.DataFrame) -> go.Figure:
                 marker=dict(color=_palette_color(idx)),
                 text=texts,
                 textposition="outside" if is_last else "none",
-                textfont=dict(size=11, color=THEME_TEXT),
+                textfont=dict(size=14, color=THEME_TEXT),
                 cliponaxis=False
             )
         )
@@ -430,7 +432,7 @@ def _build_dividends_chart(pivot: pd.DataFrame) -> go.Figure:
         height=chart_height,
         margin=dict(l=28, r=12, t=30, b=22),
         showlegend=False,
-        font=dict(family=FONT_FAMILY),
+        font=dict(family=FONT_FAMILY, size=15),
         paper_bgcolor=THEME_BG,
         plot_bgcolor=THEME_BG,
     )
@@ -470,7 +472,7 @@ def _build_yearly_dividends_chart(pivot: pd.DataFrame) -> go.Figure:
                 marker=dict(color=_palette_color(idx)),
                 text=texts,
                 textposition="outside" if is_last else "none",
-                textfont=dict(size=11, color=THEME_TEXT),
+                textfont=dict(size=14, color=THEME_TEXT),
                 cliponaxis=False
             )
         )
@@ -479,7 +481,7 @@ def _build_yearly_dividends_chart(pivot: pd.DataFrame) -> go.Figure:
         height=300,
         margin=dict(l=28, r=12, t=30, b=22),
         showlegend=False,
-        font=dict(family=FONT_FAMILY),
+        font=dict(family=FONT_FAMILY, size=15),
         paper_bgcolor=THEME_BG,
         plot_bgcolor=THEME_BG,
     )
@@ -489,16 +491,29 @@ def _build_yearly_dividends_chart(pivot: pd.DataFrame) -> go.Figure:
 
 
 
-def _build_account_detail(account: str, holdings_df: pd.DataFrame) -> Optional[go.Figure]:
+def _build_account_detail(account: str, holdings_df: pd.DataFrame, summary_df: pd.DataFrame) -> Optional[go.Figure]:
     account_holdings = holdings_df[holdings_df["계좌"] == account].copy()
     if account_holdings.empty:
         return None
     account_holdings = account_holdings.sort_values("평가금", ascending=False)
 
+    status_row = summary_df[summary_df["계좌"] == account]
+    if status_row.empty:
+        return None
+    status_row = status_row.iloc[0]
+
     def fmt_currency(val: Optional[float]) -> str:
         if val is None or pd.isna(val):
             return "-"
         return f"{val:,.0f}"
+
+    def fmt_currency_signed(val: Optional[float]) -> str:
+        if val is None or pd.isna(val):
+            return "-"
+        if val == 0:
+            return "0"
+        sign = "+" if val > 0 else "-"
+        return f"{sign}{abs(val):,.0f}"
 
     def fmt_rate(val: Optional[float]) -> str:
         if val is None or pd.isna(val):
@@ -511,18 +526,45 @@ def _build_account_detail(account: str, holdings_df: pd.DataFrame) -> Optional[g
             "종목": account_holdings["종목"],
             "매수금": account_holdings["매수금"].apply(fmt_currency),
             "평가금": account_holdings["평가금"].apply(fmt_currency),
-            "수익금": account_holdings["수익금"].apply(fmt_currency),
+            "수익금": account_holdings["수익금"].apply(fmt_currency_signed),
             "수익률": account_holdings["수익률"].apply(fmt_rate),
         }
     )
+
+    invest_val = status_row.get("투자금", 0)
+    eval_val = status_row.get("평가금", 0)
+    profit_val = status_row.get("수익금", 0)
+    dividend_val = status_row.get("배당금", 0)
+    
+    rate_val = (profit_val / invest_val) if (invest_val and invest_val > 0) else 0.0
+    if pd.isna(rate_val) or rate_val is None:
+        rate_val = 0.0
+
+    summary_table_df = pd.DataFrame({
+        "투자금": [fmt_currency(invest_val)],
+        "평가금": [fmt_currency(eval_val)],
+        "수익금": [fmt_currency_signed(profit_val)],
+        "수익률": [fmt_rate(rate_val)],
+        "배당금(누적)": [fmt_currency(dividend_val)]
+    })
+
     row_colors = [_palette_color(idx) for idx in range(len(table_df))]
     fill_colors = [row_colors] + [[THEME_BG] * len(table_df) for _ in range(len(table_df.columns) - 1)]
+
+    # 2행 2열 서브플롯 구성: 1열은 파이 차트가 2개 행에 걸쳐 합쳐짐(rowspan=2)
+    # 2열의 1행은 종목별 테이블, 2행은 계좌 요약 테이블
     fig = make_subplots(
-        rows=1,
+        rows=2,
         cols=2,
-        specs=[[{"type": "domain"}, {"type": "table"}]],
+        specs=[
+            [{"type": "domain", "rowspan": 2}, {"type": "table"}],
+            [None, {"type": "table"}]
+        ],
         column_widths=[0.3, 0.7],
+        row_heights=[0.72, 0.28],
+        vertical_spacing=0.06,
     )
+
     fig.add_trace(
         go.Pie(
             labels=account_holdings["종목"],
@@ -535,13 +577,14 @@ def _build_account_detail(account: str, holdings_df: pd.DataFrame) -> Optional[g
         row=1,
         col=1,
     )
+
     fig.add_trace(
         go.Table(
             columnwidth=DETAIL_TABLE_COLUMNWIDTH,
             header=dict(
                 values=list(table_df.columns),
                 fill_color=THEME_HEADER_BG,
-                font=dict(color="white", size=13, family=FONT_FAMILY),
+                font=dict(color="white", size=16, family=FONT_FAMILY),
                 align=TABLE_HEADER_ALIGN,
                 height=TABLE_HEADER_HEIGHT,
                 line_color=THEME_BORDER,
@@ -550,7 +593,11 @@ def _build_account_detail(account: str, holdings_df: pd.DataFrame) -> Optional[g
             cells=dict(
                 values=[table_df[col].tolist() for col in table_df.columns],
                 fill_color=fill_colors,
-                font=dict(color=_build_font_colors([table_df[col].tolist() for col in table_df.columns], ["white"] + [THEME_TEXT] * (len(table_df.columns) - 1)), size=12, family=FONT_FAMILY),
+                font=dict(
+                    color=_build_font_colors([table_df[col].tolist() for col in table_df.columns], ["white"] + [THEME_TEXT] * (len(table_df.columns) - 1)), 
+                    size=15, 
+                    family=FONT_FAMILY
+                ),
                 align=DETAIL_TABLE_ALIGN,
                 height=TABLE_ROW_HEIGHT,
                 line_color=THEME_BORDER,
@@ -560,12 +607,48 @@ def _build_account_detail(account: str, holdings_df: pd.DataFrame) -> Optional[g
         row=1,
         col=2,
     )
+
+    summary_fill_colors = [[THEME_BG] * len(summary_table_df) for _ in range(len(summary_table_df.columns))]
+    fig.add_trace(
+        go.Table(
+            columnwidth=[1, 1, 1, 0.9, 1.1],
+            header=dict(
+                values=list(summary_table_df.columns),
+                fill_color=THEME_HEADER_BG,
+                font=dict(color="white", size=16, family=FONT_FAMILY),
+                align=TABLE_HEADER_ALIGN,
+                height=TABLE_HEADER_HEIGHT,
+                line_color=THEME_BORDER,
+                line_width=TABLE_LINE_WIDTH,
+            ),
+            cells=dict(
+                values=[summary_table_df[col].tolist() for col in summary_table_df.columns],
+                fill_color=summary_fill_colors,
+                font=dict(
+                    color=_build_font_colors([summary_table_df[col].tolist() for col in summary_table_df.columns], [THEME_TEXT] * len(summary_table_df.columns)), 
+                    size=15, 
+                    family=FONT_FAMILY,
+                    weight="bold"
+                ),
+                align=["right"] * len(summary_table_df.columns),
+                height=TABLE_ROW_HEIGHT,
+                line_color=THEME_BORDER,
+                line_width=TABLE_LINE_WIDTH,
+            ),
+        ),
+        row=2,
+        col=2,
+    )
+
+    item_rows = len(table_df)
+    fig_height = max(330, 240 + item_rows * 20 + 80)
+
     fig.update_layout(
-        height=_table_height(len(table_df), min_height=260),
+        height=fig_height,
         margin=dict(l=10, r=10, t=10, b=10),
         paper_bgcolor=THEME_BG,
         showlegend=False,
-        font=dict(family=FONT_FAMILY),
+        font=dict(family=FONT_FAMILY, size=15),
     )
     return fig
 
@@ -656,6 +739,7 @@ def _render_figure_html(fig: go.Figure, *, include_js: bool) -> str:
     # 임의의 드래그/핀치 줌 및 확대 조작을 강제로 차단하고 고정(Lock)시킵니다.
     fig.update_xaxes(fixedrange=True)
     fig.update_yaxes(fixedrange=True)
+    fig.update_layout(dragmode=False)
     return pio.to_html(
         fig,
         full_html=False,
@@ -1033,7 +1117,7 @@ def _build_dashboard_fragment(data: ReportData) -> str:
         )
 
     for account in data.valid_detail_accounts:
-        fig = _build_account_detail(account, data.holdings_df)
+        fig = _build_account_detail(account, data.holdings_df, data.summary_df)
         if fig is None:
             continue
         detail_title = update_fa.ACCOUNT_TITLES.get(
@@ -1069,12 +1153,15 @@ html.dark .fa-dashboard {
 .fa-dashboard .plotly-graph-div .svg-container { overflow: visible !important; }
 .fa-dashboard .plotly-graph-div .main-svg text {
   line-height: 1 !important;
+  fill: var(--fa-text) !important;
+  font-weight: bold !important;
 }
 .fa-dashboard .plotly-graph-div .table text {
   dominant-baseline: middle !important;
   alignment-baseline: middle !important;
+  font-weight: bold !important;
 }
-.fa-dashboard .plotly-graph-div .table .cells text { fill: #1f2d3d !important; }
+.fa-dashboard .plotly-graph-div .table .cells text { fill: var(--fa-text) !important; }
 .fa-dashboard .plotly-graph-div .table .header text { fill: #ffffff !important; }
 .fa-hero { margin: 6px 0 12px; }
 .fa-hero-title { font-size: 1.4rem; font-weight: 700; }
