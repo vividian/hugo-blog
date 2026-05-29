@@ -93,14 +93,14 @@ ACCOUNT_TITLES = {
     "title_trading_history": "◉ 보유종목 거래내역",
     "title_monthly_dividends": "◉ 월별 배당금 및 분배금 현황 (최근 12개월)",
     "title_yearly_dividends": "◉ 연별 배당금 및 분배금 현황",
-    "title_usa_detail": "◉ 상세계좌: 미국주식 (SPYM:IEF:SGOV = 7:2:1)",
+    "title_usa_detail": "◉ 상세계좌: 미국주식 (SPYM:SGOV = 9:1)",
     "title_kor1_detail": "◉ 상세계좌: 국내주식1",
     "title_kor2_detail": "◉ 상세계좌: 국내주식2",
-    "title_sema_detail": "◉ 상세계좌: SEMA (S&P500-FD:SAVING = 7:3)",
+    "title_sema_detail": "◉ 상세계좌: SEMA (S&P500-FD:GOLD-FD:SAVING = 6:1:3)",
     "title_irp_detail": "◉ 상세계좌: IRP (S&P500:KOFR = 7:3)",
-    "title_psf1_detail": "◉ 상세계좌: 연금저축1 (SCHD:QQQ:IEF:MMA = 4:3:2:1)",
+    "title_psf1_detail": "◉ 상세계좌: 연금저축1 (SCHD:QQQ:MMA = 6:3:1)",
     "title_isa1_detail": "◉ 상세계좌: ISA1",
-    "title_psf2_detail": "◉ 상세계좌: 연금저축2 (SCHD:QQQ:IEF:MMA = 4:3:2:1)",
+    "title_psf2_detail": "◉ 상세계좌: 연금저축2 (SCHD:QQQ:MMA = 6:3:1)",
     "title_isa2_detail": "◉ 상세계좌: ISA2",
 }
 CONTENT_TITLE_KEYS = {

@@ -468,14 +468,26 @@ body[data-theme="dark"] .tag-item {
   margin-top: 0;         // 초반 문단이 위로 붙지 않도록
 }
 
+.fa-stack,
 .portfolio-stack {
   display: flex;
   flex-direction: column;
-  gap: 0px;          /* 원하는 간격 */
+  gap: 30px;          /* 타이틀이 그래프와 결합되었으므로 개별 카드들 사이에 쾌적한 여백(30px) 제공 */
   align-items: center;
+  margin-top: 1.5rem;
+  margin-bottom: 1.5rem;
 }
+.fa-stack img,
 .portfolio-stack img {
   width: 100%;
   max-width: 1200px;
   margin: 0;          /* 기본 margin 제거 */
+  border-radius: 12px; /* 모던 프리미엄 룩을 위한 라운딩 처리 */
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08); /* 부드러운 카드 그림자 */
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.fa-stack img:hover,
+.portfolio-stack img:hover {
+  transform: translateY(-4px); /* 호버 시 위로 부드럽게 들리는 마이크로 모션 */
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
 }
