@@ -82,6 +82,7 @@ class ReportData:
     yearly_dividends_pivot: Optional[pd.DataFrame]
     valid_detail_accounts: Sequence[str]
     invest_series: pd.Series
+    symbol_map: Dict[str, update_fa.AssetConfig]
 
 
 def _extract_image_keys(markdown_text: str) -> List[str]:
@@ -275,6 +276,113 @@ def _build_assets_investment_trend(account_df: pd.DataFrame, invest_series: pd.S
     )
     fig.update_xaxes(tickfont=dict(size=14, family=FONT_FAMILY))
     fig.update_yaxes(tickformat=",.0f", rangemode="tozero", tickfont=dict(size=14, family=FONT_FAMILY))
+    return fig
+
+
+def _build_portfolio_allocation_charts(holdings_df: pd.DataFrame, symbol_map: Dict[str, update_fa.AssetConfig]) -> go.Figure:
+    df = holdings_df.copy()
+    
+    regions = []
+    asset_classes = []
+    asset_groups = []
+    
+    for _, row in df.iterrows():
+        symbol = row["종목"]
+        config = symbol_map.get(symbol)
+        
+        region = "기타"
+        asset_class = "기타"
+        
+        if config:
+            region = config.region or "기타"
+            asset_class = config.asset_class or "기타"
+            
+        regions.append(region)
+        asset_classes.append(asset_class)
+        
+        ac_lower = asset_class.lower()
+        if any(keyword in ac_lower for keyword in ["현금", "mma", "kofr", "saving", "저축"]):
+            group = "현금성 자산"
+        elif any(keyword in ac_lower for keyword in ["tlt", "ief", "국채", "채권", "tltw"]):
+            group = "채권"
+        elif any(keyword in ac_lower for keyword in ["골드", "금", "gold"]):
+            group = "대안자산(금)"
+        else:
+            group = "주식"
+            
+        asset_groups.append(group)
+        
+    df["region"] = regions
+    df["asset_class"] = asset_classes
+    df["asset_group"] = asset_groups
+    
+    group_df = df.groupby("asset_group")["평가금"].sum().reset_index()
+    region_df = df.groupby("region")["평가금"].sum().reset_index()
+    class_df = df.groupby("asset_class")["평가금"].sum().reset_index()
+    
+    fig = make_subplots(
+        rows=1,
+        cols=3,
+        specs=[[{"type": "domain"}, {"type": "domain"}, {"type": "domain"}]],
+        subplot_titles=["<b>자산군 비중</b>", "<b>지역 비중</b>", "<b>대표 자산 비중</b>"]
+    )
+    
+    fig.add_trace(
+        go.Pie(
+            labels=group_df["asset_group"],
+            values=group_df["평가금"],
+            textinfo="percent+label",
+            hole=0.4,
+            name="자산군",
+            textposition="inside",
+            showlegend=False,
+            marker=dict(colors=CHART_COLORWAY),
+        ),
+        row=1,
+        col=1
+    )
+    
+    fig.add_trace(
+        go.Pie(
+            labels=region_df["region"],
+            values=region_df["평가금"],
+            textinfo="percent+label",
+            hole=0.4,
+            name="지역",
+            textposition="inside",
+            showlegend=False,
+            marker=dict(colors=CHART_COLORWAY),
+        ),
+        row=1,
+        col=2
+    )
+    
+    fig.add_trace(
+        go.Pie(
+            labels=class_df["asset_class"],
+            values=class_df["평가금"],
+            textinfo="percent+label",
+            hole=0.4,
+            name="대표 자산",
+            textposition="inside",
+            showlegend=False,
+            marker=dict(colors=CHART_COLORWAY),
+        ),
+        row=1,
+        col=3
+    )
+    
+    fig.update_layout(
+        height=320,
+        margin=dict(l=20, r=20, t=40, b=20),
+        font=dict(family=FONT_FAMILY, size=13),
+        paper_bgcolor=THEME_BG,
+        plot_bgcolor=THEME_BG,
+    )
+    
+    for annotation in fig['layout']['annotations']:
+        annotation['font'] = dict(size=14, color=THEME_TEXT, family=FONT_FAMILY)
+        
     return fig
 
 
@@ -787,6 +895,7 @@ def _build_report_data(records: pd.DataFrame) -> ReportData:
             "계좌",
         ].astype(str).tolist()
 
+    symbol_map = update_fa.load_symbol_map()
     invest_series = update_fa._build_investment_series(records_upto, fx_series_month)
 
     return ReportData(
@@ -801,6 +910,7 @@ def _build_report_data(records: pd.DataFrame) -> ReportData:
         yearly_dividends_pivot=yearly_dividends_pivot,
         valid_detail_accounts=valid_detail_accounts,
         invest_series=invest_series,
+        symbol_map=symbol_map,
     )
 
 
@@ -1055,6 +1165,7 @@ def _build_dashboard_fragment(data: ReportData) -> str:
 
     assets_investment_fig = _build_assets_investment_trend(data.account_df, data.invest_series)
     assets_fig = _build_assets_trend(data.account_df)
+    portfolio_alloc_fig = _build_portfolio_allocation_charts(data.holdings_df, data.symbol_map)
     account_fig = _build_account_assets_table(data.summary_df)
     holdings_fig = _build_total_holdings_table(data.holdings_df)
     monthly_div_fig = (
@@ -1078,6 +1189,7 @@ def _build_dashboard_fragment(data: ReportData) -> str:
         _build_market_kpi_row(),
         _dashboard_card(update_fa.ACCOUNT_TITLES.get("title_assets_investment_trend", "누적 투자금 vs 평가금 추세"), fig_html(assets_investment_fig), extra_class="fa-card-wide"),
         _dashboard_card(update_fa.ACCOUNT_TITLES.get("title_assets_trend", "자산 추이"), fig_html(assets_fig), extra_class="fa-card-wide"),
+        _dashboard_card("전체 포트폴리오 비중", fig_html(portfolio_alloc_fig), extra_class="fa-card-wide"),
         _dashboard_card(update_fa.ACCOUNT_TITLES.get("title_account_assets", "계좌 요약"), fig_html(account_fig)),
     ]
 

@@ -56,9 +56,11 @@ def parse_accounts(text: str) -> list[dict]:
             continue
         if line.startswith("-") and current is not None:
             parts = [part.strip() for part in line[1:].split(",")]
-            while len(parts) < 3:
-                parts.append("")
-            parts = parts[:3]
+            if len(parts) < 3:
+                while len(parts) < 3:
+                    parts.append("")
+            elif len(parts) > 5:
+                parts = parts[:5]
             current["items"].append(parts)
     return accounts
 
@@ -73,12 +75,11 @@ def write_yaml(accounts: list[dict]) -> None:
         lines.append(f"  - name: {account['name']}")
         lines.append("    items:")
         if idx == 0:
-            lines.append("      # [name, abbrev, ticker]")
-        for name, abbrev, ticker in account["items"]:
-            ticker = ticker or ""
-            lines.append(
-                f"      - [{_quote(name)}, {_quote(abbrev)}, {_quote(ticker)}]"
-            )
+            lines.append("      # [name, abbrev, ticker, region, asset_class]")
+        for item in account["items"]:
+            quoted_parts = [_quote(p) for p in item]
+            list_str = ", ".join(quoted_parts)
+            lines.append(f"      - [{list_str}]")
     YAML_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 

@@ -120,6 +120,8 @@ class AssetConfig:
     name: str
     abbrev: str
     ticker: str
+    region: str = "기타"
+    asset_class: str = "기타"
 
 
 @dataclass
@@ -189,12 +191,12 @@ def load_symbol_map() -> Dict[str, AssetConfig]:
             if len(item) < 3:
                 continue
             name, abbrev, ticker = item[0], item[1], item[2]
-            if not ticker:
-                continue
-            y_ticker = ticker
-            if ticker.startswith("KRX:"):
+            region = item[3] if len(item) > 3 else "기타"
+            asset_class = item[4] if len(item) > 4 else "기타"
+            y_ticker = ticker or ""
+            if ticker and ticker.startswith("KRX:"):
                 y_ticker = ticker.replace("KRX:", "") + ".KS"
-            config = AssetConfig(name=name, abbrev=abbrev, ticker=y_ticker)
+            config = AssetConfig(name=name, abbrev=abbrev, ticker=y_ticker, region=region, asset_class=asset_class)
             for key in {name, abbrev}:
                 if not key:
                     continue
@@ -285,13 +287,15 @@ def get_monthly_prices(end_date: pd.Timestamp, records: Optional[pd.DataFrame] =
         ]
         for symbol in traded["종목"].dropna().astype(str):
             config = fa_data.get(symbol)
-            if not config:
+            if not config or not config.ticker:
                 continue
             tickers_map[config.ticker] = config.abbrev or config.name
 
     # 거래내역 기반 대상이 비어 있으면 기존 방식으로 전체 종목을 조회한다.
     if not tickers_map:
         for config in fa_data.values():
+            if not config.ticker:
+                continue
             tickers_map[config.ticker] = config.abbrev or config.name
 
     if not tickers_map:
@@ -930,7 +934,11 @@ def build_holdings_df(records: pd.DataFrame, fx_series: pd.Series) -> pd.DataFra
     trades = extract_trades(records)
     positions = compute_positions(trades, symbol_map, fx_series)
 
-    prices = fetch_latest_prices(sorted({p.ticker for p in positions}))
+    prices = fetch_latest_prices(sorted({p.ticker for p in positions if p.ticker}))
+    for pos in positions:
+        if not pos.ticker:
+            prices[pos.ticker] = (1.0, 1.0)
+
     rows: List[Dict[str, float]] = []
     for pos in positions:
         price_info = prices.get(pos.ticker)
