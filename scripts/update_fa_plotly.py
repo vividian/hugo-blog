@@ -319,6 +319,33 @@ def _build_portfolio_allocation_charts(holdings_df: pd.DataFrame, symbol_map: Di
     group_df = df.groupby("asset_group")["평가금"].sum().reset_index()
     region_df = df.groupby("region")["평가금"].sum().reset_index()
     class_df = df.groupby("asset_class")["평가금"].sum().reset_index()
+
+    # 2% 미만인 미세 항목들을 '기타'로 합산하는 헬퍼 함수
+    def group_minor_df(df_in: pd.DataFrame, col_name: str, threshold_pct: float = 2.0) -> pd.DataFrame:
+        if len(df_in) <= 5:
+            return df_in
+        total = df_in["평가금"].sum()
+        if total == 0:
+            return df_in
+        df_sorted = df_in.sort_values(by="평가금", ascending=False).copy()
+        df_sorted["pct"] = df_sorted["평가금"] / total * 100
+        
+        major_df = df_sorted[df_sorted["pct"] >= threshold_pct].copy()
+        minor_df = df_sorted[df_sorted["pct"] < threshold_pct].copy()
+        
+        if not minor_df.empty:
+            minor_sum = minor_df["평가금"].sum()
+            etc_mask = major_df[col_name] == "기타"
+            if etc_mask.any():
+                major_df.loc[etc_mask, "평가금"] += minor_sum
+            else:
+                new_row = pd.DataFrame([{col_name: "기타", "평가금": minor_sum}])
+                major_df = pd.concat([major_df, new_row], ignore_index=True)
+        return major_df.drop(columns=["pct"], errors="ignore").sort_values(by="평가금", ascending=False)
+
+    group_df = group_minor_df(group_df, "asset_group")
+    region_df = group_minor_df(region_df, "region")
+    class_df = group_minor_df(class_df, "asset_class")
     
     fig = make_subplots(
         rows=1,
@@ -332,7 +359,7 @@ def _build_portfolio_allocation_charts(holdings_df: pd.DataFrame, symbol_map: Di
             labels=group_df["asset_group"],
             values=group_df["평가금"],
             textinfo="percent+label",
-            hole=0.4,
+            hole=0.5,
             name="자산군",
             textposition="inside",
             showlegend=False,
@@ -347,7 +374,7 @@ def _build_portfolio_allocation_charts(holdings_df: pd.DataFrame, symbol_map: Di
             labels=region_df["region"],
             values=region_df["평가금"],
             textinfo="percent+label",
-            hole=0.4,
+            hole=0.5,
             name="지역",
             textposition="inside",
             showlegend=False,
@@ -362,7 +389,7 @@ def _build_portfolio_allocation_charts(holdings_df: pd.DataFrame, symbol_map: Di
             labels=class_df["asset_class"],
             values=class_df["평가금"],
             textinfo="percent+label",
-            hole=0.4,
+            hole=0.5,
             name="대표 자산",
             textposition="inside",
             showlegend=False,
@@ -378,6 +405,8 @@ def _build_portfolio_allocation_charts(holdings_df: pd.DataFrame, symbol_map: Di
         font=dict(family=FONT_FAMILY, size=13),
         paper_bgcolor=THEME_BG,
         plot_bgcolor=THEME_BG,
+        uniformtext_mode='hide',
+        uniformtext_minsize=11,
     )
     
     for annotation in fig['layout']['annotations']:

@@ -1,0 +1,5 @@
+{{ $src := .Destination }}
+{{ if strings.HasPrefix $src "../../static/" }}
+  {{ $src = strings.TrimPrefix "../../static" $src }}
+{{ end }}
+<img src="{{ $src }}" alt="{{ .Text }}" />

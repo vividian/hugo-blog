@@ -88,6 +88,7 @@ ACCOUNT_TITLES = {
     "title_exchange_rate": "◉ 환율 (USD/KRW) 추세",
     "title_assets_trend": "◉ 계좌별 자산 추세",
     "title_assets_investment_trend": "◉ 누적 투자금 vs 평가금 추세",
+    "title_portfolio_allocation": "◉ 전체 포트폴리오 비중",
     "title_account_assets": "◉ 전체 계좌별 자산 현황 (투자금, 평가금, 수익금 등)",
     "title_total_holdings": "◉ 실시간 보유종목 현황",
     "title_trading_history": "◉ 보유종목 거래내역",
@@ -106,6 +107,7 @@ ACCOUNT_TITLES = {
 CONTENT_TITLE_KEYS = {
     "assets_trend": "title_assets_trend",
     "assets_investment_trend": "title_assets_investment_trend",
+    "portfolio_allocation": "title_portfolio_allocation",
     "account_assets": "title_account_assets",
     "total_holdings": "title_total_holdings",
     "trading_history": "title_trading_history",
@@ -1472,6 +1474,156 @@ def plot_total_holdings(holdings_df: pd.DataFrame, output_path: Path) -> Path:
     return True
 
 
+def plot_portfolio_allocation(holdings_df: pd.DataFrame, symbol_map: Dict[str, AssetConfig], output_path: Path) -> Path:
+    """전체 계좌 포트폴리오 비중(자산군, 지역, 대표자산) 도넛 차트를 생성하여 저장한다."""
+    df = holdings_df.copy()
+    
+    regions = []
+    asset_classes = []
+    asset_groups = []
+    
+    for _, row in df.iterrows():
+        symbol = row["종목"]
+        config = symbol_map.get(symbol)
+        
+        region = "기타"
+        asset_class = "기타"
+        
+        if config:
+            region = config.region or "기타"
+            asset_class = config.asset_class or "기타"
+            
+        regions.append(region)
+        asset_classes.append(asset_class)
+        
+        ac_lower = asset_class.lower()
+        if any(keyword in ac_lower for keyword in ["현금", "mma", "kofr", "saving", "저축"]):
+            group = "현금성 자산"
+        elif any(keyword in ac_lower for keyword in ["tlt", "ief", "국채", "채권", "tltw"]):
+            group = "채권"
+        elif any(keyword in ac_lower for keyword in ["골드", "금", "gold"]):
+            group = "대안자산(금)"
+        else:
+            group = "주식"
+            
+        asset_groups.append(group)
+        
+    df["region"] = regions
+    df["asset_class"] = asset_classes
+    df["asset_group"] = asset_groups
+    
+    group_df = df.groupby("asset_group")["평가금"].sum()
+    region_df = df.groupby("region")["평가금"].sum()
+    class_df = df.groupby("asset_class")["평가금"].sum()
+    
+    group_df = group_df[group_df > 0].sort_values(ascending=False)
+    region_df = region_df[region_df > 0].sort_values(ascending=False)
+    class_df = class_df[class_df > 0].sort_values(ascending=False)
+
+    # 2% 미만인 미세 항목들을 '기타'로 합산하는 헬퍼 함수
+    def group_minor_categories(series: pd.Series, threshold_pct: float = 2.0) -> pd.Series:
+        if len(series) <= 5:
+            return series
+        total = series.sum()
+        if total == 0:
+            return series
+        pcts = series / total * 100
+        major_mask = pcts >= threshold_pct
+        major_data = series[major_mask].copy()
+        minor_data = series[~major_mask].copy()
+        if not minor_data.empty:
+            minor_sum = minor_data.sum()
+            if "기타" in major_data.index:
+                major_data["기타"] += minor_sum
+            else:
+                major_data = pd.concat([major_data, pd.Series({"기타": minor_sum})])
+        return major_data.sort_values(ascending=False)
+
+    group_df = group_minor_categories(group_df)
+    region_df = group_minor_categories(region_df)
+    class_df = group_minor_categories(class_df)
+
+    _configure_matplotlib()
+    
+    # 세로 크기를 5.5에서 6.5로 늘려 범례 공간을 확보
+    fig, axes = plt.subplots(1, 3, figsize=(15, 6.5), dpi=FIG_DPI)
+    fig.patch.set_facecolor(CANVAS_BG_COLOR)
+    
+    color_palette = [
+        "#4E79A7",
+        "#59A14F",
+        "#F28E2B",
+        "#B07AA1",
+        "#E15759",
+        "#76B7B2",
+        "#EDC948",
+        "#9C755F",
+    ]
+    
+    def draw_donut(ax, data, title):
+        import matplotlib.patheffects as path_effects
+        
+        ax.set_facecolor(CANVAS_BG_COLOR)
+        if data.empty:
+            ax.text(0.5, 0.5, "데이터 없음", ha="center", va="center", fontsize=14, color="#2c3e50")
+            ax.axis("off")
+            return
+            
+        # 외곽 라벨 겹침 방지를 위해 labels=None으로 지정하고 하단 범례로 처리
+        wedges, texts, autotexts = ax.pie(
+            data,
+            labels=None,
+            autopct=lambda pct: f"{pct:.1f}%" if pct >= 5 else "",
+            pctdistance=0.75,
+            startangle=90,
+            colors=color_palette[:len(data)] if len(data) <= len(color_palette) else plt.colormaps["tab10"](np.linspace(0, 1, len(data))),
+            textprops={"fontsize": 12, "color": "white", "weight": "bold"},
+            wedgeprops=dict(width=0.5, edgecolor="#ffffff", linewidth=1.5)
+        )
+        
+        # 도넛 내부 퍼센트 글씨 가독성 극대화 (글자 테두리 stroke 추가)
+        for at in autotexts:
+            at.set_color("white")
+            at.set_fontsize(12)
+            at.set_weight("bold")
+            at.set_path_effects([path_effects.withStroke(linewidth=2, foreground="#2c3e50")])
+            
+        ax.set_title(title, fontsize=14, fontweight="bold", color="#2c3e50", pad=15)
+        ax.axis("equal")
+
+        # 범례에 표시할 이름 및 퍼센트 가공
+        total_val = data.sum()
+        legend_labels = [f"{label} ({val / total_val * 100:.1f}%)" for label, val in data.items()]
+        
+        # 항목 수에 따라 ncol 동적 설정
+        if len(data) <= 4:
+            ncol = 1
+        elif len(data) <= 8:
+            ncol = 2
+        else:
+            ncol = 3
+
+        ax.legend(
+            wedges,
+            legend_labels,
+            loc="upper center",
+            bbox_to_anchor=(0.5, -0.05),
+            ncol=ncol,
+            frameon=False,
+            prop={"size": 11, "weight": "bold"}
+        )
+
+    draw_donut(axes[0], group_df, "자산군 비중")
+    draw_donut(axes[1], region_df, "지역 비중")
+    draw_donut(axes[2], class_df, "대표 자산 비중")
+    
+    plt.tight_layout()
+    _save_canvas(fig, output_path, f"포트폴리오 비중 그래프 저장 완료: {output_path}", pad_inches=0.4, bbox="tight")
+    _crop_top_inches(output_path, inches=0.4)
+    
+    return output_path
+
+
 def _wrap_history_text(text: str, width: int = 90) -> List[str]:
     """줄바꿈 없이 긴 거래 내역 문장을 적절한 길이로 감싼다."""
     text = (text or "").strip()
@@ -1647,6 +1799,12 @@ def generate_month_reports(prefix: str,
         plot_total_holdings(holdings_df, holdings_path)
         outputs["total_holdings"] = holdings_path
         save_title(CONTENT_TITLE_KEYS.get("total_holdings"), holdings_path)
+
+        portfolio_allocation_path = output_dir / f"{prefix}_portfolio_allocation.webp"
+        symbol_map = load_symbol_map()
+        plot_portfolio_allocation(holdings_df, symbol_map, portfolio_allocation_path)
+        outputs["portfolio_allocation"] = portfolio_allocation_path
+        save_title(CONTENT_TITLE_KEYS.get("portfolio_allocation"), portfolio_allocation_path)
 
         trading_history_path = output_dir / f"{prefix}_trading_history.webp"
         plot_monthly_trading_history(records, fx_series, month_end, trading_history_path)
@@ -1909,6 +2067,7 @@ def main() -> None:
         "monthly_prices": "latest_monthly_prices.csv",
         "assets_trend": "latest_assets_trend.webp",
         "assets_investment_trend": "latest_assets_investment_trend.webp",
+        "portfolio_allocation": "latest_portfolio_allocation.webp",
         "account_assets": "latest_account_assets.webp",
         "exchange_rate": "latest_exchange_rate.webp",
         "monthly_dividends": "latest_monthly_dividends.webp",

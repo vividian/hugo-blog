@@ -127,6 +127,10 @@ def render_youtube_embed(video_id: str, label: str | None, width: str | None, he
 
 def render_image(src: str, label: str | None, width: str | None, height: str | None) -> str:
     alt_text = label or Path(src).stem
+    if src.startswith("../../static/"):
+        src = src.replace("../../static/", "/", 1)
+    elif src.startswith("gourmet_") and not src.startswith("/"):
+        src = f"/images/{src}"
     attrs = [
         f'src="{html.escape(src, quote=True)}"',
         f'alt="{html.escape(alt_text)}"',
