@@ -17,6 +17,19 @@ def run_process(cmd, *, cwd=None, capture=False):
 
 
 def git_push_blog(root_dir: Path) -> None:
+    print("blog 저장소 (static/images 등) 상태 확인 중...")
+    
+    images_dir = root_dir / "static" / "images"
+    if images_dir.exists():
+        run_process(["git", "add", "static/images/"], cwd=root_dir)
+        
+    status = run_process(["git", "status", "--porcelain"], cwd=root_dir, capture=True)
+    if status.stdout.strip():
+        print("blog 저장소에 변경 사항(새 이미지 등)을 발견했습니다. 커밋을 생성합니다.")
+        run_process(["git", "commit", "-m", "static/images 이미지 업데이트"], cwd=root_dir)
+    else:
+        print("blog 저장소에 커밋할 변경 사항이 없어 커밋을 생략합니다.")
+        
     print("blog 저장소 변경 사항 푸시 중...")
     run_process(["git", "push"], cwd=root_dir)
     print("blog 저장소 푸시 완료.")
