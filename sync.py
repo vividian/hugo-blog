@@ -140,6 +140,9 @@ def main():
             print(f"알 수 없는 오류가 발생했습니다: {e}")
             return
 
+    print("새로 붙여넣은 이미지(Pasted_ 등)를 처리합니다...")
+    run_process([sys.executable, str(root_dir / "scripts" / "process_pasted_images.py")], cwd=root_dir)
+
     git_push_blog(root_dir)
     git_sync_content(root_dir / "content")
     if args.deploy:
