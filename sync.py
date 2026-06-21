@@ -23,8 +23,12 @@ def git_push_blog(root_dir: Path) -> None:
     if images_dir.exists():
         run_process(["git", "add", "static/images/"], cwd=root_dir)
         
-    status = run_process(["git", "status", "--porcelain"], cwd=root_dir, capture=True)
-    if status.stdout.strip():
+    # staged된 변경사항이 있는지 확인 (git diff --cached --quiet: 변경 있으면 exit 1)
+    staged_check = subprocess.run(
+        ["git", "diff", "--cached", "--quiet"],
+        cwd=root_dir,
+    )
+    if staged_check.returncode != 0:
         print("blog 저장소에 변경 사항(새 이미지 등)을 발견했습니다. 커밋을 생성합니다.")
         run_process(["git", "commit", "-m", "static/images 이미지 업데이트"], cwd=root_dir)
     else:
