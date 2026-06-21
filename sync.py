@@ -19,18 +19,15 @@ def run_process(cmd, *, cwd=None, capture=False):
 def git_push_blog(root_dir: Path) -> None:
     print("blog 저장소 (static/images 등) 상태 확인 중...")
     
-    images_dir = root_dir / "static" / "images"
-    if images_dir.exists():
-        run_process(["git", "add", "static/images/"], cwd=root_dir)
-        
+    # static/images is now managed in content/images        
     # staged된 변경사항이 있는지 확인 (git diff --cached --quiet: 변경 있으면 exit 1)
     staged_check = subprocess.run(
         ["git", "diff", "--cached", "--quiet"],
         cwd=root_dir,
     )
     if staged_check.returncode != 0:
-        print("blog 저장소에 변경 사항(새 이미지 등)을 발견했습니다. 커밋을 생성합니다.")
-        run_process(["git", "commit", "-m", "static/images 이미지 업데이트"], cwd=root_dir)
+        print("blog 저장소에 변경 사항을 발견했습니다. 커밋을 생성합니다.")
+        run_process(["git", "commit", "-m", "블로그 구조/설정 업데이트"], cwd=root_dir)
     else:
         print("blog 저장소에 커밋할 변경 사항이 없어 커밋을 생략합니다.")
         

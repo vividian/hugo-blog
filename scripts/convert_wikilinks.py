@@ -129,6 +129,8 @@ def render_image(src: str, label: str | None, width: str | None, height: str | N
     alt_text = label or Path(src).stem
     if src.startswith("../../static/"):
         src = src.replace("../../static/", "/", 1)
+    elif src.startswith("../images/"):
+        src = src.replace("../images/", "/images/", 1)
     elif src.startswith("gourmet_") and not src.startswith("/"):
         src = f"/images/{src}"
     attrs = [
