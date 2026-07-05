@@ -1,7 +1,7 @@
 <article class="post-item">
     <h4 class="post-item-title">
         <a href="{{ .RelPermalink }}">{{ .Title }}</a>
-        {{ if .Params.reviewPending }}<span class="post-item-badge">검토중</span>{{ end }}
+        {{ if .Params.private }}<span class="post-item-badge post-item-badge--private">비공개</span>{{ else if .Params.reviewPending }}<span class="post-item-badge">검토중</span>{{ end }}
     </h4>
     {{/* format date string to create an ISO 8601 string */}}
     {{ $ISO_date := "2006-01-02T15:04:05Z0700" }}

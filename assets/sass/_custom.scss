@@ -175,6 +175,22 @@ body[data-theme="dark"] .site-search__input {
   font-weight: 500;
 }
 
+/* 비공개 글 뱃지 (목록용) */
+.post-item-badge--private {
+  background-color: rgba(160, 160, 160, 0.2);
+  color: #999;
+}
+
+/* 비공개 글 본문 메시지 */
+.private-post {
+  padding: 1.6rem 1rem;
+  margin: 1.5rem 0;
+  border-radius: 8px;
+  background-color: rgba(120, 120, 120, 0.12);
+  text-align: center;
+  font-weight: 500;
+}
+
 .search-page {
   max-width: 720px;
   margin: 0 auto;

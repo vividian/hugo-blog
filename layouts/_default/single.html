@@ -38,7 +38,11 @@
                 {{ end }}
             </header>
             {{ partial "toc.html" .}}
-            {{ if .Params.reviewPending }}
+            {{ if .Params.private }}
+            <div class="page-content private-post">
+                <p>{{ .Params.privateMessage | default "이 글은 비공개입니다." }}</p>
+            </div>
+            {{ else if .Params.reviewPending }}
             <div class="page-content review-pending">
                 <p>{{ .Params.reviewMessage | default "이 글은 현재 검토 중입니다." }}</p>
             </div>
