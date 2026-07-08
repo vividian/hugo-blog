@@ -16,6 +16,13 @@ def run_process(cmd, *, cwd=None, capture=False):
     )
 
 
+def get_python_executable(root_dir: Path) -> str:
+    venv_python = root_dir / ".venv" / "bin" / "python"
+    if venv_python.exists():
+        return str(venv_python)
+    return sys.executable
+
+
 def git_push_blog(root_dir: Path) -> None:
     print("blog 저장소 (static/images 등) 상태 확인 중...")
     
@@ -140,14 +147,15 @@ def main():
             print(f"알 수 없는 오류가 발생했습니다: {e}")
             return
 
-    print("새로 붙여넣은 이미지(Pasted_ 등)를 처리합니다...")
-    run_process([sys.executable, str(root_dir / "scripts" / "process_pasted_images.py")], cwd=root_dir)
+    python_bin = get_python_executable(root_dir)
+    print("게시물 이미지를 WebP로 변환하고 images/ 로 정리합니다...")
+    run_process([python_bin, str(root_dir / "scripts" / "process_pasted_images.py")], cwd=root_dir)
 
     git_push_blog(root_dir)
     git_sync_content(root_dir / "content")
     if args.deploy:
         print("deploy.py --nas 실행 중...")
-        run_process([sys.executable, "deploy.py", "--nas"], cwd=root_dir)
+        run_process([python_bin, "deploy.py", "--nas"], cwd=root_dir)
 
 if __name__ == "__main__":
     main()
