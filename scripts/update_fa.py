@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import textwrap
 from dataclasses import dataclass
@@ -2014,9 +2015,50 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def update_titles_from_fa_yaml() -> None:
+    """fa.yaml의 계좌 이름을 읽어 ACCOUNT_TITLES를 동적으로 업데이트한다."""
+    if not FINANCIALASSETS_YAML_PATH.exists():
+        return
+
+    try:
+        with FINANCIALASSETS_YAML_PATH.open("r", encoding="utf-8") as f:
+            portfolio = yaml.safe_load(f) or {}
+
+        map_name_to_key = {
+            "미국": "usa",
+            "국내1": "kor1",
+            "국내2": "kor2",
+            "공제회": "sema",
+            "IRP": "irp",
+            "연금저축1": "psf1",
+            "ISA1": "isa1",
+            "연금저축2": "psf2",
+            "ISA2": "isa2",
+        }
+
+        for account in portfolio.get("accounts", []):
+            name = account.get("name")
+            if not name:
+                continue
+            # 괄호 앞부분의 깨끗한 이름을 추출하여 매핑 키 탐색
+            # 예: "연금저축1 (SCHD:QQQ:MMA = 6:3:1)" -> "연금저축1"
+            clean_name = re.sub(r"\s*\(.*\)", "", name).strip()
+            key = map_name_to_key.get(clean_name)
+            if key:
+                title_key = f"title_{key}_detail"
+                # "공제회"의 경우 기본 영문 표기 "SEMA"를 "공제회" 대신 사용
+                display_name = name
+                if clean_name == "공제회":
+                    display_name = name.replace("공제회", "SEMA")
+                ACCOUNT_TITLES[title_key] = f"◉ 상세계좌: {display_name}"
+    except Exception as e:
+        print(f"fa.yaml에서 타이틀을 업데이트하는 중 오류가 발생했습니다: {e}")
+
+
 def main() -> None:
     """메인 실행 함수. 거래 내역을 읽어 월별 리포트를 생성한다."""
     args = parse_args()
+    update_titles_from_fa_yaml()
     ensure_static_dir()
     records = read_trading_records()
     if records.empty:
