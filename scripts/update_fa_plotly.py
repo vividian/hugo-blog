@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 from urllib.parse import urlparse
 
+import math
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
@@ -65,6 +67,73 @@ MARKET_KPI_CONFIG = [
 ]
 
 
+def _format_korean_amount(val: float) -> str:
+    """원화 금액 숫자를 한글 단위(억, 만) 표현으로 변환한다. (예: 100,000,000 -> 1억, 50,000,000 -> 0.5억)"""
+    if pd.isna(val) or val == 0:
+        return "0"
+    sign = "-" if val < 0 else ""
+    val = abs(val)
+
+    eok = val / 100_000_000
+    if eok >= 0.1:
+        if eok == int(eok):
+            return f"{sign}{int(eok)}억"
+        else:
+            formatted_eok = f"{eok:.2f}".rstrip("0").rstrip(".")
+            return f"{sign}{formatted_eok}억"
+    elif val >= 10_000:
+        man = val / 10_000
+        if man == int(man):
+            return f"{sign}{int(man):,}만"
+        else:
+            formatted_man = f"{man:.2f}".rstrip("0").rstrip(".")
+            return f"{sign}{formatted_man}만"
+    else:
+        return f"{sign}{val:,.0f}"
+
+
+def _get_korean_y_ticks(y_max: float, y_min: float = 0, target_ticks: int = 5):
+    if pd.isna(y_max) or y_max <= 0:
+        return [0], ["0"]
+
+    start = 0 if y_min >= 0 else y_min
+    span = y_max - start
+
+    raw_step = span / target_ticks
+    step_candidates = [
+        10_000_000,     # 1천만
+        20_000_000,     # 2천만
+        50_000_000,     # 5천만
+        100_000_000,    # 1억
+        200_000_000,    # 2억
+        500_000_000,    # 5억
+        1_000_000_000,  # 10억
+        2_000_000_000,  # 20억
+        5_000_000_000,  # 50억
+    ]
+
+    step = step_candidates[-1]
+    for candidate in step_candidates:
+        if candidate >= raw_step * 0.75:
+            step = candidate
+            break
+
+    if raw_step * 0.75 > step_candidates[-1]:
+        step = int(np.ceil(raw_step / 100_000_000)) * 100_000_000
+
+    start_tick = int(np.floor(start / step)) * step
+    end_tick = int(np.ceil(y_max / step)) * step
+
+    tickvals = []
+    curr = start_tick
+    while curr <= end_tick + step * 0.01:
+        tickvals.append(curr)
+        curr += step
+
+    ticktext = [_format_korean_amount(v) for v in tickvals]
+    return tickvals, ticktext
+
+
 def _palette_color(idx: int) -> str:
     return CHART_COLORWAY[idx % len(CHART_COLORWAY)]
 
@@ -115,33 +184,56 @@ def _extract_image_keys(markdown_text: str) -> List[str]:
 
 
 
-def _build_font_colors(values_matrix: list, default_col_colors: list) -> list:
-    """Plotly 테이블 셀별로 텍스트 색상을 계산한다 (+는 빨간색, -는 파란색)."""
+def _build_font_colors(columns: list, values_matrix: list, default_col_colors: list) -> list:
+    """Plotly 테이블 셀별로 텍스트 색상을 계산한다 (수익중: 빨간색, 마이너스: 파란색)."""
     import pandas as pd
     import re
     color_matrix = []
-    
+    gain_color = "#b42318"  # 빨간색
+    loss_color = "#1d4ed8"  # 파란색
+
+    target_keywords = {"수익금", "수익률", "등락률", "손익", "수익"}
+
     for c_idx, col_values in enumerate(values_matrix):
+        col_name = str(columns[c_idx]) if (columns and c_idx < len(columns)) else ""
         default_color = default_col_colors[c_idx] if c_idx < len(default_col_colors) else default_col_colors[-1]
         col_colors = []
+
+        is_target_col = any(kw in col_name for kw in target_keywords)
+
         for val in col_values:
-            if pd.isna(val) and not isinstance(val, str):
+            if pd.isna(val) or val is None:
                 col_colors.append(default_color)
                 continue
             s_val = str(val).strip()
-            # 숫자로 구성되어 있고(문자 포함 x), + 또는 - 가 포함된 경우 색상 적용 (날짜 제외)
-            has_letters = bool(re.search(r'[a-zA-Z가-힣]', s_val))
-            is_date = bool(re.search(r'^\d{4}-\d{2}-\d{2}', s_val))
-            
-            if not has_letters and not is_date:
-                if '+' in s_val:
-                    col_colors.append('#b42318')
-                elif '-' in s_val:
-                    col_colors.append('#1d4ed8')
-                else:
+
+            if is_target_col:
+                cleaned = re.sub(r"[^\d.-]", "", s_val)
+                try:
+                    num_val = float(cleaned)
+                    if num_val > 0:
+                        col_colors.append(gain_color)
+                    elif num_val < 0:
+                        col_colors.append(loss_color)
+                    else:
+                        col_colors.append(default_color)
+                except ValueError:
                     col_colors.append(default_color)
             else:
-                col_colors.append(default_color)
+                if "+" in s_val:
+                    col_colors.append(gain_color)
+                elif "-" in s_val and not re.search(r"^\d{4}-\d{2}-\d{2}", s_val):
+                    cleaned = re.sub(r"[^\d.-]", "", s_val)
+                    try:
+                        num_val = float(cleaned)
+                        if num_val < 0:
+                            col_colors.append(loss_color)
+                        else:
+                            col_colors.append(default_color)
+                    except ValueError:
+                        col_colors.append(default_color)
+                else:
+                    col_colors.append(default_color)
         color_matrix.append(col_colors)
     return color_matrix
 
@@ -236,7 +328,15 @@ def _build_assets_trend(account_df: pd.DataFrame) -> go.Figure:
         plot_bgcolor=THEME_BG,
     )
     fig.update_xaxes(tickfont=dict(size=14, family=FONT_FAMILY))
-    fig.update_yaxes(tickformat=",.0f", rangemode="tozero", tickfont=dict(size=14, family=FONT_FAMILY))
+    y_max = account_df.max().max() if not account_df.empty else 0
+    tickvals, ticktext = _get_korean_y_ticks(y_max, y_min=0)
+    fig.update_yaxes(
+        tickmode="array",
+        tickvals=tickvals,
+        ticktext=ticktext,
+        rangemode="tozero",
+        tickfont=dict(size=14, family=FONT_FAMILY),
+    )
     return fig
 
 
@@ -244,7 +344,7 @@ def _build_assets_investment_trend(account_df: pd.DataFrame, invest_series: pd.S
     fig = go.Figure()
     total_valuation = account_df.sum(axis=1)
     invest_aligned = update_fa.align_series(invest_series, account_df.index)
-    
+
     fig.add_trace(
         go.Scatter(
             x=account_df.index,
@@ -275,7 +375,15 @@ def _build_assets_investment_trend(account_df: pd.DataFrame, invest_series: pd.S
         plot_bgcolor=THEME_BG,
     )
     fig.update_xaxes(tickfont=dict(size=14, family=FONT_FAMILY))
-    fig.update_yaxes(tickformat=",.0f", rangemode="tozero", tickfont=dict(size=14, family=FONT_FAMILY))
+    y_max = max(np.nanmax(invest_aligned), np.nanmax(total_valuation)) if len(invest_aligned) > 0 else 0
+    tickvals, ticktext = _get_korean_y_ticks(y_max, y_min=0)
+    fig.update_yaxes(
+        tickmode="array",
+        tickvals=tickvals,
+        ticktext=ticktext,
+        rangemode="tozero",
+        tickfont=dict(size=14, family=FONT_FAMILY),
+    )
     return fig
 
 
@@ -400,24 +508,24 @@ def _build_portfolio_allocation_charts(holdings_df: pd.DataFrame, symbol_map: Di
     )
     
     fig.update_layout(
-        height=320,
-        margin=dict(l=20, r=20, t=40, b=20),
-        font=dict(family=FONT_FAMILY, size=13),
+        height=480,
+        margin=dict(l=20, r=20, t=50, b=20),
+        font=dict(family=FONT_FAMILY, size=15),
         paper_bgcolor=THEME_BG,
         plot_bgcolor=THEME_BG,
         uniformtext_mode='hide',
-        uniformtext_minsize=11,
+        uniformtext_minsize=13,
     )
     
     for annotation in fig['layout']['annotations']:
-        annotation['font'] = dict(size=14, color=THEME_TEXT, family=FONT_FAMILY)
+        annotation['font'] = dict(size=18, color=THEME_TEXT, family=FONT_FAMILY)
         
     return fig
 
 
 def _build_account_assets_table(summary_df: pd.DataFrame) -> go.Figure:
     display_df = update_fa.format_summary_table(summary_df)
-    values = [display_df[col].tolist() for col in display_df.columns]
+    values = [[str(item).replace(" ", "\xa0") for item in display_df[col].tolist()] for col in display_df.columns]
     aligns = ACCOUNT_ASSETS_TABLE_ALIGN
     row_colors = []
     for idx, account in enumerate(display_df["계좌"].tolist()):
@@ -432,7 +540,7 @@ def _build_account_assets_table(summary_df: pd.DataFrame) -> go.Figure:
                 header=dict(
                     values=list(display_df.columns),
                     fill_color=THEME_HEADER_BG,
-                    font=dict(color="white", size=17, family=FONT_FAMILY),
+                    font=dict(color="white", size=15, family=FONT_FAMILY),
                     align=TABLE_HEADER_ALIGN,
                     height=TABLE_HEADER_HEIGHT,
                     line_color=THEME_BORDER,
@@ -441,7 +549,7 @@ def _build_account_assets_table(summary_df: pd.DataFrame) -> go.Figure:
                 cells=dict(
                     values=values,
                     fill_color=fill_colors,
-                    font=dict(color=_build_font_colors(values, [THEME_TEXT] * len(values)), size=16, family=FONT_FAMILY),
+                    font=dict(color=_build_font_colors(list(display_df.columns), values, [THEME_TEXT] * len(values)), size=14, family=FONT_FAMILY),
                     align=aligns,
                     height=TABLE_ROW_HEIGHT,
                     line_color=THEME_BORDER,
@@ -453,7 +561,7 @@ def _build_account_assets_table(summary_df: pd.DataFrame) -> go.Figure:
     fig.update_layout(
         height=_table_height(len(display_df), min_height=220),
         margin=dict(l=0, r=0, t=0, b=0),
-        font=dict(family=FONT_FAMILY, size=16),
+        font=dict(family=FONT_FAMILY, size=15),
         paper_bgcolor=THEME_BG,
     )
     return fig
@@ -499,7 +607,7 @@ def _build_total_holdings_table(holdings_df: pd.DataFrame) -> Optional[go.Figure
     display_df = _format_total_holdings(holdings_df)
     if display_df.empty:
         return None
-    values = [display_df[col].tolist() for col in display_df.columns]
+    values = [[str(item).replace(" ", "\xa0") for item in display_df[col].tolist()] for col in display_df.columns]
     aligns = TOTAL_HOLDINGS_TABLE_ALIGN
     row_colors = [THEME_BG if idx % 2 == 0 else THEME_BG_ALT for idx in range(len(display_df))]
     fill_colors = [row_colors] * len(display_df.columns)
@@ -510,7 +618,7 @@ def _build_total_holdings_table(holdings_df: pd.DataFrame) -> Optional[go.Figure
                 header=dict(
                     values=list(display_df.columns),
                     fill_color=THEME_HEADER_BG,
-                    font=dict(color="white", size=16, family=FONT_FAMILY),
+                    font=dict(color="white", size=15, family=FONT_FAMILY),
                     align=TABLE_HEADER_ALIGN,
                     height=TABLE_HEADER_HEIGHT,
                     line_color=THEME_BORDER,
@@ -519,7 +627,7 @@ def _build_total_holdings_table(holdings_df: pd.DataFrame) -> Optional[go.Figure
                 cells=dict(
                     values=values,
                     fill_color=fill_colors,
-                    font=dict(color=_build_font_colors(values, [THEME_TEXT] * len(values)), size=15, family=FONT_FAMILY),
+                    font=dict(color=_build_font_colors(list(display_df.columns), values, [THEME_TEXT] * len(values)), size=14, family=FONT_FAMILY),
                     align=aligns,
                     height=TABLE_ROW_HEIGHT,
                     line_color=THEME_BORDER,
@@ -628,16 +736,28 @@ def _build_yearly_dividends_chart(pivot: pd.DataFrame) -> go.Figure:
 
 
 
-def _build_account_detail(account: str, holdings_df: pd.DataFrame, summary_df: pd.DataFrame) -> Optional[go.Figure]:
+def _build_account_detail(
+    account: str,
+    holdings_df: pd.DataFrame,
+    summary_df: pd.DataFrame,
+    symbol_map: Optional[Dict[str, update_fa.AssetConfig]] = None,
+) -> Tuple[Optional[go.Figure], List[str]]:
     account_holdings = holdings_df[holdings_df["계좌"] == account].copy()
     if account_holdings.empty:
-        return None
+        return None, []
     account_holdings = account_holdings.sort_values("평가금", ascending=False)
 
     status_row = summary_df[summary_df["계좌"] == account]
     if status_row.empty:
-        return None
+        return None, []
     status_row = status_row.iloc[0]
+
+    raw_account_name = update_fa.ACCOUNT_RAW_NAMES.get(account)
+    if not raw_account_name:
+        title_val = update_fa.ACCOUNT_TITLES.get(f"title_{account}_detail", "")
+        raw_account_name = title_val.replace("◉ 상세계좌: ", "").strip()
+
+    rebal_df = update_fa.calculate_rebalancing_df(raw_account_name, account_holdings, symbol_map)
 
     def fmt_currency(val: Optional[float]) -> str:
         if val is None or pd.isna(val):
@@ -688,8 +808,21 @@ def _build_account_detail(account: str, holdings_df: pd.DataFrame, summary_df: p
     row_colors = [_palette_color(idx) for idx in range(len(table_df))]
     fill_colors = [row_colors] + [[THEME_BG] * len(table_df) for _ in range(len(table_df.columns) - 1)]
 
-    # 2행 2열 서브플롯 구성: 1열은 파이 차트가 2개 행에 걸쳐 합쳐짐(rowspan=2)
-    # 2열의 1행은 종목별 테이블, 2행은 계좌 요약 테이블
+    rebal_lines: List[str] = []
+    if rebal_df is not None and not rebal_df.empty:
+        for _, row in rebal_df.iterrows():
+            diff = row["조정금액"]
+            diff_q = row.get("조정주수", 0)
+            asset_name = str(row["자산군"])
+            if diff > 100:
+                qty_str = f" (+{diff_q:g}주 매수)" if diff_q > 0 else " (매수 필요)"
+                rebal_lines.append(f"<span style='color:#2980b9;'>{asset_name} : +{diff:,.0f}원{qty_str}</span>")
+            elif diff < -100:
+                qty_str = f" ({diff_q:g}주 매도)" if diff_q < 0 else " (매도 필요)"
+                rebal_lines.append(f"<span style='color:#e74c3c;'>{asset_name} : -{abs(diff):,.0f}원{qty_str}</span>")
+            else:
+                rebal_lines.append(f"<span style='color:#27ae60;'>{asset_name} : 비중 적정 (0원)</span>")
+
     fig = make_subplots(
         rows=2,
         cols=2,
@@ -731,7 +864,7 @@ def _build_account_detail(account: str, holdings_df: pd.DataFrame, summary_df: p
                 values=[table_df[col].tolist() for col in table_df.columns],
                 fill_color=fill_colors,
                 font=dict(
-                    color=_build_font_colors([table_df[col].tolist() for col in table_df.columns], ["white"] + [THEME_TEXT] * (len(table_df.columns) - 1)), 
+                    color=_build_font_colors(list(table_df.columns), [table_df[col].tolist() for col in table_df.columns], ["white"] + [THEME_TEXT] * (len(table_df.columns) - 1)), 
                     size=15, 
                     family=FONT_FAMILY
                 ),
@@ -762,7 +895,7 @@ def _build_account_detail(account: str, holdings_df: pd.DataFrame, summary_df: p
                 values=[summary_table_df[col].tolist() for col in summary_table_df.columns],
                 fill_color=summary_fill_colors,
                 font=dict(
-                    color=_build_font_colors([summary_table_df[col].tolist() for col in summary_table_df.columns], [THEME_TEXT] * len(summary_table_df.columns)), 
+                    color=_build_font_colors(list(summary_table_df.columns), [summary_table_df[col].tolist() for col in summary_table_df.columns], [THEME_TEXT] * len(summary_table_df.columns)), 
                     size=15, 
                     family=FONT_FAMILY,
                     weight="bold"
@@ -787,7 +920,7 @@ def _build_account_detail(account: str, holdings_df: pd.DataFrame, summary_df: p
         showlegend=False,
         font=dict(family=FONT_FAMILY, size=15),
     )
-    return fig
+    return fig, rebal_lines
 
 
 def _build_trading_history(records: pd.DataFrame,
@@ -1258,16 +1391,25 @@ def _build_dashboard_fragment(data: ReportData) -> str:
         )
 
     for account in data.valid_detail_accounts:
-        fig = _build_account_detail(account, data.holdings_df, data.summary_df)
+        fig, rebal_lines = _build_account_detail(account, data.holdings_df, data.summary_df, data.symbol_map)
         if fig is None:
             continue
         detail_title = update_fa.ACCOUNT_TITLES.get(
             f"title_{account}_detail", f"상세계좌: {update_fa.account_label(account)}"
         )
+        card_content = fig_html(fig)
+        if rebal_lines:
+            card_content += "<div style='margin: 10px 4px 6px; padding: 12px 16px; background: var(--fa-kpi-bg); border-radius: 8px; font-size: 14px; line-height: 1.6; border: 1px solid var(--fa-card-border);'>"
+            card_content += "<div style='font-weight: bold; margin-bottom: 6px; color: var(--fa-text);'>💡 리밸런싱 가이드 (목표 비중 대비)</div>"
+            card_content += "<div style='display: flex; flex-wrap: wrap; gap: 18px; font-weight: bold;'>"
+            for line in rebal_lines:
+                card_content += f"<div>{line}</div>"
+            card_content += "</div></div>"
+
         blocks.append(
             _dashboard_card(
                 detail_title,
-                fig_html(fig),
+                card_content,
                 extra_class="fa-card-wide",
             )
         )
@@ -1294,16 +1436,22 @@ html.dark .fa-dashboard {
 .fa-dashboard .plotly-graph-div .svg-container { overflow: visible !important; }
 .fa-dashboard .plotly-graph-div .main-svg text {
   line-height: 1 !important;
-  fill: var(--fa-text) !important;
   font-weight: bold !important;
 }
 .fa-dashboard .plotly-graph-div .table text {
-  dominant-baseline: middle !important;
-  alignment-baseline: middle !important;
+  dominant-baseline: central !important;
+  alignment-baseline: central !important;
   font-weight: bold !important;
 }
-.fa-dashboard .plotly-graph-div .table .cells text { fill: var(--fa-text) !important; }
-.fa-dashboard .plotly-graph-div .table .header text { fill: #ffffff !important; }
+.fa-dashboard .plotly-graph-div .table .cells text {
+  dominant-baseline: central !important;
+  alignment-baseline: central !important;
+}
+.fa-dashboard .plotly-graph-div .table .header text {
+  dominant-baseline: central !important;
+  alignment-baseline: central !important;
+  fill: #ffffff !important;
+}
 .fa-hero { margin: 6px 0 12px; }
 .fa-hero-title { font-size: 1.4rem; font-weight: 700; }
 .fa-hero-meta { margin-top: 4px; color: var(--fa-muted); font-size: 0.92rem; }
@@ -1408,6 +1556,7 @@ def _remove_legacy_fragment(current_fragment_path: Path) -> None:
 
 def main() -> None:
     args = parse_args()
+    update_fa.update_titles_from_fa_yaml()
     static_dir = update_fa.PATHS.get("static_dir", ROOT_DIR / "content/fa")
     output_path = args.output or (static_dir / "latest_fa.html")
     fragment_path = args.fragment_output or DEFAULT_FRAGMENT_PATH

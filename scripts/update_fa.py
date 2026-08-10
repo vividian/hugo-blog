@@ -116,6 +116,7 @@ CONTENT_TITLE_KEYS = {
     "exchange_rate": "title_exchange_rate",
     "yearly_dividends": "title_yearly_dividends",
 }
+ACCOUNT_RAW_NAMES: Dict[str, str] = {}
 
 @dataclass
 class AssetConfig:
@@ -125,6 +126,129 @@ class AssetConfig:
     ticker: str
     region: str = "기타"
     asset_class: str = "기타"
+
+
+def parse_target_allocation(account_name: str) -> Optional[Dict[str, float]]:
+    """
+    계좌 제목 문자열에서 목표 비중 비율을 추출한다.
+    예: '연금저축1 (SCHD:QQQ:MMA = 5:4:1)' -> {'SCHD': 0.5, 'QQQ': 0.4, 'MMA': 0.1}
+    예: '미국 (SPYM:SGOV = 9:1)' -> {'SPYM': 0.9, 'SGOV': 0.1}
+    예: '공제회 (S&P500-FD:GOLD-FD:SAVING = 6:1:3)' -> {'S&P500-FD': 0.6, 'GOLD-FD': 0.1, 'SAVING': 0.3}
+    예: 'IRP (S&P500:SCHD-IEF = 7:3)' -> {'S&P500': 0.7, 'SCHD-IEF': 0.3}
+    """
+    if not account_name:
+        return None
+    match = re.search(r"\((.*?)=(.*?)\)", account_name)
+    if not match:
+        return None
+    
+    keys_part = match.group(1).strip()
+    ratios_part = match.group(2).strip()
+    
+    keys = [k.strip() for k in keys_part.split(":") if k.strip()]
+    try:
+        ratios = [float(r.strip()) for r in ratios_part.split(":") if r.strip()]
+    except ValueError:
+        return None
+        
+    if len(keys) != len(ratios) or len(keys) == 0:
+        return None
+        
+    total_ratio = sum(ratios)
+    if total_ratio <= 0:
+        return None
+        
+    return {k: r / total_ratio for k, r in zip(keys, ratios)}
+
+
+def match_target_key(symbol: str, abbrev: str, asset_class: str, target_keys: List[str]) -> str:
+    """
+    종목의 정보(symbol, abbrev, asset_class)를 바탕으로 target_keys 중 가장 적절한 키에 매핑한다.
+    """
+    symbol_str = str(symbol or "").upper()
+    abbrev_str = str(abbrev or "").upper()
+    ac_str = str(asset_class or "").upper()
+    combined = f"{symbol_str} {abbrev_str} {ac_str}"
+    
+    alias_dict = {
+        "SPYM": ["SPYM", "S&P500", "SP500"],
+        "SGOV": ["SGOV", "현금", "CASH"],
+        "SCHD": ["SCHD"],
+        "QQQ": ["QQQ", "나스닥"],
+        "MMA": ["MMA", "KOFR", "현금", "SAVING", "저축"],
+        "S&P500": ["S&P500", "SP500", "S&P 500"],
+        "SCHD-IEF": ["SCHD:IEF", "SCHD-IEF", "IEF", "TLT", "TLTW", "국채", "채권"],
+        "SCHD:IEF": ["SCHD:IEF", "SCHD-IEF", "IEF", "TLT", "TLTW", "국채", "채권"],
+        "S&P500-FD": ["S&P500", "SP500"],
+        "GOLD-FD": ["GOLD", "골드", "금"],
+        "SAVING": ["SAVING", "저축", "현금", "MMA"],
+    }
+    
+    # 1. 정확히 대소문자 무관하게 타겟 키명이 포함되어 있는지 검사
+    for key in target_keys:
+        key_upper = key.upper()
+        if key_upper in symbol_str or key_upper in abbrev_str or key_upper in ac_str:
+            return key
+            
+    # 2. 별칭 맵을 통한 키워드 매칭 검사
+    for key in target_keys:
+        key_upper = key.upper()
+        aliases = alias_dict.get(key_upper, [key_upper])
+        for alias in aliases:
+            if alias.upper() in combined:
+                return key
+                
+    return target_keys[0] if target_keys else "기타"
+
+
+def calculate_rebalancing_df(account_name: str, account_holdings: pd.DataFrame, symbol_map: Optional[Dict[str, AssetConfig]] = None) -> Optional[pd.DataFrame]:
+    """
+    계좌별 보유종목 현황을 기반으로 목표 비중에 맞추기 위한 매도/매수 필요 금액을 계산한다.
+    """
+    target_alloc = parse_target_allocation(account_name)
+    if not target_alloc or account_holdings is None or account_holdings.empty:
+        return None
+        
+    total_val = account_holdings["평가금"].sum()
+    if total_val <= 0:
+        return None
+        
+    holdings = account_holdings.copy()
+    keys = list(target_alloc.keys())
+    
+    assigned_keys = []
+    for _, row in holdings.iterrows():
+        sym = row["종목"]
+        config = symbol_map.get(sym) if symbol_map else None
+        abbrev = config.abbrev if config else sym
+        ac = config.asset_class if config else ""
+        
+        assigned_key = match_target_key(sym, abbrev, ac, keys)
+        assigned_keys.append(assigned_key)
+        
+    holdings["target_key"] = assigned_keys
+    
+    curr_by_key = holdings.groupby("target_key")["평가금"].sum().to_dict()
+    
+    rows = []
+    for key, target_ratio in target_alloc.items():
+        curr_amt = curr_by_key.get(key, 0.0)
+        curr_pct = (curr_amt / total_val) * 100.0
+        target_pct = target_ratio * 100.0
+        target_amt = total_val * target_ratio
+        diff_amt = target_amt - curr_amt  # 양수: 매수 필요, 음수: 매도 필요
+        
+        rows.append({
+            "자산군": key,
+            "현재평가금": curr_amt,
+            "현재비중": curr_pct,
+            "목표비중": target_pct,
+            "목표평가금": target_amt,
+            "조정금액": diff_amt,
+        })
+        
+    return pd.DataFrame(rows)
+
 
 
 @dataclass
@@ -660,6 +784,31 @@ def _crop_top_inches(image_path: Path, inches: float, dpi: int = FIG_DPI) -> Non
         print(f"(경고) 이미지 상단 자르기 실패: {image_path} ({exc})")
 
 
+def format_korean_amount(val: float) -> str:
+    """원화 금액 숫자를 한글 단위(억, 만) 표현으로 변환한다. (예: 100,000,000 -> 1억, 50,000,000 -> 0.5억)"""
+    if pd.isna(val) or val == 0:
+        return "0"
+    sign = "-" if val < 0 else ""
+    val = abs(val)
+
+    eok = val / 100_000_000
+    if eok >= 0.1:
+        if eok == int(eok):
+            return f"{sign}{int(eok)}억"
+        else:
+            formatted_eok = f"{eok:.2f}".rstrip("0").rstrip(".")
+            return f"{sign}{formatted_eok}억"
+    elif val >= 10_000:
+        man = val / 10_000
+        if man == int(man):
+            return f"{sign}{int(man):,}만"
+        else:
+            formatted_man = f"{man:.2f}".rstrip("0").rstrip(".")
+            return f"{sign}{formatted_man}만"
+    else:
+        return f"{sign}{val:,.0f}"
+
+
 def plot_exchange_rate_table(fx_series: pd.Series,
                              reference_date: pd.Timestamp,
                              output_path: Path) -> Path:
@@ -709,6 +858,10 @@ def plot_exchange_rate_table(fx_series: pd.Series,
     loss_color = "#0984e3"
 
     for (row, col), cell in table.get_celld().items():
+        cell.set_height(0.5)
+        cell.set_y((1 - row) * 0.5)
+        cell.get_text().set_va("center")
+        cell.get_text().set_y(0.5)
         cell.set_edgecolor("#dddddd")
         if row == 0:
             cell.set_facecolor(header_color)
@@ -749,7 +902,7 @@ def plot_assets_trend(account_df: pd.DataFrame, output_path: Path) -> Path:
             linewidth=2,
         )
 
-    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{x:,.0f}"))
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: format_korean_amount(x)))
     ax.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%y%m"))
     ax.legend(loc="upper left", frameon=False, fontsize=12)
@@ -808,7 +961,7 @@ def plot_assets_investment_trend(account_df: pd.DataFrame, invest_series: pd.Ser
         linewidth=2,
     )
 
-    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{x:,.0f}"))
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: format_korean_amount(x)))
     ax.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%y%m"))
     ax.legend(loc="upper left", frameon=False, fontsize=12)
@@ -1013,11 +1166,159 @@ def build_holdings_df(records: pd.DataFrame, fx_series: pd.Series) -> pd.DataFra
     return df
 
 
+def calculate_rebalancing_df(account_name: str, account_holdings: pd.DataFrame, symbol_map: Optional[Dict[str, AssetConfig]] = None) -> Optional[pd.DataFrame]:
+    """
+    계좌별 보유종목 현황을 기반으로 목표 비중에 맞추기 위한 매도/매수 필요 금액 및 수량을 계산한다.
+    """
+    target_alloc = parse_target_allocation(account_name)
+    if not target_alloc or account_holdings is None or account_holdings.empty:
+        return None
+        
+    total_val = account_holdings["평가금"].sum()
+    if total_val <= 0:
+        return None
+        
+    holdings = account_holdings.copy()
+    keys = list(target_alloc.keys())
+    
+    assigned_keys = []
+    for _, row in holdings.iterrows():
+        sym = row["종목"]
+        config = symbol_map.get(sym) if symbol_map else None
+        abbrev = config.abbrev if config else sym
+        ac = config.asset_class if config else ""
+        
+        assigned_key = match_target_key(sym, abbrev, ac, keys)
+        assigned_keys.append(assigned_key)
+        
+    holdings["target_key"] = assigned_keys
+    
+    curr_by_key = holdings.groupby("target_key")["평가금"].sum().to_dict()
+    
+    # 대표 단가 계산
+    key_qty_price = {}
+    for key in keys:
+        sub_df = holdings[holdings["target_key"] == key]
+        if not sub_df.empty:
+            if "수량" in sub_df.columns and "평가금" in sub_df.columns:
+                total_q = sub_df["수량"].fillna(0).sum()
+                total_e = sub_df["평가금"].sum()
+                if total_q > 0 and total_e > 0:
+                    key_qty_price[key] = total_e / total_q
+            elif "현재가" in sub_df.columns:
+                key_qty_price[key] = sub_df["현재가"].iloc[0]
+
+    rows = []
+    for key, target_ratio in target_alloc.items():
+        curr_amt = curr_by_key.get(key, 0.0)
+        curr_pct = (curr_amt / total_val) * 100.0
+        target_pct = target_ratio * 100.0
+        target_amt = total_val * target_ratio
+        diff_amt = target_amt - curr_amt  # 양수: 매수 필요, 음수: 매도 필요
+        
+        avg_p = key_qty_price.get(key, 0.0)
+        diff_qty = 0
+        if avg_p > 0:
+            diff_qty = int(round(diff_amt / avg_p))
+        
+        rows.append({
+            "자산군": key,
+            "현재평가금": curr_amt,
+            "현재비중": curr_pct,
+            "목표비중": target_pct,
+            "목표평가금": target_amt,
+            "조정금액": diff_amt,
+            "단가": avg_p,
+            "조정주수": diff_qty,
+        })
+        
+    return pd.DataFrame(rows)
+
+
+@dataclass
+class Position:
+    """보유 종목 정보를 담는 데이터 클래스"""
+    account: str
+    symbol: str
+    ticker: str
+    quantity: float
+    cost: float
+
+
+def ensure_static_dir() -> None:
+    """결과물을 저장할 정적 폴더가 없다면 생성한다."""
+    STATIC_FINANCIALASSETS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def account_label(account: str) -> str:
+    """계좌 코드에 해당하는 표시용 이름을 반환한다."""
+    return ACCOUNT_LABELS.get(account, account)
+
+
+def _clean_numeric(series: Iterable) -> pd.Series:
+    """쉼표가 포함된 문자열 숫자를 float로 변환한다."""
+    ser = pd.Series(series, dtype="string").str.replace(",", "", regex=False)
+    return pd.to_numeric(ser, errors="coerce")
+
+
+def read_trading_records() -> pd.DataFrame:
+    """trading_records.csv 파일을 읽어 DataFrame으로 반환한다."""
+    if not TRADING_RECORDS_PATH.exists():
+        raise FileNotFoundError(f"trading_records.csv 파일을 찾을 수 없습니다: {TRADING_RECORDS_PATH}")
+
+    df = pd.read_csv(TRADING_RECORDS_PATH, encoding="utf-8-sig")
+    # 2022.01.31, 2022-01-31 등 다양한 날짜 입력을 공통 포맷으로 정규화한다.
+    df["일자"] = (
+        pd.Series(df["일자"], dtype="string")
+        .str.replace(".", "-", regex=False)
+        .str.replace("/", "-", regex=False)
+    )
+    df["일자"] = pd.to_datetime(df["일자"], errors="coerce")
+
+    numeric_cols = ["단가", "수량", "배당", "투자금", "환율", "평가금"]
+    for col in numeric_cols:
+        if col in df.columns:
+            df[col] = _clean_numeric(df[col])
+
+    return df
+
+
+def latest_month_code(records: pd.DataFrame) -> str:
+    """거래 기록에서 가장 최근 월 코드를 'YYMM' 형식으로 반환한다."""
+    latest_date = records["일자"].dropna().max()
+    if pd.isna(latest_date):
+        return "2201"
+    return f"{latest_date:%y%m}"
+
+
+def _save_canvas(fig: plt.Figure, output_path: Path, log_message: str, pad_inches: float = 0.2, bbox: str = "tight") -> None:
+    """Figure 객체를 저장하고 로그 메시지를 출력한다."""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=FIG_DPI, bbox_inches=bbox, pad_inches=pad_inches)
+    plt.close(fig)
+    print(log_message)
+
+
+def _crop_top_inches(image_path: Path, inches: float = 0.4) -> None:
+    """이미지 상단의 불필요한 여백을 잘라낸다."""
+    if not image_path.exists():
+        return
+
+    with Image.open(image_path) as img:
+        width, height = img.size
+        crop_pixels = int(inches * FIG_DPI)
+        if crop_pixels >= height:
+            return
+
+        cropped = img.crop((0, crop_pixels, width, height))
+        cropped.save(image_path)
+
+
 def plot_account_detail(account: str, 
                         holdings_df: pd.DataFrame, 
                         status_df: pd.DataFrame, 
                         output_path: Path,) -> bool:
-    """개별 계좌의 상세 내역(파이 차트, 보유 종목 테이블)을 그려 저장한다."""
+    """개별 계좌의 상세 내역(파이 차트, 보유 종목 테이블, 리밸런싱 텍스트 가이드)을 그려 저장한다."""
     # 계좌 종목
     account_holdings = holdings_df[holdings_df["계좌"] == account].copy()
     if account_holdings.empty:
@@ -1029,6 +1330,15 @@ def plot_account_detail(account: str,
         return False
     status_row = status_row.iloc[0]
 
+    symbol_map = load_symbol_map()
+    raw_account_name = ACCOUNT_RAW_NAMES.get(account)
+    if not raw_account_name:
+        title_val = ACCOUNT_TITLES.get(f"title_{account}_detail", "")
+        raw_account_name = title_val.replace("◉ 상세계좌: ", "").strip()
+        
+    rebal_df = calculate_rebalancing_df(raw_account_name, account_holdings, symbol_map)
+    has_rebal = rebal_df is not None and not rebal_df.empty
+
     account_holdings = account_holdings.sort_values("평가금", ascending=False)
     colors = plt.colormaps["tab10"](np.linspace(0, 1, max(len(account_holdings), 1)))
 
@@ -1036,9 +1346,9 @@ def plot_account_detail(account: str,
     fig, axes = plt.subplots(
         1,
         2,
-        figsize=(12, 5),
+        figsize=(12.5, 6.6 if has_rebal else 5.2),
         dpi=FIG_DPI,
-        gridspec_kw={"width_ratios": [0.7, 1.3]},
+        gridspec_kw={"width_ratios": [0.65, 1.35]},
     )
     fig.patch.set_facecolor(CANVAS_BG_COLOR)
     ax_pie, ax_table = axes
@@ -1053,7 +1363,7 @@ def plot_account_detail(account: str,
         else "",
         startangle=90,
         colors=colors,
-        textprops={"fontsize": 14, "color": "white", "weight": "bold"},
+        textprops={"fontsize": 13, "color": "white", "weight": "bold"},
     )
     ax_pie.set_title("")
     color_map = dict(zip(account_holdings["종목"], colors))
@@ -1069,24 +1379,28 @@ def plot_account_detail(account: str,
     main_data["수익률"] = main_data["수익률"].apply(lambda x: "-" if x is None or pd.isna(x) else f"{x * 100:.2f}%")
 
     main_data_rows = len(main_data)
-    custom_height = {
-        # 테이블 타이틀의 높이 위치, 테이블 하단 위치, 테이블 높이
-        2: [0.82, 0.40, 0.36], 
-        3: [0.88, 0.40, 0.42], 
-        4: [0.88, 0.34, 0.48],  # 기준 값
-        5: [0.88, 0.34, 0.53],
-        6: [0.95, 0.32, 0.58]
-    }
+    
+    if has_rebal:
+        table_top_y = 0.95
+        main_table_bbox = [0, 0.54, 1, 0.35]
+        summary_title_y = 0.47
+        summary_table_bbox = [0, 0.28, 1, 0.14]
+        rebal_title_y = 0.21
+    else:
+        table_top_y = 0.95
+        main_table_bbox = [0, 0.40, 1, 0.45]
+        summary_title_y = 0.32
+        summary_table_bbox = [0, 0.05, 1, 0.22]
 
     ax_table.axis("off")
     ax_table.text(
         0.0,
-        custom_height.get(main_data_rows, [0.88, 0.55, 0.22])[0],
+        table_top_y,
         "계좌 현황 (종목별)",
         transform=ax_table.transAxes,
         ha="left",
         va="top",
-        fontsize=14,
+        fontsize=12.5,
         fontweight="bold",
         color="#2c3e50",
     )
@@ -1099,13 +1413,17 @@ def plot_account_detail(account: str,
         colLabels=main_data.columns,
         cellLoc="center",
         loc="upper center",
-        bbox=[0, custom_height.get(main_data_rows, [0.88, 0.55, 0.22])[1], 1, custom_height.get(main_data_rows, [0.88, 0.55, 0.22])[2]],
+        bbox=main_table_bbox,
     )
     main_table.auto_set_font_size(False)
-    main_table.set_fontsize(14)
-    main_table.scale(1.05, 0.55)
+    main_table.set_fontsize(11)
 
+    main_uniform_height = 1.0 / (main_data_rows + 1)
     for (row, col), cell in main_table.get_celld().items():
+        cell.set_height(main_uniform_height)
+        cell.set_y((main_data_rows - row) * main_uniform_height)
+        cell.get_text().set_va("center")
+        cell.get_text().set_y(0.5)
         cell.set_edgecolor("#dddddd")
         if row == 0:
             cell.get_text().set_ha("center")
@@ -1123,7 +1441,22 @@ def plot_account_detail(account: str,
                 shade = color_map.get(label, shade)
                 cell.set_text_props(color="white", weight="bold")
             else:
-                cell.set_text_props(color="#2c3e50", weight="normal")
+                col_name = main_data.columns[col]
+                if col_name in ("수익금", "수익률"):
+                    val_str = str(main_data.iloc[row - 1, col]).strip()
+                    cleaned = re.sub(r"[^\d.-]", "", val_str)
+                    try:
+                        num_val = float(cleaned)
+                        if num_val > 0:
+                            cell.get_text().set_color("#b42318")
+                        elif num_val < 0:
+                            cell.get_text().set_color("#1d4ed8")
+                        else:
+                            cell.get_text().set_color("#2c3e50")
+                    except ValueError:
+                        cell.get_text().set_color("#2c3e50")
+                else:
+                    cell.get_text().set_color("#2c3e50")
             cell.set_facecolor(shade)
 
     # 계좌 현황 요약 테이블
@@ -1145,12 +1478,12 @@ def plot_account_detail(account: str,
 
     ax_table.text(
         0.0,
-        0.29,
+        summary_title_y,
         "계좌 현황 (전체)",
         transform=ax_table.transAxes,
         ha="left",
         va="top",
-        fontsize=14,
+        fontsize=12.5,
         fontweight="bold",
         color="#2c3e50",
     )
@@ -1160,13 +1493,17 @@ def plot_account_detail(account: str,
         colLabels=summary_columns,
         cellLoc="center",
         loc="upper center",
-        bbox=[0, 0.05, 1, 0.18],
+        bbox=summary_table_bbox,
     )
     summary_table.auto_set_font_size(False)
-    summary_table.set_fontsize(14)
-    summary_table.scale(1.05, 0.55)
+    summary_table.set_fontsize(11.5)
 
+    summary_uniform_height = 0.5
     for (row, col), cell in summary_table.get_celld().items():
+        cell.set_height(summary_uniform_height)
+        cell.set_y((1 - row) * summary_uniform_height)
+        cell.get_text().set_va("center")
+        cell.get_text().set_y(0.5)
         cell.set_edgecolor("#dddddd")
         if row == 0:
             cell.get_text().set_ha("center")
@@ -1179,10 +1516,54 @@ def plot_account_detail(account: str,
             cell.set_facecolor(shade)
             cell.set_text_props(color="#2c3e50", weight="bold")
 
+    # 리밸런싱 가이드 텍스트 (목표 비중이 정의된 계좌인 경우)
+    if has_rebal:
+        ax_table.text(
+            0.0,
+            rebal_title_y,
+            "리밸런싱 가이드 (목표 비중 대비)",
+            transform=ax_table.transAxes,
+            ha="left",
+            va="top",
+            fontsize=12.5,
+            fontweight="bold",
+            color="#2c3e50",
+        )
+        
+        y_pos = rebal_title_y - 0.055
+        for _, row in rebal_df.iterrows():
+            diff = row["조정금액"]
+            diff_q = row.get("조정주수", 0)
+            asset_name = str(row["자산군"])
+            
+            if diff > 100:
+                qty_str = f" (+{diff_q:g}주 매수)" if diff_q > 0 else " (매수 필요)"
+                line_str = f"-  {asset_name} : +{diff:,.0f}원{qty_str}"
+                color_code = "#2980b9"
+            elif diff < -100:
+                qty_str = f" ({diff_q:g}주 매도)" if diff_q < 0 else " (매도 필요)"
+                line_str = f"-  {asset_name} : -{abs(diff):,.0f}원{qty_str}"
+                color_code = "#b42318"
+            else:
+                line_str = f"-  {asset_name} : 비중 적정 (0원)"
+                color_code = "#27ae60"
+                
+            ax_table.text(
+                0.02,
+                y_pos,
+                line_str,
+                transform=ax_table.transAxes,
+                ha="left",
+                va="top",
+                fontsize=10.5,
+                fontweight="bold",
+                color=color_code,
+            )
+            y_pos -= 0.048
+
     plt.tight_layout()
     display_name = account_label(account)
     _save_canvas(fig, output_path, f"{display_name} 상세 그래프 저장 완료: {output_path}")
-    _crop_top_inches(output_path, inches=0.7)
     return True
 
 
@@ -1423,20 +1804,24 @@ def plot_total_holdings(holdings_df: pd.DataFrame, output_path: Path) -> Path:
         bbox=[0.0, 0.05, 1.0, 0.97]
     )
     table.auto_set_font_size(False)
-    table.set_fontsize(12)
-    table.scale(1.0, 1.15)
-
     header_color = "#2c3e50"
     even_color = "#fffdf5"
     odd_color = "#f6f0e6"
-    gain_color = "#d63031"
-    loss_color = "#0984e3"
+    gain_color = "#b42318"
+    loss_color = "#1d4ed8"
 
     profit_values = filtered["수익금"].to_list()
     rate_values = filtered["수익률"].to_list()
     change_values = filtered["등락률"].to_list()
 
+    total_rows = len(display_df) + 1
+    uniform_height = 1.0 / total_rows
+
     for (row, col), cell in table.get_celld().items():
+        cell.set_height(uniform_height)
+        cell.set_y((total_rows - 1 - row) * uniform_height)
+        cell.get_text().set_va("center")
+        cell.get_text().set_y(0.5)
         if row == 0:
             cell.set_facecolor(header_color)
             cell.set_text_props(color="white", weight="bold")
@@ -1452,7 +1837,6 @@ def plot_total_holdings(holdings_df: pd.DataFrame, output_path: Path) -> Path:
             if pd.notna(profit):
                 if profit > 0:
                     cell.get_text().set_color(gain_color)
-                    cell.get_text().set_text(f"+{display_df.iloc[row-1, col]}")
                 elif profit < 0:
                     cell.get_text().set_color(loss_color)
                 else:
@@ -1467,10 +1851,9 @@ def plot_total_holdings(holdings_df: pd.DataFrame, output_path: Path) -> Path:
         fig,
         output_path,
         f"보유 종목 현황 저장 완료: {output_path}",
-        pad_inches=0.55,
+        pad_inches=0.15,
         bbox="tight",
     )
-    _crop_top_inches(output_path, inches=0.5)
 
     return True
 
@@ -1547,7 +1930,7 @@ def plot_portfolio_allocation(holdings_df: pd.DataFrame, symbol_map: Dict[str, A
     _configure_matplotlib()
     
     # 세로 크기를 5.5에서 6.5로 늘려 범례 공간을 확보
-    fig, axes = plt.subplots(1, 3, figsize=(15, 6.5), dpi=FIG_DPI)
+    fig, axes = plt.subplots(1, 3, figsize=(22.5, 9.75), dpi=FIG_DPI)
     fig.patch.set_facecolor(CANVAS_BG_COLOR)
     
     color_palette = [
@@ -1566,7 +1949,7 @@ def plot_portfolio_allocation(holdings_df: pd.DataFrame, symbol_map: Dict[str, A
         
         ax.set_facecolor(CANVAS_BG_COLOR)
         if data.empty:
-            ax.text(0.5, 0.5, "데이터 없음", ha="center", va="center", fontsize=14, color="#2c3e50")
+            ax.text(0.5, 0.5, "데이터 없음", ha="center", va="center", fontsize=18, color="#2c3e50")
             ax.axis("off")
             return
             
@@ -1578,18 +1961,18 @@ def plot_portfolio_allocation(holdings_df: pd.DataFrame, symbol_map: Dict[str, A
             pctdistance=0.75,
             startangle=90,
             colors=color_palette[:len(data)] if len(data) <= len(color_palette) else plt.colormaps["tab10"](np.linspace(0, 1, len(data))),
-            textprops={"fontsize": 12, "color": "white", "weight": "bold"},
-            wedgeprops=dict(width=0.5, edgecolor="#ffffff", linewidth=1.5)
+            textprops={"fontsize": 16, "color": "white", "weight": "bold"},
+            wedgeprops=dict(width=0.5, edgecolor="#ffffff", linewidth=2.0)
         )
         
         # 도넛 내부 퍼센트 글씨 가독성 극대화 (글자 테두리 stroke 추가)
         for at in autotexts:
             at.set_color("white")
-            at.set_fontsize(12)
+            at.set_fontsize(16)
             at.set_weight("bold")
-            at.set_path_effects([path_effects.withStroke(linewidth=2, foreground="#2c3e50")])
+            at.set_path_effects([path_effects.withStroke(linewidth=3, foreground="#2c3e50")])
             
-        ax.set_title(title, fontsize=14, fontweight="bold", color="#2c3e50", pad=15)
+        ax.set_title(title, fontsize=20, fontweight="bold", color="#2c3e50", pad=20)
         ax.axis("equal")
 
         # 범례에 표시할 이름 및 퍼센트 가공
@@ -1611,7 +1994,7 @@ def plot_portfolio_allocation(holdings_df: pd.DataFrame, symbol_map: Dict[str, A
             bbox_to_anchor=(0.5, -0.05),
             ncol=ncol,
             frameon=False,
-            prop={"size": 11, "weight": "bold"}
+            prop={"size": 15, "weight": "bold"}
         )
 
     draw_donut(axes[0], group_df, "자산군 비중")
@@ -1955,11 +2338,17 @@ def plot_account_assets(display_df: pd.DataFrame, output_path: Path) -> Path:
         bbox=[0.0, 0.05, 1.0, 0.85],  # [x, y, width, height]
     )
     table.auto_set_font_size(False)
-    table.set_fontsize(16)
-    table.scale(1, 1.3 * row_height_factor)
+    table.set_fontsize(12)
 
     num_rows = len(display_df)
+    total_rows = num_rows + 1
+    uniform_height = 1.0 / total_rows
+
     for (row, col), cell in table.get_celld().items():
+        cell.set_height(uniform_height)
+        cell.set_y((total_rows - 1 - row) * uniform_height)
+        cell.get_text().set_va("center")
+        cell.get_text().set_y(0.5)
         cell.set_edgecolor("#dddddd")
         if row == 0:
             cell.set_facecolor("#2d3436")
@@ -1983,17 +2372,32 @@ def plot_account_assets(display_df: pd.DataFrame, output_path: Path) -> Path:
                 cell.set_text_props(weight="bold", color="white")
         else:
             cell.get_text().set_ha("right")
+            col_name = display_df.columns[col]
             if is_total:
                 cell.set_facecolor("#e5e7eb")
-                cell.set_text_props(weight="bold", color="#111827")
+                cell.get_text().set_weight("bold")
             else:
                 shade = "#fffdf5" if (row % 2 == 1) else "#f6f0e6"
                 cell.set_facecolor(shade)
-                cell.set_text_props(color="#1f2933")
+
+            if col_name in ("수익금", "수익률"):
+                val_str = str(display_df.iloc[data_idx, col]).strip()
+                cleaned = re.sub(r"[^\d.-]", "", val_str)
+                try:
+                    num_val = float(cleaned)
+                    if num_val > 0:
+                        cell.get_text().set_color("#b42318")
+                    elif num_val < 0:
+                        cell.get_text().set_color("#1d4ed8")
+                    else:
+                        cell.get_text().set_color("#1f2933")
+                except ValueError:
+                    cell.get_text().set_color("#1f2933")
+            else:
+                cell.get_text().set_color("#1f2933")
 
     plt.tight_layout()
-    _save_canvas(fig, output_path, f"계좌 요약 표 저장 완료: {output_path}")
-    _crop_top_inches(output_path, inches=0.9)
+    _save_canvas(fig, output_path, f"계좌 요약 표 저장 완료: {output_path}", pad_inches=0.15, bbox="tight")
 
     return True
 
@@ -2045,6 +2449,8 @@ def update_titles_from_fa_yaml() -> None:
             clean_name = re.sub(r"\s*\(.*\)", "", name).strip()
             key = map_name_to_key.get(clean_name)
             if key:
+                ACCOUNT_RAW_NAMES[key] = name
+                ACCOUNT_RAW_NAMES[clean_name] = name
                 title_key = f"title_{key}_detail"
                 # "공제회"의 경우 기본 영문 표기 "SEMA"를 "공제회" 대신 사용
                 display_name = name

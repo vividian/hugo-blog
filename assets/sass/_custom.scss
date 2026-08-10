@@ -507,3 +507,17 @@ body[data-theme="dark"] .tag-item {
   transform: translateY(-4px); /* 호버 시 위로 부드럽게 들리는 마이크로 모션 */
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
 }
+
+/* HTML Markdown Table 셀 높이 및 정렬 통일 */
+.page-content table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.page-content table th,
+.page-content table td {
+  vertical-align: middle;
+  box-sizing: border-box;
+  line-height: 1.4;
+  padding: 8px 12px;
+}
