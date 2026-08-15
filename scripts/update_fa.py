@@ -96,14 +96,16 @@ DEFAULT_CANVAS_LAYOUT = {
         "pie_mom_fontsize": 11.5,
         "pie_mom_gap": 0.20,
         "subtitle_height": 0.28,
-        "subtitle_margin": 0.10,
+        "subtitle_margin_top": 0.10,
+        "subtitle_margin_bottom": 0.10,
         "subtitle_fontsize": 12.5,
-        "row_height": 0.34,
-        "main_table_fontsize": 11.0,
-        "summary_table_fontsize": 11.5,
+        "row_height": 0.38,
+        "table_fontsize": 12.0,
+        "main_table_fontsize": 12.0,
+        "summary_table_fontsize": 12.0,
         "section_gap": 0.25,
-        "rebal_line_height": 0.22,
-        "rebal_fontsize": 10.5,
+        "rebal_line_height": 0.35,
+        "rebal_fontsize": 11.5,
         "pie_pct_fontsize": 13.0,
     },
     "total_holdings": {
@@ -1629,14 +1631,16 @@ def plot_account_detail(account: str,
     pie_mom_fs = float(cfg.get("pie_mom_fontsize", 11.5))
     pie_mom_gap = float(cfg.get("pie_mom_gap", 0.20))
     subtitle_h = float(cfg.get("subtitle_height", 0.28))
-    subtitle_margin = float(cfg.get("subtitle_margin", 0.10))
-    subtitle_fs = float(cfg.get("subtitle_fontsize", 12.5))
-    row_h = float(cfg.get("row_height", 0.34))
-    main_table_fs = float(cfg.get("main_table_fontsize", 11.0))
-    summary_table_fs = float(cfg.get("summary_table_fontsize", 11.5))
+    subtitle_margin_top = float(cfg.get("subtitle_margin_top", 0.10))
+    subtitle_margin_bottom = float(cfg.get("subtitle_margin_bottom", cfg.get("subtitle_margin", 0.10)))
+    subtitle_fs = float(cfg.get("subtitle_fontsize", 13.0))
+    row_h = float(cfg.get("row_height", 0.38))
+    table_fs = float(cfg.get("table_fontsize", 12.0))
+    main_table_fs = float(cfg.get("main_table_fontsize", table_fs))
+    summary_table_fs = float(cfg.get("summary_table_fontsize", table_fs))
     section_gap = float(cfg.get("section_gap", 0.25))
-    rebal_line_h = float(cfg.get("rebal_line_height", 0.22))
-    rebal_fs = float(cfg.get("rebal_fontsize", 10.5))
+    rebal_line_h = float(cfg.get("rebal_line_height", 0.35))
+    rebal_fs = float(cfg.get("rebal_fontsize", 11.5))
     pie_pct_fs = float(cfg.get("pie_pct_fontsize", 13.0))
 
     # 종목별 데이터 테이블 가공
@@ -1651,11 +1655,11 @@ def plot_account_detail(account: str,
     h_main_table = (n_main_rows + 1) * row_h
     h_summary_table = 2 * row_h
     n_rebal_rows = len(rebal_df) if has_rebal else 0
-    h_rebal_section = (subtitle_h + subtitle_margin + n_rebal_rows * rebal_line_h) if has_rebal else 0.0
+    h_rebal_section = (subtitle_margin_top + subtitle_h + subtitle_margin_bottom + n_rebal_rows * rebal_line_h) if has_rebal else 0.0
 
     # 전체 내용 높이 및 캔버스 높이 산출 (서브타이틀 마진 및 파이 높이 고려)
-    h_section_summary = subtitle_h + subtitle_margin + h_summary_table
-    h_section_main = subtitle_h + subtitle_margin + h_main_table
+    h_section_summary = subtitle_margin_top + subtitle_h + subtitle_margin_bottom + h_summary_table
+    h_section_main = subtitle_margin_top + subtitle_h + subtitle_margin_bottom + h_main_table
     h_pie_mom = (pie_mom_gap + 0.55) if mom_diff is not None else 0.0
     h_pie_needed = pad_top + pie_pad_top + (2 * pie_radius) + h_pie_mom + pad_bottom
 
@@ -1736,6 +1740,7 @@ def plot_account_detail(account: str,
     neutral_header = "#2d3436"
 
     # 1) 전체 요약 서브타이틀
+    curr_y -= subtitle_margin_top
     summary_title_y = curr_y / fig_height
     ax_table.text(
         0.0,
@@ -1749,7 +1754,7 @@ def plot_account_detail(account: str,
         color="#2c3e50",
     )
     curr_y -= subtitle_h
-    curr_y -= subtitle_margin
+    curr_y -= subtitle_margin_bottom
 
     # 2) 계좌 현황 요약 테이블
     curr_y -= h_summary_table
@@ -1801,6 +1806,7 @@ def plot_account_detail(account: str,
 
     # 3) 종목별 서브타이틀
     curr_y -= section_gap
+    curr_y -= subtitle_margin_top
     main_title_y = curr_y / fig_height
     ax_table.text(
         0.0,
@@ -1814,7 +1820,7 @@ def plot_account_detail(account: str,
         color="#2c3e50",
     )
     curr_y -= subtitle_h
-    curr_y -= subtitle_margin
+    curr_y -= subtitle_margin_bottom
 
     # 4) 메인 종목 테이블
     curr_y -= h_main_table
@@ -1873,6 +1879,7 @@ def plot_account_detail(account: str,
     # 5) 리밸런싱 가이드 텍스트 (목표 비중이 정의된 계좌인 경우)
     if has_rebal:
         curr_y -= section_gap
+        curr_y -= subtitle_margin_top
         rebal_title_y = curr_y / fig_height
         ax_table.text(
             0.0,
@@ -1886,7 +1893,7 @@ def plot_account_detail(account: str,
             color="#2c3e50",
         )
         curr_y -= subtitle_h
-        curr_y -= subtitle_margin
+        curr_y -= subtitle_margin_bottom
         
         for _, row in rebal_df.iterrows():
             line_y = curr_y / fig_height

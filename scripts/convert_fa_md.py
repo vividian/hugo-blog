@@ -70,6 +70,15 @@ def _quote(value: str) -> str:
 
 
 def write_yaml(accounts: list[dict]) -> None:
+    # 기존 fa.yaml에서 accounts 외의 내용(canvas_layout, market_indices_config 등)을 보존
+    preserved_sections = ""
+    if YAML_PATH.exists():
+        existing_text = YAML_PATH.read_text(encoding="utf-8")
+        # accounts 블록 이후에 오는 canvas_layout 또는 market_indices_config 등 보존
+        m = re.search(r"\n(?=(?:#\s*-{5,}\n\s*)?canvas_layout\s*:|market_indices_config\s*:)", existing_text)
+        if m:
+            preserved_sections = "\n" + existing_text[m.start():].strip() + "\n"
+
     lines: list[str] = ["accounts:"]
     for idx, account in enumerate(accounts):
         lines.append(f"  - name: {account['name']}")
@@ -80,7 +89,10 @@ def write_yaml(accounts: list[dict]) -> None:
             quoted_parts = [_quote(p) for p in item]
             list_str = ", ".join(quoted_parts)
             lines.append(f"      - [{list_str}]")
-    YAML_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    
+    accounts_text = "\n".join(lines) + "\n"
+    final_text = accounts_text + preserved_sections if preserved_sections else accounts_text
+    YAML_PATH.write_text(final_text, encoding="utf-8")
 
 
 def main() -> None:
