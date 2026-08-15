@@ -13,7 +13,7 @@ import shutil
 import textwrap
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from cycler import cycler
 from datetime import datetime
@@ -75,18 +75,134 @@ ACCOUNT_LABELS = {
     "psf2": "연금저축2",
     "isa2": "ISA2",
 }
-TITLE_FONT_SIZE = 16  # 차트 제목 폰트 크기
-FIG_DPI = 150  # 차트 DPI
-CANVAS_BG_COLOR = "#fffdf5"  # 차트 배경색
-TITLE_COLOR = "#2c3e50"  # 차트 제목 색상
+# 기본 캔버스 및 레이아웃 설정 (fa.yaml에 미정의 시 적용되는 fallback 기본값)
+DEFAULT_CANVAS_LAYOUT = {
+    "common": {
+        "dpi": 150,
+        "canvas_bg_color": "#fffdf5",
+        "title_color": "#2c3e50",
+        "title_font_size": 16,
+        "title_row_height": 0.3,
+        "default_canvas_width": 12.0,
+    },
+    "account_detail": {
+        "canvas_width": 12.5,
+        "min_canvas_height": 4.8,
+        "pie_table_ratio": [0.65, 1.35],
+        "pad_top": 0.25,
+        "pad_bottom": 0.25,
+        "pie_pad_top": 0.0,
+        "pie_radius": 1.75,
+        "pie_mom_fontsize": 11.5,
+        "pie_mom_gap": 0.20,
+        "subtitle_height": 0.28,
+        "subtitle_margin": 0.10,
+        "subtitle_fontsize": 12.5,
+        "row_height": 0.34,
+        "main_table_fontsize": 11.0,
+        "summary_table_fontsize": 11.5,
+        "section_gap": 0.25,
+        "rebal_line_height": 0.22,
+        "rebal_fontsize": 10.5,
+        "pie_pct_fontsize": 13.0,
+    },
+    "total_holdings": {
+        "canvas_width": 12.0,
+        "pad_top": 0.25,
+        "pad_bottom": 0.25,
+        "row_height": 0.34,
+        "table_fontsize": 11.0,
+        "min_canvas_height": 4.0,
+    },
+    "account_assets": {
+        "canvas_width": 12.0,
+        "pad_top": 0.25,
+        "pad_bottom": 0.25,
+        "row_height": 0.38,
+        "table_fontsize": 12.0,
+        "min_canvas_height": 4.0,
+    },
+    "exchange_rate": {
+        "canvas_width": 12.0,
+        "pad_top": 0.10,
+        "pad_bottom": 0.15,
+        "row_height": 0.40,
+        "table_fontsize": 13.0,
+    },
+    "trading_history": {
+        "canvas_width": 12.0,
+        "pad_top": 0.3,
+        "pad_bottom": 0.3,
+        "summary_line_height": 0.38,
+        "summary_fontsize": 14.0,
+        "text_line_height": 0.32,
+        "text_fontsize": 13.0,
+        "min_canvas_height": 3.5,
+    },
+    "portfolio_allocation": {
+        "canvas_width": 22.5,
+        "canvas_height": 9.75,
+        "title_fontsize": 20.0,
+        "pie_pct_fontsize": 16.0,
+        "legend_fontsize": 15.0,
+    },
+    "assets_trend": {
+        "canvas_width": 12.0,
+        "canvas_height": 6.0,
+        "legend_fontsize": 12.0,
+        "linewidth": 2.0,
+    },
+    "dividends": {
+        "canvas_width": 12.0,
+        "canvas_height": 6.0,
+        "bar_label_fontsize": 12.0,
+        "tick_fontsize": 12.0,
+        "legend_fontsize": 10.5,
+        "legend_ncol": 7,
+    },
+    "market_indices": {
+        "canvas_width": 12.0,
+        "pad_top": 0.10,
+        "pad_bottom": 0.15,
+        "row_height": 0.40,
+        "table_fontsize": 13.0,
+    },
+}
+
+
+def _load_canvas_layout() -> Dict[str, Dict[str, Any]]:
+    """config/fa.yaml에서 canvas_layout 설정을 로드하고 기본값과 병합한다."""
+    layout = {}
+    if FINANCIALASSETS_YAML_PATH.exists():
+        try:
+            with FINANCIALASSETS_YAML_PATH.open("r", encoding="utf-8") as fp:
+                data = yaml.safe_load(fp) or {}
+                layout = data.get("canvas_layout") or {}
+        except Exception as e:
+            print(f"(경고) fa.yaml canvas_layout 로드 실패: {e}")
+
+    merged: Dict[str, Dict[str, Any]] = {}
+    for section, defaults in DEFAULT_CANVAS_LAYOUT.items():
+        user_section = layout.get(section) or {}
+        merged[section] = {**defaults, **user_section}
+    return merged
+
+
+LAYOUT = _load_canvas_layout()
+
+TITLE_FONT_SIZE = float(LAYOUT["common"]["title_font_size"])
+FIG_DPI = int(LAYOUT["common"]["dpi"])
+CANVAS_BG_COLOR = str(LAYOUT["common"]["canvas_bg_color"])
+TITLE_COLOR = str(LAYOUT["common"]["title_color"])
 TITLE_POS = (0.0, 0.5)  # 제목 축 내부 좌표 (좌측, 중앙)
-TITLE_ROW_HEIGHT = 0.3  # 제목 전용 행 높이(인치)
+TITLE_ROW_HEIGHT = float(LAYOUT["common"]["title_row_height"])
 FIG_LEFT = 0.05
 FIG_RIGHT = 0.98
 FIG_TOP = 0.98
 FIG_BOTTOM = 0.06
 ACCOUNT_TITLES = {
     "title_exchange_rate": "◉ 환율 (USD/KRW) 추세",
+    "title_market_indices": "◉ 주요 시장 지표 (인덱스)",
     "title_assets_trend": "◉ 계좌별 자산 추세",
     "title_assets_investment_trend": "◉ 누적 투자금 vs 평가금 추세",
     "title_portfolio_allocation": "◉ 전체 포트폴리오 비중",
@@ -114,6 +230,7 @@ CONTENT_TITLE_KEYS = {
     "trading_history": "title_trading_history",
     "monthly_dividends": "title_monthly_dividends",
     "exchange_rate": "title_exchange_rate",
+    "market_indices": "title_market_indices",
     "yearly_dividends": "title_yearly_dividends",
 }
 ACCOUNT_RAW_NAMES: Dict[str, str] = {}
@@ -817,6 +934,20 @@ def plot_exchange_rate_table(fx_series: pd.Series,
     if fx_series.empty:
         raise ValueError("환율 데이터가 없습니다.")
 
+    cfg = LAYOUT.get("exchange_rate", {})
+    canvas_w = float(cfg.get("canvas_width", 12.0))
+    pad_top = float(cfg.get("pad_top", 0.10))
+    pad_bottom = float(cfg.get("pad_bottom", 0.15))
+    row_h = float(cfg.get("row_height", 0.40))
+    table_fontsize = float(cfg.get("table_fontsize", 13.0))
+
+    total_rows = 2  # 헤더 1행 + 데이터 1행
+    table_h = total_rows * row_h
+    fig_height = pad_top + table_h + pad_bottom
+
+    table_y = pad_bottom / fig_height
+    table_h_ratio = table_h / fig_height
+
     fx_series = fx_series.sort_index()
     latest_date = pd.to_datetime(fx_series.index.max())
     ref_date = pd.Timestamp(reference_date) if reference_date is not None else latest_date
@@ -830,36 +961,38 @@ def plot_exchange_rate_table(fx_series: pd.Series,
     change = current_rate - prev_rate
     change_pct = (change / prev_rate * 100) if prev_rate else 0.0
 
-    headers = ["환율(원/USD)", "증감", "직전 3년 평균 환율"]
+    headers = ["환율 (원/USD)", "증감 (전일 대비)", "직전 3년 평균 환율"]
     values = [
-        f"{current_rate:,.2f}",
-        f"{change:+.2f} ({change_pct:+.2f}%)",
-        f"{avg_3y:,.2f}",
+        f"{current_rate:,.2f}원",
+        f"{change:+.2f}원 ({change_pct:+.2f}%)",
+        f"{avg_3y:,.2f}원",
     ]
 
-    fig, ax = plt.subplots(figsize=(12, 1.3), dpi=FIG_DPI)
+    fig, ax = plt.subplots(figsize=(canvas_w, fig_height), dpi=FIG_DPI)
     fig.patch.set_facecolor(CANVAS_BG_COLOR)
     ax.axis("off")
 
     table = ax.table(
-        cellText=[headers, values],
+        cellText=[values],
+        colLabels=headers,
         cellLoc="center",
         loc="center",
-        bbox=[0.0, 0.0, 1.0, 1.0],
+        bbox=[0.0, table_y, 1.0, table_h_ratio],
     )
     table.auto_set_font_size(False)
-    table.set_fontsize(16)
-    table.scale(1.1, 0.9)
+    table.set_fontsize(table_fontsize)
 
     header_color = "#2d3436"
     even_color = "#fffdf5"
     odd_color = "#f6f0e6"
-    gain_color = "#d63031"
-    loss_color = "#0984e3"
+    gain_color = "#b42318"
+    loss_color = "#1d4ed8"
+
+    uniform_h = 1.0 / total_rows
 
     for (row, col), cell in table.get_celld().items():
-        cell.set_height(0.5)
-        cell.set_y((1 - row) * 0.5)
+        cell.set_height(uniform_h)
+        cell.set_y((total_rows - 1 - row) * uniform_h)
         cell.get_text().set_va("center")
         cell.get_text().set_y(0.5)
         cell.set_edgecolor("#dddddd")
@@ -869,22 +1002,144 @@ def plot_exchange_rate_table(fx_series: pd.Series,
         else:
             shade = even_color if col % 2 == 0 else odd_color
             cell.set_facecolor(shade)
-            cell.set_text_props(color="#2c3e50", weight="bold")
+            cell.set_text_props(color="#1f2933", weight="bold")
             if col == 1:
-                cell.set_facecolor(even_color)
-                color = gain_color if change > 0 else loss_color if change < 0 else "#2c3e50"
+                color = gain_color if change > 0 else loss_color if change < 0 else "#1f2933"
                 cell.set_text_props(color=color, weight="bold")
 
-    _save_canvas(fig, output_path, f"환율 테이블 저장 완료: {output_path}", pad_inches=0.25, bbox="tight")
-    _crop_top_inches(output_path, inches=0.2)
-
+    _save_canvas(fig, output_path, f"환율 테이블 저장 완료: {output_path}", pad_inches=0.15, bbox="tight")
     return True
+
+
+DEFAULT_MARKET_KPI_CONFIG = [
+    {"label": "S&P500", "ticker": "^GSPC", "decimals": 2},
+    {"label": "나스닥100", "ticker": "^NDX", "decimals": 2},
+    {"label": "SCHD", "ticker": "SCHD", "decimals": 2},
+    {"label": "IEF", "ticker": "IEF", "decimals": 2},
+    {"label": "코스피", "ticker": "^KS11", "decimals": 2},
+    {"label": "코스닥", "ticker": "^KQ11", "decimals": 2},
+]
+
+
+def load_market_indices_config() -> List[Dict[str, Any]]:
+    """fa.yaml에서 market_indices_config를 로드하거나 기본값을 반환한다."""
+    if FINANCIALASSETS_YAML_PATH.exists():
+        try:
+            with FINANCIALASSETS_YAML_PATH.open("r", encoding="utf-8") as fp:
+                data = yaml.safe_load(fp) or {}
+                cfg_list = data.get("market_indices_config")
+                if cfg_list and isinstance(cfg_list, list):
+                    return cfg_list
+        except Exception:
+            pass
+    return DEFAULT_MARKET_KPI_CONFIG
+
+
+def plot_market_indices_table(output_path: Path, target_date: Optional[pd.Timestamp] = None) -> Path:
+    """주요 시장 인덱스(S&P500, 나스닥100, SCHD, IEF, 코스피, 코스닥 등)의 현재가와 증감수치, 증감률을 4행 테이블로 그려 저장한다."""
+    _configure_matplotlib()
+    cfg_layout = LAYOUT.get("market_indices", {})
+    canvas_w = float(cfg_layout.get("canvas_width", 12.0))
+    pad_top = float(cfg_layout.get("pad_top", 0.10))
+    pad_bottom = float(cfg_layout.get("pad_bottom", 0.15))
+    row_h = float(cfg_layout.get("row_height", 0.40))
+    table_fontsize = float(cfg_layout.get("table_fontsize", 13.0))
+
+    total_rows = 4  # colLabels 1행 + 현재가 1행 + 증감수치 1행 + 증감률 1행
+    table_h = total_rows * row_h
+    fig_height = pad_top + table_h + pad_bottom
+
+    table_y = pad_bottom / fig_height
+    table_h_ratio = table_h / fig_height
+
+    index_configs = load_market_indices_config()
+    tickers = [c["ticker"] for c in index_configs]
+
+    price_map: Dict[str, Tuple[Optional[float], Optional[float]]] = {}
+    try:
+        price_map = fetch_latest_prices(tickers)
+    except Exception as e:
+        print(f"(경고) 시장 지표 가격 조회 실패: {e}")
+
+    headers = [str(c["label"]) for c in index_configs]
+    price_row = []
+    diff_row = []
+    pct_row = []
+
+    for c in index_configs:
+        ticker = c["ticker"]
+        decimals = int(c.get("decimals", 2))
+        scale = float(c.get("scale", 1.0))
+        pair = price_map.get(ticker)
+        if pair and pair[0] is not None:
+            cur_p = pair[0] * scale
+            prev_p = (pair[1] * scale) if pair[1] is not None else cur_p
+            diff = cur_p - prev_p
+            diff_pct = (diff / prev_p * 100.0) if prev_p > 0 else 0.0
+
+            price_row.append(f"{cur_p:,.{decimals}f}")
+            sign = "+" if diff > 0 else ""
+            diff_row.append(f"{sign}{diff:,.{decimals}f}")
+            pct_row.append(f"{sign}{diff_pct:.2f}%")
+        else:
+            price_row.append("-")
+            diff_row.append("-")
+            pct_row.append("-")
+
+    fig, ax = plt.subplots(figsize=(canvas_w, fig_height), dpi=FIG_DPI)
+    fig.patch.set_facecolor(CANVAS_BG_COLOR)
+    ax.axis("off")
+
+    table_data = [price_row, diff_row, pct_row]
+    table = ax.table(
+        cellText=table_data,
+        colLabels=headers,
+        cellLoc="center",
+        loc="center",
+        bbox=[0.0, table_y, 1.0, table_h_ratio],
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(table_fontsize)
+
+    uniform_h = 1.0 / total_rows
+
+    for (row, col), cell in table.get_celld().items():
+        cell.set_height(uniform_h)
+        cell.set_y((total_rows - 1 - row) * uniform_h)
+        cell.get_text().set_va("center")
+        cell.get_text().set_y(0.5)
+        cell.set_edgecolor("#dddddd")
+
+        if row == 0:
+            cell.set_facecolor("#2d3436")
+            cell.set_text_props(color="white", weight="bold")
+        elif row == 1:
+            cell.set_facecolor("#fffdf5")
+            cell.set_text_props(color="#1f2933", weight="bold")
+        elif row in (2, 3):
+            cell.set_facecolor("#f9fafb" if col % 2 == 0 else "#fffdf5")
+            val_text = diff_row[col] if col < len(diff_row) else ""
+            if val_text.startswith("+"):
+                cell.set_text_props(color="#b42318", weight="bold")
+            elif val_text.startswith("-"):
+                cell.set_text_props(color="#1d4ed8", weight="bold")
+            else:
+                cell.set_text_props(color="#1f2933", weight="bold")
+
+    _save_canvas(fig, output_path, f"시장 지표 테이블 저장 완료: {output_path}", pad_inches=0.15, bbox="tight")
+    return output_path
 
 
 def plot_assets_trend(account_df: pd.DataFrame, output_path: Path) -> Path:
     """계좌별 자산 흐름을 꺾은선 그래프로 그려 저장한다."""
     _configure_matplotlib()
-    fig, ax = plt.subplots(figsize=(12, 6), dpi=FIG_DPI)
+    cfg = LAYOUT.get("assets_trend", {})
+    canvas_w = float(cfg.get("canvas_width", 12.0))
+    canvas_h = float(cfg.get("canvas_height", 6.0))
+    legend_fontsize = float(cfg.get("legend_fontsize", 12.0))
+    line_width = float(cfg.get("linewidth", 2.0))
+
+    fig, ax = plt.subplots(figsize=(canvas_w, canvas_h), dpi=FIG_DPI)
     fig.patch.set_facecolor(CANVAS_BG_COLOR)
     ax.set_facecolor(CANVAS_BG_COLOR)
 
@@ -899,13 +1154,13 @@ def plot_assets_trend(account_df: pd.DataFrame, output_path: Path) -> Path:
             label=label,
             color=color_map[idx],
             linestyle="-",
-            linewidth=2,
+            linewidth=line_width,
         )
 
     ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: format_korean_amount(x)))
     ax.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%y%m"))
-    ax.legend(loc="upper left", frameon=False, fontsize=12)
+    ax.legend(loc="upper left", frameon=False, fontsize=legend_fontsize)
     ax.grid(True, axis="y", linestyle="--", alpha=0.7)
     for spine in ax.spines.values():
         spine.set_color("#dddddd")
@@ -916,13 +1171,11 @@ def plot_assets_trend(account_df: pd.DataFrame, output_path: Path) -> Path:
     ax.set_ylim(max(0, y_min - pad), y_max + pad)
     fig.autofmt_xdate(rotation=30)
 
-    # fig.subplots_adjust(top=0.85, bottom=0.12, left=0.1, right=0.9)
     _save_canvas(
         fig,
         output_path,
         f"계좌 추세 그래프 저장 완료: {output_path}",
         pad_inches=0.65,
-        # bbox=None,
         bbox="tight",
     )
     _crop_top_inches(output_path, inches=0.5)
@@ -933,7 +1186,13 @@ def plot_assets_trend(account_df: pd.DataFrame, output_path: Path) -> Path:
 def plot_assets_investment_trend(account_df: pd.DataFrame, invest_series: pd.Series, output_path: Path) -> Path:
     """누적 투자금과 누적 평가금 추세를 선 그래프로 그려 저장한다."""
     _configure_matplotlib()
-    fig, ax = plt.subplots(figsize=(12, 6), dpi=FIG_DPI)
+    cfg = LAYOUT.get("assets_trend", {})
+    canvas_w = float(cfg.get("canvas_width", 12.0))
+    canvas_h = float(cfg.get("canvas_height", 6.0))
+    legend_fontsize = float(cfg.get("legend_fontsize", 12.0))
+    line_width = float(cfg.get("linewidth", 2.0))
+
+    fig, ax = plt.subplots(figsize=(canvas_w, canvas_h), dpi=FIG_DPI)
     fig.patch.set_facecolor(CANVAS_BG_COLOR)
     ax.set_facecolor(CANVAS_BG_COLOR)
 
@@ -950,7 +1209,7 @@ def plot_assets_investment_trend(account_df: pd.DataFrame, invest_series: pd.Ser
         label="누적 투자금",
         color="#2c3e50",
         linestyle="-",
-        linewidth=2,
+        linewidth=line_width,
     )
     ax.plot(
         account_df.index,
@@ -958,13 +1217,13 @@ def plot_assets_investment_trend(account_df: pd.DataFrame, invest_series: pd.Ser
         label="누적 평가금",
         color="#d63031",
         linestyle="-",
-        linewidth=2,
+        linewidth=line_width,
     )
 
     ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: format_korean_amount(x)))
     ax.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%y%m"))
-    ax.legend(loc="upper left", frameon=False, fontsize=12)
+    ax.legend(loc="upper left", frameon=False, fontsize=legend_fontsize)
     ax.grid(True, axis="y", linestyle="--", alpha=0.7)
     for spine in ax.spines.values():
         spine.set_color("#dddddd")
@@ -1317,7 +1576,8 @@ def _crop_top_inches(image_path: Path, inches: float = 0.4) -> None:
 def plot_account_detail(account: str, 
                         holdings_df: pd.DataFrame, 
                         status_df: pd.DataFrame, 
-                        output_path: Path,) -> bool:
+                        output_path: Path,
+                        account_df: Optional[pd.DataFrame] = None) -> bool:
     """개별 계좌의 상세 내역(파이 차트, 보유 종목 테이블, 리밸런싱 텍스트 가이드)을 그려 저장한다."""
     # 계좌 종목
     account_holdings = holdings_df[holdings_df["계좌"] == account].copy()
@@ -1339,74 +1599,226 @@ def plot_account_detail(account: str,
     rebal_df = calculate_rebalancing_df(raw_account_name, account_holdings, symbol_map)
     has_rebal = rebal_df is not None and not rebal_df.empty
 
+    # 전월 대비 증감액 및 증감율 계산
+    mom_diff = None
+    mom_pct = None
+    if account_df is not None and not account_df.empty and account in account_df.columns:
+        s = account_df[account].dropna()
+        if len(s) >= 2:
+            cur_val = float(s.iloc[-1])
+            prev_val = float(s.iloc[-2])
+            mom_diff = cur_val - prev_val
+            if prev_val > 0:
+                mom_pct = (mom_diff / prev_val) * 100.0
+        elif len(s) == 1:
+            mom_diff = 0.0
+            mom_pct = 0.0
+
     account_holdings = account_holdings.sort_values("평가금", ascending=False)
     colors = plt.colormaps["tab10"](np.linspace(0, 1, max(len(account_holdings), 1)))
 
-    _configure_matplotlib()
-    fig, axes = plt.subplots(
-        1,
-        2,
-        figsize=(12.5, 6.6 if has_rebal else 5.2),
-        dpi=FIG_DPI,
-        gridspec_kw={"width_ratios": [0.65, 1.35]},
-    )
-    fig.patch.set_facecolor(CANVAS_BG_COLOR)
-    ax_pie, ax_table = axes
-    ax_pie.set_facecolor(CANVAS_BG_COLOR)
+    # 레이아웃 설정 로드
+    cfg = LAYOUT.get("account_detail", {})
+    canvas_w = float(cfg.get("canvas_width", 12.5))
+    min_canvas_h = float(cfg.get("min_canvas_height", 4.8))
+    pie_table_ratio = cfg.get("pie_table_ratio", [0.65, 1.35])
+    pad_top = float(cfg.get("pad_top", 0.25))
+    pad_bottom = float(cfg.get("pad_bottom", 0.25))
+    pie_pad_top = float(cfg.get("pie_pad_top", 0.0))
+    pie_radius = float(cfg.get("pie_radius", 1.75))
+    pie_mom_fs = float(cfg.get("pie_mom_fontsize", 11.5))
+    pie_mom_gap = float(cfg.get("pie_mom_gap", 0.20))
+    subtitle_h = float(cfg.get("subtitle_height", 0.28))
+    subtitle_margin = float(cfg.get("subtitle_margin", 0.10))
+    subtitle_fs = float(cfg.get("subtitle_fontsize", 12.5))
+    row_h = float(cfg.get("row_height", 0.34))
+    main_table_fs = float(cfg.get("main_table_fontsize", 11.0))
+    summary_table_fs = float(cfg.get("summary_table_fontsize", 11.5))
+    section_gap = float(cfg.get("section_gap", 0.25))
+    rebal_line_h = float(cfg.get("rebal_line_height", 0.22))
+    rebal_fs = float(cfg.get("rebal_fontsize", 10.5))
+    pie_pct_fs = float(cfg.get("pie_pct_fontsize", 13.0))
 
-    # 파이 차트
-    wedges, _, autotexts = ax_pie.pie(
-        account_holdings["평가금"],
-        labels=None,
-        autopct=lambda pct: f"{pct:.1f}%"
-        if pct >= 3
-        else "",
-        startangle=90,
-        colors=colors,
-        textprops={"fontsize": 13, "color": "white", "weight": "bold"},
-    )
-    ax_pie.set_title("")
-    color_map = dict(zip(account_holdings["종목"], colors))
-
-    # 테이블 그리기
+    # 종목별 데이터 테이블 가공
     table_df = account_holdings.copy()
-
-    # 종목별 데이터 테이블
     main_data = table_df[["종목", "매수금", "평가금", "수익금", "수익률"]].copy()
     main_data["매수금"] = main_data["매수금"].apply(lambda x: f"{x:,.0f}")
     main_data["평가금"] = main_data["평가금"].apply(lambda x: f"{x:,.0f}")
     main_data["수익금"] = main_data["수익금"].apply(lambda x: f"{x:,.0f}")
     main_data["수익률"] = main_data["수익률"].apply(lambda x: "-" if x is None or pd.isna(x) else f"{x * 100:.2f}%")
 
-    main_data_rows = len(main_data)
-    
-    if has_rebal:
-        table_top_y = 0.95
-        main_table_bbox = [0, 0.54, 1, 0.35]
-        summary_title_y = 0.47
-        summary_table_bbox = [0, 0.28, 1, 0.14]
-        rebal_title_y = 0.21
-    else:
-        table_top_y = 0.95
-        main_table_bbox = [0, 0.40, 1, 0.45]
-        summary_title_y = 0.32
-        summary_table_bbox = [0, 0.05, 1, 0.22]
+    n_main_rows = len(main_data)
+    h_main_table = (n_main_rows + 1) * row_h
+    h_summary_table = 2 * row_h
+    n_rebal_rows = len(rebal_df) if has_rebal else 0
+    h_rebal_section = (subtitle_h + subtitle_margin + n_rebal_rows * rebal_line_h) if has_rebal else 0.0
 
+    # 전체 내용 높이 및 캔버스 높이 산출 (서브타이틀 마진 및 파이 높이 고려)
+    h_section_summary = subtitle_h + subtitle_margin + h_summary_table
+    h_section_main = subtitle_h + subtitle_margin + h_main_table
+    h_pie_mom = (pie_mom_gap + 0.55) if mom_diff is not None else 0.0
+    h_pie_needed = pad_top + pie_pad_top + (2 * pie_radius) + h_pie_mom + pad_bottom
+
+    total_content_height = max(
+        h_pie_needed,
+        pad_top
+        + h_section_summary
+        + section_gap
+        + h_section_main
+        + (section_gap + h_rebal_section if has_rebal else 0.0)
+        + pad_bottom,
+    )
+    fig_height = max(min_canvas_h, total_content_height)
+    extra_pad = (fig_height - total_content_height) / 2.0 if fig_height > total_content_height else 0.0
+
+    _configure_matplotlib()
+    fig, axes = plt.subplots(
+        1,
+        2,
+        figsize=(canvas_w, fig_height),
+        dpi=FIG_DPI,
+        gridspec_kw={"width_ratios": pie_table_ratio},
+    )
+    fig.patch.set_facecolor(CANVAS_BG_COLOR)
+    ax_pie, ax_table = axes
+    ax_pie.set_facecolor(CANVAS_BG_COLOR)
+
+    # 파이 차트 상단 정렬 배치
+    total_ratio = float(pie_table_ratio[0] + pie_table_ratio[1])
+    w_pie_inch = canvas_w * (float(pie_table_ratio[0]) / total_ratio)
+    target_pie_top_y = fig_height - pad_top - extra_pad - pie_pad_top
+    pie_center_y = target_pie_top_y - pie_radius
+
+    wedges, _, autotexts = ax_pie.pie(
+        account_holdings["평가금"],
+        labels=None,
+        autopct=lambda pct: f"{pct:.1f}%" if pct >= 3 else "",
+        startangle=90,
+        colors=colors,
+        radius=pie_radius,
+        center=(0, pie_center_y),
+        textprops={"fontsize": pie_pct_fs, "color": "white", "weight": "bold"},
+    )
+    
+    # 파이 차트 하단 전월대비 증감액/증감율 뱃지
+    if mom_diff is not None:
+        pie_bottom_y = pie_center_y - pie_radius
+        mom_y = pie_bottom_y - pie_mom_gap
+        sign = "+" if mom_diff > 0 else ""
+        pct_str = f"({sign}{mom_pct:.2f}%)" if mom_pct is not None else ""
+        val_str = f"전월 대비  {sign}{mom_diff:,.0f}원 {pct_str}".strip()
+        color_code = "#b42318" if mom_diff > 0 else ("#1d4ed8" if mom_diff < 0 else "#2c3e50")
+        
+        ax_pie.text(
+            0,
+            mom_y,
+            val_str,
+            ha="center",
+            va="top",
+            fontsize=pie_mom_fs,
+            fontweight="bold",
+            color=color_code,
+            bbox=dict(boxstyle="round,pad=0.4,rounding_size=0.3", facecolor="#ffffff", edgecolor="#d1d5db", linewidth=1.0),
+        )
+
+    ax_pie.set_xlim(-w_pie_inch / 2.0, w_pie_inch / 2.0)
+    ax_pie.set_ylim(0.0, fig_height)
+    ax_pie.set_aspect("equal", adjustable="box")
+    ax_pie.axis("off")
+
+    color_map = dict(zip(account_holdings["종목"], colors))
     ax_table.axis("off")
+
+    # Top-Down 상대 좌표 계산
+    curr_y = fig_height - pad_top - extra_pad
+
+    header_colors = ["#2d3436", "#2d3436", "#2d3436", "#2d3436", "#2d3436"]
+    neutral_header = "#2d3436"
+
+    # 1) 전체 요약 서브타이틀
+    summary_title_y = curr_y / fig_height
     ax_table.text(
         0.0,
-        table_top_y,
+        summary_title_y,
+        "계좌 현황 (전체)",
+        transform=ax_table.transAxes,
+        ha="left",
+        va="top",
+        fontsize=subtitle_fs,
+        fontweight="bold",
+        color="#2c3e50",
+    )
+    curr_y -= subtitle_h
+    curr_y -= subtitle_margin
+
+    # 2) 계좌 현황 요약 테이블
+    curr_y -= h_summary_table
+    summary_table_bbox = [0.0, curr_y / fig_height, 1.0, h_summary_table / fig_height]
+
+    summary_columns = ["투자금", "평가금", "수익금", "수익률", "배당금(누적)"]
+    summary_data = pd.DataFrame(
+        [
+            [
+                f"{status_row.get('투자금', 0):,.0f}",
+                f"{status_row.get('평가금', 0):,.0f}",
+                f"{status_row.get('수익금', 0):,.0f}",
+                "-"
+                if not status_row.get("투자금")
+                else f"{(status_row.get('수익금', 0) / status_row.get('투자금')) * 100:.2f}%",
+                f"{status_row.get('배당금', 0):,.0f}",
+            ]
+        ],
+        columns=summary_columns,
+    )
+
+    summary_table = ax_table.table(
+        cellText=summary_data.values,
+        colLabels=summary_columns,
+        cellLoc="center",
+        loc="upper center",
+        bbox=summary_table_bbox,
+    )
+    summary_table.auto_set_font_size(False)
+    summary_table.set_fontsize(summary_table_fs)
+
+    summary_uniform_height = 0.5
+    for (row, col), cell in summary_table.get_celld().items():
+        cell.set_height(summary_uniform_height)
+        cell.set_y((1 - row) * summary_uniform_height)
+        cell.get_text().set_va("center")
+        cell.get_text().set_y(0.5)
+        cell.set_edgecolor("#dddddd")
+        if row == 0:
+            cell.get_text().set_ha("center")
+            color = header_colors[col] if col < len(header_colors) else neutral_header
+            cell.set_facecolor(color)
+            cell.set_text_props(color="white", weight="bold")
+        else:
+            cell.get_text().set_ha("right")
+            shade = "#fffdf5" if (row % 2 == 1) else "#f6f0e6"
+            cell.set_facecolor(shade)
+            cell.set_text_props(color="#2c3e50", weight="bold")
+
+    # 3) 종목별 서브타이틀
+    curr_y -= section_gap
+    main_title_y = curr_y / fig_height
+    ax_table.text(
+        0.0,
+        main_title_y,
         "계좌 현황 (종목별)",
         transform=ax_table.transAxes,
         ha="left",
         va="top",
-        fontsize=12.5,
+        fontsize=subtitle_fs,
         fontweight="bold",
         color="#2c3e50",
     )
+    curr_y -= subtitle_h
+    curr_y -= subtitle_margin
 
-    header_colors = ["#2d3436", "#2d3436", "#2d3436", "#2d3436", "#2d3436"]
-    neutral_header = "#2d3436"
+    # 4) 메인 종목 테이블
+    curr_y -= h_main_table
+    main_table_bbox = [0.0, curr_y / fig_height, 1.0, h_main_table / fig_height]
 
     main_table = ax_table.table(
         cellText=main_data.values,
@@ -1416,25 +1828,22 @@ def plot_account_detail(account: str,
         bbox=main_table_bbox,
     )
     main_table.auto_set_font_size(False)
-    main_table.set_fontsize(11)
+    main_table.set_fontsize(main_table_fs)
 
-    main_uniform_height = 1.0 / (main_data_rows + 1)
+    main_uniform_height = 1.0 / (n_main_rows + 1)
     for (row, col), cell in main_table.get_celld().items():
         cell.set_height(main_uniform_height)
-        cell.set_y((main_data_rows - row) * main_uniform_height)
+        cell.set_y((n_main_rows - row) * main_uniform_height)
         cell.get_text().set_va("center")
         cell.get_text().set_y(0.5)
         cell.set_edgecolor("#dddddd")
         if row == 0:
             cell.get_text().set_ha("center")
-        else:
-            cell.get_text().set_ha("center" if col == 0 else "right")
-
-        if row == 0:
             color = header_colors[col] if col < len(header_colors) else neutral_header
             cell.set_facecolor(color)
             cell.set_text_props(color="white", weight="bold")
         else:
+            cell.get_text().set_ha("center" if col == 0 else "right")
             shade = "#fffdf5" if (row % 2 == 0) else "#f6f0e6"
             if col == 0:
                 label = main_data.iloc[row - 1, 0]
@@ -1459,65 +1868,12 @@ def plot_account_detail(account: str,
                     cell.get_text().set_color("#2c3e50")
             cell.set_facecolor(shade)
 
-    # 계좌 현황 요약 테이블
-    summary_columns = ["투자금", "평가금", "수익금", "수익률", "배당금(누적)"]
-    summary_data = pd.DataFrame(
-        [
-            [
-                f"{status_row.get('투자금', 0):,.0f}",
-                f"{status_row.get('평가금', 0):,.0f}",
-                f"{status_row.get('수익금', 0):,.0f}",
-                "-"
-                if not status_row.get("투자금")
-                else f"{(status_row.get('수익금', 0) / status_row.get('투자금')) * 100:.2f}%",
-                f"{status_row.get('배당금', 0):,.0f}",
-            ]
-        ],
-        columns=summary_columns,
-    )
 
-    ax_table.text(
-        0.0,
-        summary_title_y,
-        "계좌 현황 (전체)",
-        transform=ax_table.transAxes,
-        ha="left",
-        va="top",
-        fontsize=12.5,
-        fontweight="bold",
-        color="#2c3e50",
-    )
 
-    summary_table = ax_table.table(
-        cellText=summary_data.values,
-        colLabels=summary_columns,
-        cellLoc="center",
-        loc="upper center",
-        bbox=summary_table_bbox,
-    )
-    summary_table.auto_set_font_size(False)
-    summary_table.set_fontsize(11.5)
-
-    summary_uniform_height = 0.5
-    for (row, col), cell in summary_table.get_celld().items():
-        cell.set_height(summary_uniform_height)
-        cell.set_y((1 - row) * summary_uniform_height)
-        cell.get_text().set_va("center")
-        cell.get_text().set_y(0.5)
-        cell.set_edgecolor("#dddddd")
-        if row == 0:
-            cell.get_text().set_ha("center")
-            color = header_colors[col] if col < len(header_colors) else neutral_header
-            cell.set_facecolor(color)
-            cell.set_text_props(color="white", weight="bold")
-        else:
-            cell.get_text().set_ha("right")
-            shade = "#fffdf5" if (row % 2 == 1) else "#f6f0e6"
-            cell.set_facecolor(shade)
-            cell.set_text_props(color="#2c3e50", weight="bold")
-
-    # 리밸런싱 가이드 텍스트 (목표 비중이 정의된 계좌인 경우)
+    # 5) 리밸런싱 가이드 텍스트 (목표 비중이 정의된 계좌인 경우)
     if has_rebal:
+        curr_y -= section_gap
+        rebal_title_y = curr_y / fig_height
         ax_table.text(
             0.0,
             rebal_title_y,
@@ -1525,13 +1881,15 @@ def plot_account_detail(account: str,
             transform=ax_table.transAxes,
             ha="left",
             va="top",
-            fontsize=12.5,
+            fontsize=subtitle_fs,
             fontweight="bold",
             color="#2c3e50",
         )
+        curr_y -= subtitle_h
+        curr_y -= subtitle_margin
         
-        y_pos = rebal_title_y - 0.055
         for _, row in rebal_df.iterrows():
+            line_y = curr_y / fig_height
             diff = row["조정금액"]
             diff_q = row.get("조정주수", 0)
             asset_name = str(row["자산군"])
@@ -1550,20 +1908,19 @@ def plot_account_detail(account: str,
                 
             ax_table.text(
                 0.02,
-                y_pos,
+                line_y,
                 line_str,
                 transform=ax_table.transAxes,
                 ha="left",
                 va="top",
-                fontsize=10.5,
+                fontsize=rebal_fs,
                 fontweight="bold",
                 color=color_code,
             )
-            y_pos -= 0.048
+            curr_y -= rebal_line_h
 
-    plt.tight_layout()
     display_name = account_label(account)
-    _save_canvas(fig, output_path, f"{display_name} 상세 그래프 저장 완료: {output_path}")
+    _save_canvas(fig, output_path, f"{display_name} 상세 그래프 저장 완료: {output_path}", pad_inches=0.2, bbox="tight")
     return True
 
 
@@ -1650,7 +2007,14 @@ def plot_monthly_dividends(pivot: pd.DataFrame, output_path: Path) -> Path:
     columns = pivot.columns.tolist()
 
     _configure_matplotlib()
-    fig, ax = plt.subplots(figsize=(12, 6), dpi=FIG_DPI)
+    cfg = LAYOUT.get("dividends", {})
+    canvas_w = float(cfg.get("canvas_width", 12.0))
+    canvas_h = float(cfg.get("canvas_height", 6.0))
+    bar_label_fs = float(cfg.get("bar_label_fontsize", 12.0))
+    tick_fs = float(cfg.get("tick_fontsize", 12.0))
+    legend_fs = float(cfg.get("legend_fontsize", 12.0))
+
+    fig, ax = plt.subplots(figsize=(canvas_w, canvas_h), dpi=FIG_DPI)
     fig.patch.set_facecolor(CANVAS_BG_COLOR)
     ax.set_facecolor(CANVAS_BG_COLOR)
     bottoms = np.zeros(len(months))
@@ -1671,6 +2035,9 @@ def plot_monthly_dividends(pivot: pd.DataFrame, output_path: Path) -> Path:
         bottoms += values
 
     totals = pivot.sum(axis=1).values
+    if len(totals) > 0 and max(totals) > 0:
+        ax.set_ylim(0, max(totals) * 1.08)
+
     for i, total in enumerate(totals):
         if total <= 0:
             continue
@@ -1680,58 +2047,95 @@ def plot_monthly_dividends(pivot: pd.DataFrame, output_path: Path) -> Path:
             f"{total:,.0f}",
             ha="center",
             va="bottom",
-            fontsize=12,
+            fontsize=bar_label_fs,
             color="black",
         )
 
     ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{int(x):,}"))
     ax.xaxis.set_major_locator(mdates.MonthLocator(interval=1))
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%y%m"))
-    ax.tick_params(axis="x", rotation=45, labelsize=12)
-    ax.tick_params(axis="y", labelsize=12)
+    ax.tick_params(axis="x", rotation=45, labelsize=tick_fs)
+    ax.tick_params(axis="y", labelsize=tick_fs)
     ax.grid(axis="y", linestyle="--", alpha=0.5)
     for spine in ax.spines.values():
         spine.set_color("#dddddd")
-    ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1), frameon=False)
-    # fig.subplots_adjust(top=0.85, bottom=0.12, left=0.1, right=0.9)
+    
+    legend_ncol = int(cfg.get("legend_ncol", 7))
+    ax.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.18),
+        ncol=legend_ncol,
+        frameon=False,
+        fontsize=legend_fs,
+        handlelength=1.2,
+        columnspacing=1.0,
+    )
     _save_canvas(
         fig,
         output_path,
         f"월별 배당 그래프 저장 완료: {output_path}",
-        pad_inches=0.65,
+        pad_inches=0.25,
         bbox="tight",
     )
-    _crop_top_inches(output_path, inches=0.6)
 
     return True
 
 
 def plot_yearly_dividends(pivot: pd.DataFrame, output_path: Path) -> Path:
-    """연별 배당금 현황을 누적 막대 그래프로 그려 저장한다."""
+    """연별 배당금 현황을 막대 그래프로 그려 저장한다. (과거 년도는 단일 색상, 당해년도만 종목별 스택 및 범례 표시)"""
     years = pivot.index.to_pydatetime()
-    columns = pivot.columns.tolist()
+    if len(years) == 0:
+        raise ValueError("연별 배당 데이터가 없습니다.")
 
     _configure_matplotlib()
-    fig, ax = plt.subplots(figsize=(12, 6), dpi=FIG_DPI)
+    cfg = LAYOUT.get("dividends", {})
+    canvas_w = float(cfg.get("canvas_width", 12.0))
+    canvas_h = float(cfg.get("canvas_height", 6.0))
+    bar_label_fs = float(cfg.get("bar_label_fontsize", 12.0))
+    tick_fs = float(cfg.get("tick_fontsize", 12.0))
+    legend_fs = float(cfg.get("legend_fontsize", 10.5))
+
+    fig, ax = plt.subplots(figsize=(canvas_w, canvas_h), dpi=FIG_DPI)
     fig.patch.set_facecolor(CANVAS_BG_COLOR)
     ax.set_facecolor(CANVAS_BG_COLOR)
-    bottoms = np.zeros(len(years))
-    colors = plt.colormaps["tab10"](np.linspace(0, 1, max(len(columns), 1)))
 
-    for col, color in zip(columns, colors):
-        values = pivot[col].values
+    # 1. 과거 년도: 단일 색상으로 총 배당금 단일 막대 렌더링
+    past_color = "#94a3b8"  # 차분한 슬레이트 그레이 단일 색상
+    for i in range(len(years) - 1):
+        year_total = float(pivot.iloc[i].sum())
+        if year_total > 0:
+            ax.bar(
+                years[i],
+                year_total,
+                width=220,
+                color=past_color,
+                edgecolor="white",
+            )
+
+    # 2. 당해 년도 (현재 연도): 당해년도에 배당이 발생한 종목만 스택 막대 렌더링
+    current_row = pivot.iloc[-1]
+    current_symbols = [col for col in pivot.columns if current_row[col] > 0]
+    colors = plt.colormaps["tab10"](np.linspace(0, 1, max(len(current_symbols), 1)))
+
+    curr_bottom = 0.0
+    for col, color in zip(current_symbols, colors):
+        val = float(current_row[col])
         ax.bar(
-            years,
-            values,
+            years[-1],
+            val,
             width=220,
-            bottom=bottoms,
+            bottom=curr_bottom,
             label=col,
             color=color,
             edgecolor="white",
         )
-        bottoms += values
+        curr_bottom += val
 
+    # 3. 모든 연도 상단 총 배당금 텍스트 표시
     totals = pivot.sum(axis=1).values
+    if len(totals) > 0 and max(totals) > 0:
+        ax.set_ylim(0, max(totals) * 1.08)
+
     for i, total in enumerate(totals):
         if total <= 0:
             continue
@@ -1741,27 +2145,39 @@ def plot_yearly_dividends(pivot: pd.DataFrame, output_path: Path) -> Path:
             f"{total:,.0f}",
             ha="center",
             va="bottom",
-            fontsize=12,
+            fontsize=bar_label_fs,
             color="black",
         )
 
     ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{int(x):,}"))
     ax.xaxis.set_major_locator(mdates.YearLocator())
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
-    ax.tick_params(axis="x", rotation=0, labelsize=12)
-    ax.tick_params(axis="y", labelsize=12)
+    ax.tick_params(axis="x", rotation=0, labelsize=tick_fs)
+    ax.tick_params(axis="y", labelsize=tick_fs)
     ax.grid(axis="y", linestyle="--", alpha=0.5)
     for spine in ax.spines.values():
         spine.set_color("#dddddd")
-    ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1), frameon=False)
+
+    # 4. 당해년도 종목만 하단 범례 표시
+    legend_ncol = int(cfg.get("legend_ncol", 7))
+    if current_symbols:
+        ax.legend(
+            loc="upper center",
+            bbox_to_anchor=(0.5, -0.15),
+            ncol=legend_ncol,
+            frameon=False,
+            fontsize=legend_fs,
+            handlelength=1.2,
+            columnspacing=1.0,
+        )
+
     _save_canvas(
         fig,
         output_path,
         f"연별 배당 그래프 저장 완료: {output_path}",
-        pad_inches=0.65,
+        pad_inches=0.25,
         bbox="tight",
     )
-    _crop_top_inches(output_path, inches=0.6)
 
     return True
 
@@ -1774,11 +2190,13 @@ def plot_total_holdings(holdings_df: pd.DataFrame, output_path: Path) -> Path:
     if filtered.empty:
         raise ValueError("보유 중인 종목이 없습니다.")
 
-    row_count = len(filtered)
-    _configure_matplotlib()
-    fig, ax = plt.subplots(figsize=(12, 12), dpi=FIG_DPI)
-    fig.patch.set_facecolor(CANVAS_BG_COLOR)
-    ax.axis("off")
+    cfg = LAYOUT.get("total_holdings", {})
+    canvas_w = float(cfg.get("canvas_width", 12.0))
+    pad_top = float(cfg.get("pad_top", 0.25))
+    pad_bottom = float(cfg.get("pad_bottom", 0.25))
+    row_h = float(cfg.get("row_height", 0.34))
+    table_fs = float(cfg.get("table_fontsize", 11.0))
+    min_canvas_h = float(cfg.get("min_canvas_height", 4.0))
 
     columns = ["계좌", "종목", "보유수량", "평단가", "금액", "현재가", "수익금", "수익률", "등락률"]
     formatted = filtered.copy()
@@ -1796,14 +2214,28 @@ def plot_total_holdings(holdings_df: pd.DataFrame, output_path: Path) -> Path:
     formatted["등락률"] = filtered["등락률"].apply(fmt_rate)
     display_df = formatted[columns]
 
+    total_rows = len(display_df) + 1
+    table_h = total_rows * row_h
+    fig_height = max(min_canvas_h, pad_top + table_h + pad_bottom)
+    extra_pad = (fig_height - (pad_top + table_h + pad_bottom)) / 2.0 if fig_height > (pad_top + table_h + pad_bottom) else 0.0
+
+    table_y = (pad_bottom + extra_pad) / fig_height
+    table_height_ratio = table_h / fig_height
+
+    _configure_matplotlib()
+    fig, ax = plt.subplots(figsize=(canvas_w, fig_height), dpi=FIG_DPI)
+    fig.patch.set_facecolor(CANVAS_BG_COLOR)
+    ax.axis("off")
+
     table = ax.table(
         cellText=display_df.values,
         colLabels=columns,
         cellLoc="center",
         loc="center",
-        bbox=[0.0, 0.05, 1.0, 0.97]
+        bbox=[0.0, table_y, 1.0, table_height_ratio]
     )
     table.auto_set_font_size(False)
+    table.set_fontsize(table_fs)
     header_color = "#2c3e50"
     even_color = "#fffdf5"
     odd_color = "#f6f0e6"
@@ -1814,7 +2246,6 @@ def plot_total_holdings(holdings_df: pd.DataFrame, output_path: Path) -> Path:
     rate_values = filtered["수익률"].to_list()
     change_values = filtered["등락률"].to_list()
 
-    total_rows = len(display_df) + 1
     uniform_height = 1.0 / total_rows
 
     for (row, col), cell in table.get_celld().items():
@@ -1929,8 +2360,14 @@ def plot_portfolio_allocation(holdings_df: pd.DataFrame, symbol_map: Dict[str, A
 
     _configure_matplotlib()
     
-    # 세로 크기를 5.5에서 6.5로 늘려 범례 공간을 확보
-    fig, axes = plt.subplots(1, 3, figsize=(22.5, 9.75), dpi=FIG_DPI)
+    cfg = LAYOUT.get("portfolio_allocation", {})
+    canvas_w = float(cfg.get("canvas_width", 22.5))
+    canvas_h = float(cfg.get("canvas_height", 9.75))
+    title_fs = float(cfg.get("title_fontsize", 20.0))
+    pie_pct_fs = float(cfg.get("pie_pct_fontsize", 16.0))
+    legend_fs = float(cfg.get("legend_fontsize", 15.0))
+
+    fig, axes = plt.subplots(1, 3, figsize=(canvas_w, canvas_h), dpi=FIG_DPI)
     fig.patch.set_facecolor(CANVAS_BG_COLOR)
     
     color_palette = [
@@ -1953,7 +2390,6 @@ def plot_portfolio_allocation(holdings_df: pd.DataFrame, symbol_map: Dict[str, A
             ax.axis("off")
             return
             
-        # 외곽 라벨 겹침 방지를 위해 labels=None으로 지정하고 하단 범례로 처리
         wedges, texts, autotexts = ax.pie(
             data,
             labels=None,
@@ -1961,25 +2397,22 @@ def plot_portfolio_allocation(holdings_df: pd.DataFrame, symbol_map: Dict[str, A
             pctdistance=0.75,
             startangle=90,
             colors=color_palette[:len(data)] if len(data) <= len(color_palette) else plt.colormaps["tab10"](np.linspace(0, 1, len(data))),
-            textprops={"fontsize": 16, "color": "white", "weight": "bold"},
+            textprops={"fontsize": pie_pct_fs, "color": "white", "weight": "bold"},
             wedgeprops=dict(width=0.5, edgecolor="#ffffff", linewidth=2.0)
         )
         
-        # 도넛 내부 퍼센트 글씨 가독성 극대화 (글자 테두리 stroke 추가)
         for at in autotexts:
             at.set_color("white")
-            at.set_fontsize(16)
+            at.set_fontsize(pie_pct_fs)
             at.set_weight("bold")
             at.set_path_effects([path_effects.withStroke(linewidth=3, foreground="#2c3e50")])
             
-        ax.set_title(title, fontsize=20, fontweight="bold", color="#2c3e50", pad=20)
+        ax.set_title(title, fontsize=title_fs, fontweight="bold", color="#2c3e50", pad=20)
         ax.axis("equal")
 
-        # 범례에 표시할 이름 및 퍼센트 가공
         total_val = data.sum()
         legend_labels = [f"{label} ({val / total_val * 100:.1f}%)" for label, val in data.items()]
         
-        # 항목 수에 따라 ncol 동적 설정
         if len(data) <= 4:
             ncol = 1
         elif len(data) <= 8:
@@ -1994,7 +2427,7 @@ def plot_portfolio_allocation(holdings_df: pd.DataFrame, symbol_map: Dict[str, A
             bbox_to_anchor=(0.5, -0.05),
             ncol=ncol,
             frameon=False,
-            prop={"size": 15, "weight": "bold"}
+            prop={"size": legend_fs, "weight": "bold"}
         )
 
     draw_donut(axes[0], group_df, "자산군 비중")
@@ -2027,6 +2460,16 @@ def plot_monthly_trading_history(records: pd.DataFrame,
     month_records = records[(records["일자"] >= start) & (records["일자"] <= end)].copy()
     if month_records.empty:
         raise ValueError("해당 월 거래 내역이 없습니다.")
+
+    cfg = LAYOUT.get("trading_history", {})
+    canvas_w = float(cfg.get("canvas_width", 12.0))
+    pad_top = float(cfg.get("pad_top", 0.3))
+    pad_bottom = float(cfg.get("pad_bottom", 0.3))
+    summary_line_h = float(cfg.get("summary_line_height", 0.38))
+    summary_fs = float(cfg.get("summary_fontsize", 14.0))
+    text_line_h = float(cfg.get("text_line_height", 0.32))
+    text_fs = float(cfg.get("text_fontsize", 13.0))
+    min_canvas_h = float(cfg.get("min_canvas_height", 3.5))
 
     buy_total = sell_total = invest_total = div_total = 0.0
     lines: List[Tuple[str, str]] = []
@@ -2091,9 +2534,10 @@ def plot_monthly_trading_history(records: pd.DataFrame,
         wrapped_lines.append((kind, _wrap_history_text(text)))
 
     total_wrapped = sum(len(parts) for _, parts in wrapped_lines)
-    line_count = max(total_wrapped + 1, 1)
-    fig_height = max(4.0, 0.35 * (line_count + 2))
-    fig, ax = plt.subplots(figsize=(12, fig_height), dpi=FIG_DPI)
+    content_height = pad_top + summary_line_h + (total_wrapped * text_line_h) + pad_bottom
+    fig_height = max(min_canvas_h, content_height)
+
+    fig, ax = plt.subplots(figsize=(canvas_w, fig_height), dpi=FIG_DPI)
     fig.patch.set_facecolor(CANVAS_BG_COLOR)
     ax.axis("off")
 
@@ -2104,22 +2548,18 @@ def plot_monthly_trading_history(records: pd.DataFrame,
         "div": "#2c3e50",
     }
 
-    line_step = 1.0
-    margin = 0.5
-    y_max = line_step * (line_count + 2 * margin)
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, y_max)
+    curr_y = fig_height - pad_top
+    summary_y = curr_y / fig_height
+    ax.text(0.0, summary_y, summary, transform=ax.transAxes, ha="left", va="top", fontsize=summary_fs, fontweight="bold", color="#2c3e50")
 
-    y = y_max - margin * line_step
-    ax.text(0.0, y, summary, ha="left", va="top", fontsize=14, fontweight="bold", color="#2c3e50")
-    y -= line_step
-
+    curr_y -= summary_line_h
     for kind, text_lines in wrapped_lines:
         for line in text_lines:
-            ax.text(0.0, y, line, ha="left", va="top", fontsize=13, color=colors.get(kind, "#2c3e50"))
-            y -= line_step
+            line_y = curr_y / fig_height
+            ax.text(0.0, line_y, line, transform=ax.transAxes, ha="left", va="top", fontsize=text_fs, color=colors.get(kind, "#2c3e50"))
+            curr_y -= text_line_h
 
-    _save_canvas(fig, output_path, f"월별 거래 내역 저장 완료: {output_path}", pad_inches=0.4, bbox="tight")
+    _save_canvas(fig, output_path, f"월별 거래 내역 저장 완료: {output_path}", pad_inches=0.15, bbox="tight")
 
     return True
 
@@ -2178,6 +2618,14 @@ def generate_month_reports(prefix: str,
         print(f"(경고) {prefix} 환율 테이블 생성 실패: {exc}")
 
     try:
+        market_indices_path = output_dir / f"{prefix}_market_indices.webp"
+        plot_market_indices_table(market_indices_path, month_end)
+        outputs["market_indices"] = market_indices_path
+        save_title(CONTENT_TITLE_KEYS.get("market_indices"), market_indices_path)
+    except Exception as exc:
+        print(f"(경고) {prefix} 주요 시장 지표 생성 실패: {exc}")
+
+    try:
         holdings_df = build_holdings_df(records, fx_series)
         holdings_path = output_dir / f"{prefix}_total_holdings.webp"
         plot_total_holdings(holdings_df, holdings_path)
@@ -2204,7 +2652,7 @@ def generate_month_reports(prefix: str,
             if account not in valid_detail_set:
                 continue
             detail_path = output_dir / f"{prefix}_{account}_detail.webp"
-            if plot_account_detail(account, holdings_df, summary_df, detail_path):
+            if plot_account_detail(account, holdings_df, summary_df, detail_path, account_df=account_df):
                 outputs[f"{account}_detail"] = detail_path
                 detail_title_key = f"title_{account}_detail"
                 if detail_title_key in ACCOUNT_TITLES:
@@ -2316,10 +2764,25 @@ def format_summary_table(summary_df: pd.DataFrame) -> pd.DataFrame:
 
 def plot_account_assets(display_df: pd.DataFrame, output_path: Path) -> Path:
     """전체 계좌 요약 정보를 테이블 형태의 이미지로 저장한다."""
-    row_height_factor = 1.5
-    fig_height = max(5.0, (0.8 + 0.35 * len(display_df)) * row_height_factor)
+    cfg = LAYOUT.get("account_assets", {})
+    canvas_w = float(cfg.get("canvas_width", 12.0))
+    pad_top = float(cfg.get("pad_top", 0.25))
+    pad_bottom = float(cfg.get("pad_bottom", 0.25))
+    row_h = float(cfg.get("row_height", 0.38))
+    table_fs = float(cfg.get("table_fontsize", 12.0))
+    min_canvas_h = float(cfg.get("min_canvas_height", 4.0))
+
+    num_rows = len(display_df)
+    total_rows = num_rows + 1
+    table_h = total_rows * row_h
+    fig_height = max(min_canvas_h, pad_top + table_h + pad_bottom)
+    extra_pad = (fig_height - (pad_top + table_h + pad_bottom)) / 2.0 if fig_height > (pad_top + table_h + pad_bottom) else 0.0
+
+    table_y = (pad_bottom + extra_pad) / fig_height
+    table_height_ratio = table_h / fig_height
+
     _configure_matplotlib()
-    fig, ax = plt.subplots(figsize=(12, fig_height), dpi=FIG_DPI)
+    fig, ax = plt.subplots(figsize=(canvas_w, fig_height), dpi=FIG_DPI)
     fig.patch.set_facecolor(CANVAS_BG_COLOR)
     ax.axis("off")
 
@@ -2335,13 +2798,11 @@ def plot_account_assets(display_df: pd.DataFrame, output_path: Path) -> Path:
         cellLoc="center",
         loc="center",
         colColours=["#f6f6f6"] * len(display_df.columns),
-        bbox=[0.0, 0.05, 1.0, 0.85],  # [x, y, width, height]
+        bbox=[0.0, table_y, 1.0, table_height_ratio],
     )
     table.auto_set_font_size(False)
-    table.set_fontsize(12)
+    table.set_fontsize(table_fs)
 
-    num_rows = len(display_df)
-    total_rows = num_rows + 1
     uniform_height = 1.0 / total_rows
 
     for (row, col), cell in table.get_celld().items():
@@ -2518,6 +2979,7 @@ def main() -> None:
         "portfolio_allocation": "latest_portfolio_allocation.webp",
         "account_assets": "latest_account_assets.webp",
         "exchange_rate": "latest_exchange_rate.webp",
+        "market_indices": "latest_market_indices.webp",
         "monthly_dividends": "latest_monthly_dividends.webp",
         "yearly_dividends": "latest_yearly_dividends.webp",
         "total_holdings": "latest_total_holdings.webp",
