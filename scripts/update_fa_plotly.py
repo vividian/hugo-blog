@@ -1279,8 +1279,15 @@ def _build_dashboard_fragment(data: ReportData) -> str:
 
     blocks: List[str] = [
         "<section class=\"fa-hero\">"
-        f"<div class=\"fa-hero-title\">{html.escape(data.month_end.strftime('%Y년 %m월 자산 대시보드'))}</div>"
-        f"<div class=\"fa-hero-meta\">최종 업데이트: {html.escape(data.month_end.strftime('%Y-%m-%d'))}</div>"
+        "<div class=\"fa-hero-header\">"
+        "  <div>"
+        f"    <div class=\"fa-hero-title\">{html.escape(data.month_end.strftime('%Y년 %m월 자산 대시보드'))}</div>"
+        f"    <div class=\"fa-hero-meta\">최종 업데이트: {html.escape(data.month_end.strftime('%Y-%m-%d'))}</div>"
+        "  </div>"
+        "  <a href=\"https://fa-admin.vividian.net\" class=\"fa-btn-admin\" target=\"_blank\" rel=\"noopener noreferrer\">"
+        "    <span>⚙️ 거래내역 관리</span>"
+        "  </a>"
+        "</div>"
         "</section>",
         _build_kpi_row(data),
         _build_market_kpi_row(),
@@ -1392,8 +1399,36 @@ def _build_dashboard_fragment(data: ReportData) -> str:
 
 /* Hero Section */
 .fa-hero { margin: 8px 0 16px; }
+.fa-hero-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
 .fa-hero-title { font-size: 1.55rem; font-weight: 800; letter-spacing: -0.02em; }
 .fa-hero-meta { margin-top: 4px; color: var(--fa-text-muted); font-size: 0.88rem; }
+.fa-btn-admin {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--fa-card-bg);
+  border: 1px solid var(--fa-border);
+  color: var(--fa-text-main);
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-decoration: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s ease;
+}
+.fa-btn-admin:hover {
+  background: var(--fa-accent-bg);
+  color: var(--fa-accent);
+  border-color: var(--fa-accent);
+  transform: translateY(-1px);
+}
 
 /* KPI Grid */
 .fa-kpi-grid {
