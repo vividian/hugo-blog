@@ -39,7 +39,7 @@ CHART_COLORWAY = [
     "#ED64A6",  # Pink
 ]
 THEME_BG = "rgba(0,0,0,0)"
-THEME_TEXT = "var(--fa-text-main)"
+THEME_TEXT = "#1e293b"
 THEME_GRID = "rgba(128,128,128,0.18)"
 
 MARKET_KPI_CONFIG = [
@@ -1353,32 +1353,9 @@ def _build_dashboard_fragment(data: ReportData) -> str:
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
   color: var(--fa-text-main);
   line-height: 1.5;
-}
-
-html.dark .fa-dashboard {
-  --fa-bg: #0f172a;
-  --fa-card-bg: #1e293b;
-  --fa-card-border: #334155;
-  --fa-card-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.3);
-  --fa-text-main: #f1f5f9;
-  --fa-text-muted: #94a3b8;
-  --fa-text-sub: #64748b;
-  --fa-kpi-bg: #0f172a;
-  --fa-table-header-bg: #0f172a;
-  --fa-table-stripe: rgba(255, 255, 255, 0.02);
-  --fa-table-hover: rgba(255, 255, 255, 0.05);
-  --fa-border: #334155;
-
-  --fa-gain: #f87171;
-  --fa-gain-bg: rgba(239, 68, 68, 0.15);
-  --fa-loss: #60a5fa;
-  --fa-loss-bg: rgba(59, 130, 246, 0.15);
-  --fa-accent: #818cf8;
-  --fa-accent-bg: rgba(99, 102, 241, 0.15);
-  --fa-purple: #c084fc;
-  --fa-purple-bg: rgba(168, 85, 247, 0.15);
-  --fa-ok: #4ade80;
-  --fa-ok-bg: rgba(34, 197, 94, 0.15);
+  background: var(--fa-bg);
+  border-radius: 16px;
+  padding: 16px 0;
 }
 
 /* 숫자 서식 및 색상 유틸리티 */

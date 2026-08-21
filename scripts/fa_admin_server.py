@@ -1,0 +1,1055 @@
+#!/usr/bin/env python3
+"""
+FA 거래내역 관리자 웹 서버 (FA Admin Server)
+- SQLite DB (data/fa_records.db) 기반 거래내역 CRUD (등록/수정/삭제/조회)
+- 자세히보기 대시보드와 일치하는 모던 핀테크 반응형 UI
+- 거래 변경 시 config/trading_records.csv 자동 백업 동기화
+- 원클릭 대시보드 생성(update_fa_plotly.py) 트리거 지원
+"""
+
+import json
+import sqlite3
+import subprocess
+import sys
+import threading
+from datetime import date
+from http import HTTPStatus
+from http.server import HTTPServer, SimpleHTTPRequestHandler
+from pathlib import Path
+from typing import Any, Dict, List
+from urllib.parse import parse_qs, urlparse
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+DB_PATH = ROOT_DIR / "data" / "fa_records.db"
+CSV_PATH = ROOT_DIR / "config" / "trading_records.csv"
+
+ACCOUNT_CHOICES = [
+    {"code": "usa", "name": "미국 주식"},
+    {"code": "kor1", "name": "국내 주식1"},
+    {"code": "kor2", "name": "국내 주식2"},
+    {"code": "sema", "name": "공제회 (SEMA)"},
+    {"code": "irp", "name": "IRP"},
+    {"code": "psf1", "name": "연금저축1"},
+    {"code": "isa1", "name": "ISA1"},
+    {"code": "psf2", "name": "연금저축2"},
+    {"code": "isa2", "name": "ISA2"},
+]
+
+
+def get_db_connection() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def export_db_to_csv():
+    """DB의 거래 데이터를 config/trading_records.csv로 자동 백업 덤프합니다."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT account AS 계좌, date AS 일자, symbol AS 종목,
+                   unit_price AS 단가, quantity AS 수량, dividend AS 배당,
+                   deposit AS 투자금, evaluation AS 평가금, memo AS 비고
+            FROM trading_records
+            ORDER BY date DESC, id DESC;
+        """)
+        rows = cursor.fetchall()
+        conn.close()
+
+        import pandas as pd
+        df = pd.DataFrame([dict(r) for r in rows])
+        if not df.empty:
+            # 날짜를 YYYY.MM.DD 형식으로 보존
+            df["일자"] = df["일자"].str.replace("-", ".", regex=False)
+            CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
+            df.to_csv(CSV_PATH, index=False, encoding="utf-8-sig")
+            print(f"(백업) {CSV_PATH} 덤프 완료 ({len(df)}건)")
+    except Exception as e:
+        print(f"(경고) CSV 자동 백업 덤프 실패: {e}")
+
+
+def run_dashboard_update():
+    """백그라운드에서 update_fa_plotly.py를 실행하여 대시보드를 재생성합니다."""
+    def _worker():
+        try:
+            cmd = [sys.executable, str(ROOT_DIR / "scripts" / "update_fa_plotly.py")]
+            res = subprocess.run(cmd, cwd=ROOT_DIR, capture_output=True, text=True)
+            if res.returncode == 0:
+                print("✅ 대시보드 자동 갱신 완료!")
+            else:
+                print(f"⚠️ 대시보드 갱신 에러: {res.stderr}")
+        except Exception as e:
+            print(f"⚠️ 대시보드 갱신 실행 실패: {e}")
+
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
+
+
+HTML_TEMPLATE = """<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>FA 자산 거래내역 관리자</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ko.js"></script>
+  <style>
+    :root {
+      --fa-bg: #f8fafc;
+      --fa-card-bg: #ffffff;
+      --fa-card-border: #e2e8f0;
+      --fa-card-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05), 0 2px 6px -1px rgba(0, 0, 0, 0.03);
+      --fa-text-main: #1e293b;
+      --fa-text-muted: #64748b;
+      --fa-text-sub: #94a3b8;
+      --fa-kpi-bg: #f8fafc;
+      --fa-border: #e2e8f0;
+      
+      --fa-gain: #e53e3e;
+      --fa-gain-bg: #fff5f5;
+      --fa-loss: #3182ce;
+      --fa-loss-bg: #ebf8ff;
+      --fa-accent: #4f46e5;
+      --fa-accent-hover: #4338ca;
+      --fa-accent-bg: #eef2ff;
+      --fa-purple: #805ad5;
+      --fa-purple-bg: #faf5ff;
+      --fa-ok: #38a169;
+      --fa-ok-bg: #f0fff4;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--fa-bg);
+      color: var(--fa-text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
+      line-height: 1.5;
+      padding: 16px 12px 60px;
+    }
+    .fa-admin-container {
+      max-width: 1050px;
+      margin: 0 auto;
+    }
+
+    /* Header */
+    .fa-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding: 8px 4px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .fa-header-title {
+      font-size: 1.35rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .fa-header-badge {
+      font-size: 0.72rem;
+      font-weight: 700;
+      background: var(--fa-accent-bg);
+      color: var(--fa-accent);
+      padding: 3px 8px;
+      border-radius: 6px;
+    }
+    .fa-btn-refresh {
+      background: #ffffff;
+      border: 1px solid var(--fa-border);
+      color: var(--fa-text-main);
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+    .fa-btn-refresh:hover {
+      background: var(--fa-accent-bg);
+      color: var(--fa-accent);
+      border-color: var(--fa-accent);
+    }
+
+    /* KPI Summary Row */
+    .fa-kpi-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    @media (max-width: 640px) {
+      .fa-kpi-row { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    }
+    .fa-kpi-box {
+      background: var(--fa-card-bg);
+      border: 1px solid var(--fa-card-border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      box-shadow: var(--fa-card-shadow);
+    }
+    .fa-kpi-label { font-size: 0.75rem; font-weight: 600; color: var(--fa-text-muted); margin-bottom: 4px; }
+    .fa-kpi-val { font-size: 1.15rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+    /* Card Section */
+    .fa-card {
+      background: var(--fa-card-bg);
+      border: 1px solid var(--fa-card-border);
+      border-radius: 14px;
+      box-shadow: var(--fa-card-shadow);
+      padding: 20px 22px;
+      margin-bottom: 24px;
+    }
+    .fa-card-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* Form Styles */
+    .fa-form-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+    @media (max-width: 768px) {
+      .fa-form-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 500px) {
+      .fa-form-grid { grid-template-columns: 1fr; }
+    }
+    .fa-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .fa-label {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--fa-text-muted);
+    }
+    .fa-input, .fa-select {
+      background: var(--fa-bg);
+      border: 1px solid var(--fa-border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 0.92rem;
+      color: var(--fa-text-main);
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .fa-input:focus, .fa-select:focus {
+      border-color: var(--fa-accent);
+      box-shadow: 0 0 0 3px var(--fa-accent-bg);
+      background: #ffffff;
+    }
+
+    /* Kind Segment Buttons */
+    .fa-kind-group {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .fa-kind-btn {
+      flex: 1;
+      min-width: 55px;
+      padding: 8px 6px;
+      background: var(--fa-bg);
+      border: 1px solid var(--fa-border);
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--fa-text-muted);
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s;
+    }
+    .fa-kind-btn.active.buy { background: var(--fa-gain-bg); color: var(--fa-gain); border-color: var(--fa-gain); }
+    .fa-kind-btn.active.sell { background: var(--fa-loss-bg); color: var(--fa-loss); border-color: var(--fa-loss); }
+    .fa-kind-btn.active.div { background: var(--fa-purple-bg); color: var(--fa-purple); border-color: var(--fa-purple); }
+    .fa-kind-btn.active.deposit { background: var(--fa-ok-bg); color: var(--fa-ok); border-color: var(--fa-ok); }
+    .fa-kind-btn.active.eval { background: var(--fa-accent-bg); color: var(--fa-accent); border-color: var(--fa-accent); }
+
+    .fa-form-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 18px;
+    }
+    .fa-btn-primary {
+      background: var(--fa-accent);
+      color: #ffffff;
+      border: none;
+      padding: 10px 24px;
+      border-radius: 8px;
+      font-size: 0.92rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+    }
+    .fa-btn-primary:hover { background: var(--fa-accent-hover); }
+    .fa-btn-primary:active { transform: scale(0.98); }
+
+    /* Filter & Table Toolbar */
+    .fa-table-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+    .fa-filter-group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    /* Modern Table */
+    .fa-table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--fa-border);
+      border-radius: 10px;
+    }
+    .fa-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.86rem;
+      text-align: left;
+      white-space: nowrap;
+    }
+    .fa-table th {
+      background: var(--fa-table-header-bg);
+      color: var(--fa-text-muted);
+      font-weight: 700;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--fa-border);
+    }
+    .fa-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--fa-border);
+      font-variant-numeric: tabular-nums;
+    }
+    .fa-table tr:last-child td { border-bottom: none; }
+    .fa-table tr:hover { background: rgba(0,0,0,0.015); }
+    .text-right { text-align: right; }
+
+    /* Badges */
+    .badge {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 5px;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+    .badge-buy { background: var(--fa-gain-bg); color: var(--fa-gain); }
+    .badge-sell { background: var(--fa-loss-bg); color: var(--fa-loss); }
+    .badge-div { background: var(--fa-purple-bg); color: var(--fa-purple); }
+    .badge-deposit { background: var(--fa-ok-bg); color: var(--fa-ok); }
+    .badge-eval { background: var(--fa-accent-bg); color: var(--fa-accent); }
+    .badge-account { background: #f1f5f9; color: #475569; }
+
+    /* Action Buttons */
+    .fa-btn-action {
+      background: transparent;
+      border: 1px solid var(--fa-border);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 0.76rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .fa-btn-edit:hover { background: var(--fa-accent-bg); color: var(--fa-accent); border-color: var(--fa-accent); }
+    .fa-btn-del:hover { background: var(--fa-gain-bg); color: var(--fa-gain); border-color: var(--fa-gain); }
+
+    /* Notification Toast */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #1e293b;
+      color: #ffffff;
+      padding: 12px 20px;
+      border-radius: 10px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.25s ease-out;
+      z-index: 1000;
+    }
+    #toast.show { transform: translateY(0); opacity: 1; }
+  </style>
+</head>
+<body>
+  <div class="fa-admin-container">
+    <!-- Header -->
+    <div class="fa-header">
+      <div class="fa-header-title">
+        <span>📈 FA 자산 거래내역 관리자</span>
+        <span class="fa-header-badge">SQLite DB</span>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="fa-btn-refresh" onclick="triggerDashboardBuild()">
+          <span>📊 대시보드 갱신</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- KPI Row -->
+    <div class="fa-kpi-row">
+      <div class="fa-kpi-box">
+        <div class="fa-kpi-label">총 거래 건수</div>
+        <div class="fa-kpi-val" id="kpi-total-count">-</div>
+      </div>
+      <div class="fa-kpi-box">
+        <div class="fa-kpi-label">최근 거래일</div>
+        <div class="fa-kpi-val" id="kpi-latest-date">-</div>
+      </div>
+      <div class="fa-kpi-box">
+        <div class="fa-kpi-label">당월 총 매수금</div>
+        <div class="fa-kpi-val" style="color:var(--fa-gain);" id="kpi-month-buy">-</div>
+      </div>
+      <div class="fa-kpi-box">
+        <div class="fa-kpi-label">당월 총 배당금</div>
+        <div class="fa-kpi-val" style="color:var(--fa-purple);" id="kpi-month-div">-</div>
+      </div>
+    </div>
+
+    <!-- Trade Input Form Card -->
+    <div class="fa-card">
+      <div class="fa-card-title">
+        <span id="form-heading">✨ 새 거래 등록</span>
+        <button type="button" id="btn-cancel-edit" class="fa-btn-action" style="display:none;" onclick="cancelEdit()">수정 취소</button>
+      </div>
+      <form id="trade-form" onsubmit="handleFormSubmit(event)">
+        <input type="hidden" id="edit-id" value="">
+        <div class="fa-form-grid">
+          <!-- 일자 -->
+          <div class="fa-field">
+            <label class="fa-label">거래 일자</label>
+            <input type="text" id="f-date" class="fa-input" required placeholder="YYYY-MM-DD">
+          </div>
+
+          <!-- 계좌 -->
+          <div class="fa-field">
+            <label class="fa-label">계좌 선택</label>
+            <select id="f-account" class="fa-select" required onchange="handleAccountChange()">
+              <option value="usa">미국 주식</option>
+              <option value="kor1">국내 주식1</option>
+              <option value="kor2">국내 주식2</option>
+              <option value="sema">공제회 (SEMA)</option>
+              <option value="irp">IRP</option>
+              <option value="psf1">연금저축1</option>
+              <option value="isa1">ISA1</option>
+              <option value="psf2">연금저축2</option>
+              <option value="isa2">ISA2</option>
+            </select>
+          </div>
+
+          <!-- 거래 구분 (Kind) -->
+          <div class="fa-field">
+            <label class="fa-label">거래 구분</label>
+            <input type="hidden" id="f-kind" value="매수">
+            <div class="fa-kind-group">
+              <button type="button" class="fa-kind-btn active buy" onclick="selectKind('매수', this)">매수</button>
+              <button type="button" class="fa-kind-btn sell" onclick="selectKind('매도', this)">매도</button>
+              <button type="button" class="fa-kind-btn div" onclick="selectKind('배당', this)">배당</button>
+              <button type="button" class="fa-kind-btn deposit" onclick="selectKind('입금', this)">입금</button>
+              <button type="button" class="fa-kind-btn eval" onclick="selectKind('평가금', this)">평가금</button>
+            </div>
+          </div>
+
+          <!-- 종목명 -->
+          <div class="fa-field">
+            <label class="fa-label">종목명 / 티커</label>
+            <input type="text" id="f-symbol" class="fa-input" list="symbol-datalist" placeholder="예: ACE S&P500, SPYM">
+            <datalist id="symbol-datalist"></datalist>
+          </div>
+
+          <!-- 단가 -->
+          <div class="fa-field" id="wrap-unit-price">
+            <label class="fa-label">체결 단가 (원/$)</label>
+            <input type="number" step="any" id="f-unit-price" class="fa-input" placeholder="0" oninput="calcAmount()">
+          </div>
+
+          <!-- 수량 -->
+          <div class="fa-field" id="wrap-quantity">
+            <label class="fa-label">체결 수량 (주)</label>
+            <input type="number" step="any" id="f-quantity" class="fa-input" placeholder="0" oninput="calcAmount()">
+          </div>
+
+          <!-- 정산 금액 -->
+          <div class="fa-field" id="wrap-amount">
+            <label class="fa-label">체결 금액 (자동계산)</label>
+            <input type="number" step="any" id="f-amount" class="fa-input" placeholder="0">
+          </div>
+
+          <!-- 배당금 (구분이 배당일 때) -->
+          <div class="fa-field" id="wrap-dividend" style="display:none;">
+            <label class="fa-label">배당금 (원/$)</label>
+            <input type="number" step="any" id="f-dividend" class="fa-input" placeholder="0">
+          </div>
+
+          <!-- 투자금 (구분이 입출금일 때) -->
+          <div class="fa-field" id="wrap-deposit" style="display:none;">
+            <label class="fa-label">입금액 / 투자금 (원)</label>
+            <input type="number" step="any" id="f-deposit" class="fa-input" placeholder="0">
+          </div>
+
+          <!-- 평가금 (구분이 평가금일 때) -->
+          <div class="fa-field" id="wrap-evaluation" style="display:none;">
+            <label class="fa-label">계좌 평가금 (원)</label>
+            <input type="number" step="any" id="f-evaluation" class="fa-input" placeholder="0">
+          </div>
+
+          <!-- 환율 -->
+          <div class="fa-field">
+            <label class="fa-label">적용 환율</label>
+            <input type="number" step="any" id="f-exchange" class="fa-input" value="1.0">
+          </div>
+
+          <!-- 비고 / 메모 -->
+          <div class="fa-field">
+            <label class="fa-label">메모 / 비고</label>
+            <input type="text" id="f-memo" class="fa-input" placeholder="메모 입력">
+          </div>
+        </div>
+
+        <div class="fa-form-actions">
+          <button type="submit" id="btn-submit" class="fa-btn-primary">거래 등록하기</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Trade History Table Card -->
+    <div class="fa-card">
+      <div class="fa-card-title">
+        <span>📜 거래 기록 내역</span>
+        <span id="record-count-badge" style="font-size:0.8rem; font-weight:600; color:var(--fa-text-muted);"></span>
+      </div>
+
+      <div class="fa-table-toolbar">
+        <div class="fa-filter-group">
+          <select id="filter-account" class="fa-select" onchange="loadRecords()">
+            <option value="">전체 계좌</option>
+            <option value="usa">미국 주식</option>
+            <option value="kor1">국내 주식1</option>
+            <option value="kor2">국내 주식2</option>
+            <option value="sema">공제회</option>
+            <option value="irp">IRP</option>
+            <option value="psf1">연금저축1</option>
+            <option value="isa1">ISA1</option>
+            <option value="psf2">연금저축2</option>
+            <option value="isa2">ISA2</option>
+          </select>
+          <select id="filter-kind" class="fa-select" onchange="loadRecords()">
+            <option value="">전체 구분</option>
+            <option value="매수">매수</option>
+            <option value="매도">매도</option>
+            <option value="배당">배당</option>
+            <option value="입금">입금</option>
+            <option value="평가금">평가금</option>
+          </select>
+        </div>
+        <div>
+          <input type="text" id="filter-search" class="fa-input" placeholder="종목명 검색..." oninput="debounceLoadRecords()">
+        </div>
+      </div>
+
+      <div class="fa-table-wrap">
+        <table class="fa-table">
+          <thead>
+            <tr>
+              <th>일자</th>
+              <th>계좌</th>
+              <th>구분</th>
+              <th>종목명</th>
+              <th class="text-right">단가</th>
+              <th class="text-right">수량</th>
+              <th class="text-right">체결/배당금액</th>
+              <th>비고</th>
+              <th class="text-right">관리</th>
+            </tr>
+          </thead>
+          <tbody id="records-tbody">
+            <tr><td colspan="9" style="text-align:center; padding:30px; color:var(--fa-text-muted);">데이터 불러오는 중...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script>
+    const ACCOUNT_MAP = {
+      usa: "미국", kor1: "국내1", kor2: "국내2", sema: "공제회",
+      irp: "IRP", psf1: "연금1", isa1: "ISA1", psf2: "연금2", isa2: "ISA2"
+    };
+
+    let allRecords = [];
+
+    document.addEventListener("DOMContentLoaded", () => {
+      flatpickr("#f-date", {
+        locale: "ko",
+        dateFormat: "Y-m-d",
+        defaultDate: new Date()
+      });
+      loadSymbols();
+      loadRecords();
+    });
+
+    function showToast(msg) {
+      const toast = document.getElementById("toast");
+      toast.innerText = msg;
+      toast.classList.add("show");
+      setTimeout(() => toast.classList.remove("show"), 3000);
+    }
+
+    function selectKind(kind, btnEl) {
+      document.querySelectorAll(".fa-kind-btn").forEach(b => b.classList.remove("active"));
+      btnEl.classList.add("active");
+      document.getElementById("f-kind").value = kind;
+
+      // 필드 가시성 토글
+      const isDiv = (kind === '배당');
+      const isDep = (kind === '입금');
+      const isEval = (kind === '평가금');
+
+      document.getElementById("wrap-unit-price").style.display = (isDep || isEval) ? 'none' : 'flex';
+      document.getElementById("wrap-quantity").style.display = (isDep || isEval) ? 'none' : 'flex';
+      document.getElementById("wrap-amount").style.display = (isDiv || isDep || isEval) ? 'none' : 'flex';
+      document.getElementById("wrap-dividend").style.display = isDiv ? 'flex' : 'none';
+      document.getElementById("wrap-deposit").style.display = isDep ? 'flex' : 'none';
+      document.getElementById("wrap-evaluation").style.display = isEval ? 'flex' : 'none';
+    }
+
+    function handleAccountChange() {
+      const acct = document.getElementById("f-account").value;
+      const exField = document.getElementById("f-exchange");
+      if (acct === 'usa') {
+        if (parseFloat(exField.value) <= 1.0) exField.value = 1380.0;
+      } else {
+        exField.value = 1.0;
+      }
+    }
+
+    function calcAmount() {
+      const price = parseFloat(document.getElementById("f-unit-price").value) || 0;
+      const qty = parseFloat(document.getElementById("f-quantity").value) || 0;
+      if (price > 0 && qty > 0) {
+        document.getElementById("f-amount").value = Math.round(price * qty);
+      }
+    }
+
+    async function loadSymbols() {
+      try {
+        const res = await fetch("/api/symbols");
+        const symbols = await res.json();
+        const dl = document.getElementById("symbol-datalist");
+        dl.innerHTML = symbols.map(s => `<option value="${s}">`).join("");
+      } catch(e) {}
+    }
+
+    let debounceTimer = null;
+    function debounceLoadRecords() {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(loadRecords, 250);
+    }
+
+    async function loadRecords() {
+      const acct = document.getElementById("filter-account").value;
+      const kind = document.getElementById("filter-kind").value;
+      const q = document.getElementById("filter-search").value.trim();
+
+      const params = new URLSearchParams();
+      if (acct) params.append("account", acct);
+      if (kind) params.append("kind", kind);
+      if (q) params.append("q", q);
+
+      try {
+        const res = await fetch("/api/records?" + params.toString());
+        const data = await res.json();
+        renderTable(data.records);
+        renderKPIs(data.kpi);
+      } catch(e) {
+        console.error(e);
+      }
+    }
+
+    function renderKPIs(kpi) {
+      if (!kpi) return;
+      document.getElementById("kpi-total-count").innerText = `${kpi.total_count.toLocaleString()}건`;
+      document.getElementById("kpi-latest-date").innerText = kpi.latest_date || "-";
+      document.getElementById("kpi-month-buy").innerText = `${Math.round(kpi.month_buy).toLocaleString()}원`;
+      document.getElementById("kpi-month-div").innerText = `${Math.round(kpi.month_div).toLocaleString()}원`;
+      document.getElementById("record-count-badge").innerText = `조회된 거래: ${kpi.filtered_count.toLocaleString()}건`;
+    }
+
+    function renderTable(records) {
+      const tbody = document.getElementById("records-tbody");
+      if (!records || records.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:30px; color:var(--fa-text-muted);">등록된 거래 내역이 없습니다.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = records.map(r => {
+        let badgeClass = "badge-buy";
+        let kindText = r.kind || "매수";
+        if (kindText === "매도") badgeClass = "badge-sell";
+        else if (kindText === "배당") badgeClass = "badge-div";
+        else if (kindText === "입금") badgeClass = "badge-deposit";
+        else if (kindText === "평가금") badgeClass = "badge-eval";
+
+        let mainAmountStr = "-";
+        if (r.dividend > 0) mainAmountStr = `${r.dividend.toLocaleString()}원`;
+        else if (r.deposit > 0) mainAmountStr = `${r.deposit.toLocaleString()}원`;
+        else if (r.evaluation > 0) mainAmountStr = `${r.evaluation.toLocaleString()}원`;
+        else if (r.amount > 0) mainAmountStr = `${r.amount.toLocaleString()}원`;
+
+        const acctLabel = ACCOUNT_MAP[r.account] || r.account;
+
+        return `
+          <tr>
+            <td style="font-weight:600;">${r.date}</td>
+            <td><span class="badge badge-account">${acctLabel}</span></td>
+            <td><span class="badge ${badgeClass}">${kindText}</span></td>
+            <td style="font-weight:700; color:var(--fa-text-main);">${r.symbol || "-"}</td>
+            <td class="text-right">${r.unit_price > 0 ? r.unit_price.toLocaleString() : "-"}</td>
+            <td class="text-right">${r.quantity > 0 ? r.quantity.toLocaleString() : "-"}</td>
+            <td class="text-right" style="font-weight:700;">${mainAmountStr}</td>
+            <td style="color:var(--fa-text-muted); font-size:0.8rem;">${r.memo || ""}</td>
+            <td class="text-right">
+              <button class="fa-btn-action fa-btn-edit" onclick='startEdit(${JSON.stringify(r)})'>수정</button>
+              <button class="fa-btn-action fa-btn-del" onclick="deleteRecord(${r.id})">삭제</button>
+            </td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    async function handleFormSubmit(e) {
+      e.preventDefault();
+      const editId = document.getElementById("edit-id").value;
+
+      const payload = {
+        date: document.getElementById("f-date").value,
+        account: document.getElementById("f-account").value,
+        kind: document.getElementById("f-kind").value,
+        symbol: document.getElementById("f-symbol").value.trim(),
+        unit_price: parseFloat(document.getElementById("f-unit-price").value) || 0.0,
+        quantity: parseFloat(document.getElementById("f-quantity").value) || 0.0,
+        amount: parseFloat(document.getElementById("f-amount").value) || 0.0,
+        dividend: parseFloat(document.getElementById("f-dividend").value) || 0.0,
+        deposit: parseFloat(document.getElementById("f-deposit").value) || 0.0,
+        evaluation: parseFloat(document.getElementById("f-evaluation").value) || 0.0,
+        exchange_rate: parseFloat(document.getElementById("f-exchange").value) || 1.0,
+        memo: document.getElementById("f-memo").value.trim()
+      };
+
+      try {
+        let res;
+        if (editId) {
+          payload.id = parseInt(editId);
+          res = await fetch(`/api/records/${editId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+        } else {
+          res = await fetch("/api/records", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+        }
+
+        const data = await res.json();
+        if (data.ok) {
+          showToast(editId ? "거래가 성공적으로 수정되었습니다! ✅" : "새 거래가 성공적으로 등록되었습니다! 🎉");
+          cancelEdit();
+          loadRecords();
+          loadSymbols();
+        } else {
+          alert("저장 실패: " + (data.error || "오류가 발생했습니다."));
+        }
+      } catch(err) {
+        alert("네트워크 통신 오류가 발생했습니다.");
+      }
+    }
+
+    function startEdit(r) {
+      document.getElementById("edit-id").value = r.id;
+      document.getElementById("f-date").value = r.date;
+      document.getElementById("f-account").value = r.account;
+      document.getElementById("f-symbol").value = r.symbol || "";
+      document.getElementById("f-unit-price").value = r.unit_price || "";
+      document.getElementById("f-quantity").value = r.quantity || "";
+      document.getElementById("f-amount").value = r.amount || "";
+      document.getElementById("f-dividend").value = r.dividend || "";
+      document.getElementById("f-deposit").value = r.deposit || "";
+      document.getElementById("f-evaluation").value = r.evaluation || "";
+      document.getElementById("f-exchange").value = r.exchange_rate || "1.0";
+      document.getElementById("f-memo").value = r.memo || "";
+
+      // 버튼 뱃지 선택
+      const kind = r.kind || "매수";
+      const btn = Array.from(document.querySelectorAll(".fa-kind-btn")).find(b => b.innerText === kind);
+      if (btn) selectKind(kind, btn);
+
+      document.getElementById("form-heading").innerText = `✏️ 거래 수정 (ID #${r.id})`;
+      document.getElementById("btn-submit").innerText = "수정 완료";
+      document.getElementById("btn-cancel-edit").style.display = "inline-block";
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function cancelEdit() {
+      document.getElementById("edit-id").value = "";
+      document.getElementById("trade-form").reset();
+      document.getElementById("f-date").value = new Date().toISOString().split("T")[0];
+      selectKind('매수', document.querySelector('.fa-kind-btn.buy'));
+      document.getElementById("form-heading").innerText = "✨ 새 거래 등록";
+      document.getElementById("btn-submit").innerText = "거래 등록하기";
+      document.getElementById("btn-cancel-edit").style.display = "none";
+    }
+
+    async function deleteRecord(id) {
+      if (!confirm("정말 이 거래 내역을 삭제하시겠습니까?")) return;
+      try {
+        const res = await fetch(`/api/records/${id}`, { method: "DELETE" });
+        const data = await res.json();
+        if (data.ok) {
+          showToast("거래 내역이 삭제되었습니다.");
+          loadRecords();
+        }
+      } catch(e) {
+        alert("삭제 실패");
+      }
+    }
+
+    async function triggerDashboardBuild() {
+      showToast("대시보드 갱신 작업을 백그라운드에서 시작했습니다... ⏳");
+      try {
+        await fetch("/api/build-dashboard", { method: "POST" });
+      } catch(e) {}
+    }
+  </script>
+</body>
+</html>
+"""
+
+
+class FAAdminRequestHandler(SimpleHTTPRequestHandler):
+    def _send_json(self, data: Any, status: int = 200):
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+
+    def do_GET(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+
+        if path in ("/", "/index.html", "/admin"):
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(HTML_TEMPLATE.encode("utf-8"))
+            return
+
+        if path == "/api/symbols":
+            conn = get_db_connection()
+            cur = conn.cursor()
+            cur.execute("SELECT DISTINCT symbol FROM trading_records WHERE symbol != '' ORDER BY symbol ASC;")
+            symbols = [r["symbol"] for r in cur.fetchall()]
+            conn.close()
+            self._send_json(symbols)
+            return
+
+        if path == "/api/records":
+            qs = parse_qs(parsed.query)
+            acct = qs.get("account", [""])[0]
+            kind = qs.get("kind", [""])[0]
+            q = qs.get("q", [""])[0]
+
+            conn = get_db_connection()
+            cur = conn.cursor()
+
+            query = "SELECT * FROM trading_records WHERE 1=1"
+            params = []
+            if acct:
+                query += " AND account = ?"
+                params.append(acct)
+            if kind:
+                query += " AND kind = ?"
+                params.append(kind)
+            if q:
+                query += " AND symbol LIKE ?"
+                params.append(f"%{q}%")
+
+            query += " ORDER BY date DESC, id DESC"
+            cur.execute(query, params)
+            rows = [dict(r) for r in cur.fetchall()]
+
+            # KPI 요약 계산
+            cur.execute("SELECT COUNT(*) AS cnt, MAX(date) AS max_date FROM trading_records;")
+            base_stat = cur.fetchone()
+            total_count = base_stat["cnt"] if base_stat else 0
+            latest_date = base_stat["max_date"] if base_stat else "-"
+
+            # 당월 매수금 / 배당금 합산
+            current_month = date.today().strftime("%Y-%m")
+            cur.execute("""
+                SELECT
+                    SUM(CASE WHEN kind = '매수' THEN amount ELSE 0 END) AS month_buy,
+                    SUM(CASE WHEN kind = '배당' THEN dividend ELSE 0 END) AS month_div
+                FROM trading_records
+                WHERE date LIKE ?;
+            """, (f"{current_month}%",))
+            month_stat = cur.fetchone()
+            month_buy = month_stat["month_buy"] or 0.0
+            month_div = month_stat["month_div"] or 0.0
+
+            conn.close()
+
+            self._send_json({
+                "records": rows,
+                "kpi": {
+                    "total_count": total_count,
+                    "latest_date": latest_date,
+                    "month_buy": month_buy,
+                    "month_div": month_div,
+                    "filtered_count": len(rows),
+                }
+            })
+            return
+
+        self.send_error(HTTPStatus.NOT_FOUND)
+
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+
+        if path == "/api/build-dashboard":
+            run_dashboard_update()
+            self._send_json({"ok": True})
+            return
+
+        if path == "/api/records":
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length).decode("utf-8")
+            data = json.loads(body)
+
+            conn = get_db_connection()
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO trading_records (
+                    date, account, symbol, kind, unit_price, quantity,
+                    amount, dividend, deposit, evaluation, exchange_rate, memo
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """, (
+                data.get("date"), data.get("account"), data.get("symbol", ""),
+                data.get("kind", "매수"), float(data.get("unit_price") or 0),
+                float(data.get("quantity") or 0), float(data.get("amount") or 0),
+                float(data.get("dividend") or 0), float(data.get("deposit") or 0),
+                float(data.get("evaluation") or 0), float(data.get("exchange_rate") or 1.0),
+                data.get("memo", "")
+            ))
+            conn.commit()
+            new_id = cur.lastrowid
+            conn.close()
+
+            export_db_to_csv()
+            run_dashboard_update()
+            self._send_json({"ok": True, "id": new_id})
+            return
+
+        self.send_error(HTTPStatus.NOT_FOUND)
+
+    def do_PUT(self):
+        parsed = urlparse(self.path)
+        if parsed.path.startswith("/api/records/"):
+            rec_id = int(parsed.path.split("/")[-1])
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length).decode("utf-8")
+            data = json.loads(body)
+
+            conn = get_db_connection()
+            cur = conn.cursor()
+            cur.execute("""
+                UPDATE trading_records SET
+                    date = ?, account = ?, symbol = ?, kind = ?, unit_price = ?,
+                    quantity = ?, amount = ?, dividend = ?, deposit = ?,
+                    evaluation = ?, exchange_rate = ?, memo = ?
+                WHERE id = ?;
+            """, (
+                data.get("date"), data.get("account"), data.get("symbol", ""),
+                data.get("kind", "매수"), float(data.get("unit_price") or 0),
+                float(data.get("quantity") or 0), float(data.get("amount") or 0),
+                float(data.get("dividend") or 0), float(data.get("deposit") or 0),
+                float(data.get("evaluation") or 0), float(data.get("exchange_rate") or 1.0),
+                data.get("memo", ""), rec_id
+            ))
+            conn.commit()
+            conn.close()
+
+            export_db_to_csv()
+            run_dashboard_update()
+            self._send_json({"ok": True})
+            return
+
+        self.send_error(HTTPStatus.NOT_FOUND)
+
+    def do_DELETE(self):
+        parsed = urlparse(self.path)
+        if parsed.path.startswith("/api/records/"):
+            rec_id = int(parsed.path.split("/")[-1])
+            conn = get_db_connection()
+            cur = conn.cursor()
+            cur.execute("DELETE FROM trading_records WHERE id = ?;", (rec_id,))
+            conn.commit()
+            conn.close()
+
+            export_db_to_csv()
+            run_dashboard_update()
+            self._send_json({"ok": True})
+            return
+
+        self.send_error(HTTPStatus.NOT_FOUND)
+
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="FA Trading Records Admin Web Server")
+    parser.add_argument("--port", type=int, default=8095, help="Port to listen on (default: 8095)")
+    parser.add_argument("--host", type=str, default="0.0.0.0", help="Host address (default: 0.0.0.0)")
+    args = parser.parse_args()
+
+    server_address = (args.host, args.port)
+    httpd = HTTPServer(server_address, FAAdminRequestHandler)
+    print(f"🚀 FA 거래내역 관리자 서버 시작: http://{args.host}:{args.port}")
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\n서버를 종료합니다.")
+
+
+if __name__ == "__main__":
+    main()

@@ -397,7 +397,32 @@ def _clean_numeric(series: Iterable) -> pd.Series:
 
 
 def read_trading_records() -> pd.DataFrame:
-    """trading_records.csv 파일을 읽어 DataFrame으로 반환한다."""
+    """fa_records.db (SQLite) 또는 trading_records.csv 파일을 읽어 DataFrame으로 반환한다."""
+    db_path = ROOT_DIR / "data" / "fa_records.db"
+    if db_path.exists():
+        import sqlite3
+        try:
+            conn = sqlite3.connect(db_path)
+            query = """
+            SELECT date AS 일자, account AS 계좌, symbol AS 종목, kind AS 구분,
+                   unit_price AS 단가, quantity AS 수량, amount AS 금액,
+                   dividend AS 배당, deposit AS 투자금, evaluation AS 평가금,
+                   exchange_rate AS 환율, memo AS 비고
+            FROM trading_records
+            ORDER BY date ASC, id ASC;
+            """
+            df = pd.read_sql_query(query, conn)
+            conn.close()
+            if not df.empty:
+                df["일자"] = pd.to_datetime(df["일자"], errors="coerce")
+                numeric_cols = ["단가", "수량", "배당", "투자금", "평가금", "환율", "금액"]
+                for col in numeric_cols:
+                    if col in df.columns:
+                        df[col] = pd.to_numeric(df[col], errors="coerce")
+                return df
+        except Exception as e:
+            print(f"(경고) SQLite DB 로드 실패, CSV 폴백 시도: {e}")
+
     if not TRADING_RECORDS_PATH.exists():
         raise FileNotFoundError(f"trading_records.csv 파일을 찾을 수 없습니다: {TRADING_RECORDS_PATH}")
 
@@ -1523,7 +1548,32 @@ def _clean_numeric(series: Iterable) -> pd.Series:
 
 
 def read_trading_records() -> pd.DataFrame:
-    """trading_records.csv 파일을 읽어 DataFrame으로 반환한다."""
+    """fa_records.db (SQLite) 또는 trading_records.csv 파일을 읽어 DataFrame으로 반환한다."""
+    db_path = ROOT_DIR / "data" / "fa_records.db"
+    if db_path.exists():
+        import sqlite3
+        try:
+            conn = sqlite3.connect(db_path)
+            query = """
+            SELECT date AS 일자, account AS 계좌, symbol AS 종목, kind AS 구분,
+                   unit_price AS 단가, quantity AS 수량, amount AS 금액,
+                   dividend AS 배당, deposit AS 투자금, evaluation AS 평가금,
+                   exchange_rate AS 환율, memo AS 비고
+            FROM trading_records
+            ORDER BY date ASC, id ASC;
+            """
+            df = pd.read_sql_query(query, conn)
+            conn.close()
+            if not df.empty:
+                df["일자"] = pd.to_datetime(df["일자"], errors="coerce")
+                numeric_cols = ["단가", "수량", "배당", "투자금", "평가금", "환율", "금액"]
+                for col in numeric_cols:
+                    if col in df.columns:
+                        df[col] = pd.to_numeric(df[col], errors="coerce")
+                return df
+        except Exception as e:
+            print(f"(경고) SQLite DB 로드 실패, CSV 폴백 시도: {e}")
+
     if not TRADING_RECORDS_PATH.exists():
         raise FileNotFoundError(f"trading_records.csv 파일을 찾을 수 없습니다: {TRADING_RECORDS_PATH}")
 
