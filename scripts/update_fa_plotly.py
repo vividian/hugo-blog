@@ -1333,36 +1333,53 @@ def _build_dashboard_fragment(data: ReportData) -> str:
    FA Modern Fintech Dashboard Design System
    ========================================================= */
 .fa-dashboard {
-  --fa-bg: #f8fafc;
-  --fa-card-bg: #ffffff;
-  --fa-card-border: #e2e8f0;
-  --fa-card-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05), 0 2px 6px -1px rgba(0, 0, 0, 0.03);
-  --fa-text-main: #1e293b;
-  --fa-text-muted: #64748b;
-  --fa-text-sub: #94a3b8;
-  --fa-kpi-bg: #f8fafc;
-  --fa-table-header-bg: #f1f5f9;
-  --fa-table-stripe: #f8fafc;
-  --fa-table-hover: #f1f5f9;
-  --fa-border: #e2e8f0;
+  --fa-bg: #f8fafc !important;
+  --fa-card-bg: #ffffff !important;
+  --fa-card-border: #e2e8f0 !important;
+  --fa-card-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05), 0 2px 6px -1px rgba(0, 0, 0, 0.03) !important;
+  --fa-text-main: #1e293b !important;
+  --fa-text-muted: #64748b !important;
+  --fa-text-sub: #94a3b8 !important;
+  --fa-kpi-bg: #f8fafc !important;
+  --fa-table-header-bg: #f1f5f9 !important;
+  --fa-table-stripe: #f8fafc !important;
+  --fa-table-hover: #f1f5f9 !important;
+  --fa-border: #e2e8f0 !important;
   
-  --fa-gain: #e53e3e;        /* 한국 표준 상승/수익: 레드 */
-  --fa-gain-bg: #fff5f5;
-  --fa-loss: #3182ce;        /* 한국 표준 하락/손실: 블루 */
-  --fa-loss-bg: #ebf8ff;
-  --fa-accent: #4f46e5;
-  --fa-accent-bg: #eef2ff;
-  --fa-purple: #805ad5;
-  --fa-purple-bg: #faf5ff;
-  --fa-ok: #38a169;
-  --fa-ok-bg: #f0fff4;
+  --fa-gain: #e53e3e !important;
+  --fa-gain-bg: #fff5f5 !important;
+  --fa-loss: #3182ce !important;
+  --fa-loss-bg: #ebf8ff !important;
+  --fa-accent: #4f46e5 !important;
+  --fa-accent-bg: #eef2ff !important;
+  --fa-purple: #805ad5 !important;
+  --fa-purple-bg: #faf5ff !important;
+  --fa-ok: #38a169 !important;
+  --fa-ok-bg: #f0fff4 !important;
 
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
-  color: var(--fa-text-main);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif !important;
+  color: #1e293b !important;
   line-height: 1.5;
-  background: var(--fa-bg);
-  border-radius: 16px;
-  padding: 16px 0;
+  background: #f8fafc !important;
+  border-radius: 16px !important;
+  padding: 24px 20px !important;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08) !important;
+  border: 1px solid #e2e8f0 !important;
+  color-scheme: light !important;
+}
+
+/* 블로그 전역 다크모드 상속 차단 */
+body[data-theme="dark"] .fa-dashboard,
+html[data-theme="dark"] .fa-dashboard,
+.dark .fa-dashboard {
+  background: #f8fafc !important;
+  color: #1e293b !important;
+  color-scheme: light !important;
+}
+body[data-theme="dark"] .fa-dashboard *,
+html[data-theme="dark"] .fa-dashboard *,
+.dark .fa-dashboard * {
+  color-scheme: light !important;
 }
 
 /* 숫자 서식 및 색상 유틸리티 */
