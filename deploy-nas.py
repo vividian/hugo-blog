@@ -42,8 +42,7 @@ def run_python(script: str, *args: str) -> None:
 def clean_metadata_dirs(paths: list[Path]) -> None:
     """
     Synology NAS 환경에서 자동으로 생성되는 `@eaDir` 같은 메타데이터 폴더를 재귀적으로 찾아 제거합니다.
-    - 지정된 경로 리스트(`paths`) 내에 존재하는 모든 하위 `@eaDir`를 삭제합니다.
-    - 폴더 삭제 중 오류 발생 시, 경고 메시지를 출력하고 계속 진행합니다.
+    또한 Hugo 빌드 에러를 유발하는 data/ 내의 .db 파일을 db/로 이동하거나 정리합니다.
     """
     for base in paths:
         if not base.exists():
@@ -55,6 +54,20 @@ def clean_metadata_dirs(paths: list[Path]) -> None:
                     print(f"삭제: {ea_dir}")
                 except Exception as exc:
                     print(f"(경고) {ea_dir} 제거 실패: {exc}")
+
+    # data/ 폴더에 잘못 위치한 .db 파일 자동 이동/정리
+    data_dir = ROOT / "data"
+    db_dir = ROOT / "db"
+    db_dir.mkdir(parents=True, exist_ok=True)
+    if data_dir.exists():
+        for db_file in data_dir.glob("*.db"):
+            target = db_dir / db_file.name
+            if not target.exists():
+                shutil.move(str(db_file), str(target))
+                print(f"이동: {db_file} -> {target}")
+            else:
+                db_file.unlink()
+                print(f"삭제(중복): {db_file}")
 
 
 def parse_args() -> argparse.Namespace:
