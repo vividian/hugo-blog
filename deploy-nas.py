@@ -204,8 +204,13 @@ def main() -> int:
     # 사이트 빌드
     public_dir = build_site(args.full_portfolio)
 
-    # 배포 대상 경로 결정
+    # 배포 대상 경로 결정 (지정되지 않은 경우 config.yaml의 ssh_deploy.web_public 자동 적용)
     target_path = args.target
+    if not target_path:
+        web_pub_cfg = get_value("ssh_deploy.web_public")
+        if web_pub_cfg and Path(web_pub_cfg).exists():
+            target_path = Path(web_pub_cfg)
+
     if target_path:
         sync_to_target(public_dir, target_path)
         print(f"배포 완료: {public_dir} → {target_path}")
