@@ -20,7 +20,7 @@ from typing import Any, Dict, List
 from urllib.parse import parse_qs, urlparse
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
-DB_PATH = ROOT_DIR / "data" / "fa_records.db"
+DB_PATH = ROOT_DIR / "db" / "fa_records.db"
 CSV_PATH = ROOT_DIR / "config" / "trading_records.csv"
 
 ACCOUNT_CHOICES = [

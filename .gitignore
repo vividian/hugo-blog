@@ -48,6 +48,8 @@ log/
 *.zip
 *.tar
 *.tar.gz
+db/
+*.db
 
 # Local configuration
 config/local_*.json

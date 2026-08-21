@@ -398,7 +398,7 @@ def _clean_numeric(series: Iterable) -> pd.Series:
 
 def read_trading_records() -> pd.DataFrame:
     """fa_records.db (SQLite) 또는 trading_records.csv 파일을 읽어 DataFrame으로 반환한다."""
-    db_path = ROOT_DIR / "data" / "fa_records.db"
+    db_path = ROOT_DIR / "db" / "fa_records.db"
     if db_path.exists():
         import sqlite3
         try:
@@ -1549,7 +1549,7 @@ def _clean_numeric(series: Iterable) -> pd.Series:
 
 def read_trading_records() -> pd.DataFrame:
     """fa_records.db (SQLite) 또는 trading_records.csv 파일을 읽어 DataFrame으로 반환한다."""
-    db_path = ROOT_DIR / "data" / "fa_records.db"
+    db_path = ROOT_DIR / "db" / "fa_records.db"
     if db_path.exists():
         import sqlite3
         try:

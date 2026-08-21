@@ -9,7 +9,7 @@ import pandas as pd
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 CSV_PATH = ROOT_DIR / "config" / "trading_records.csv"
-DB_PATH = ROOT_DIR / "data" / "fa_records.db"
+DB_PATH = ROOT_DIR / "db" / "fa_records.db"
 
 
 def init_db(conn: sqlite3.Connection):
