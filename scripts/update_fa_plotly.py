@@ -1436,22 +1436,22 @@ def _build_dashboard_fragment(data: ReportData) -> str:
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: var(--fa-card-bg);
-  border: 1px solid var(--fa-border);
-  color: var(--fa-text-main);
-  padding: 8px 14px;
+  background: #4f46e5 !important;
+  color: #ffffff !important;
+  border: 1px solid #4338ca !important;
+  padding: 8px 16px;
   border-radius: 8px;
   font-size: 0.85rem;
   font-weight: 700;
   text-decoration: none;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3) !important;
   transition: all 0.2s ease;
 }
 .fa-btn-admin:hover {
-  background: var(--fa-accent-bg);
-  color: var(--fa-accent);
-  border-color: var(--fa-accent);
+  background: #4338ca !important;
+  color: #ffffff !important;
   transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4) !important;
 }
 
 /* KPI Grid */
