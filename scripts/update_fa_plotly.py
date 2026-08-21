@@ -301,8 +301,8 @@ def _build_assets_trend(account_df: pd.DataFrame) -> go.Figure:
             )
         )
     fig.update_layout(
-        height=350,
-        margin=dict(l=15, r=15, t=35, b=25),
+        height=370,
+        margin=dict(l=15, r=15, t=65, b=25),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0, font=dict(size=12, family=FONT_FAMILY)),
         showlegend=True,
         font=dict(family=FONT_FAMILY, size=12),
@@ -350,8 +350,8 @@ def _build_assets_investment_trend(account_df: pd.DataFrame, invest_series: pd.S
         )
     )
     fig.update_layout(
-        height=350,
-        margin=dict(l=15, r=15, t=35, b=25),
+        height=370,
+        margin=dict(l=15, r=15, t=65, b=25),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0, font=dict(size=12, family=FONT_FAMILY)),
         showlegend=True,
         font=dict(family=FONT_FAMILY, size=12),
@@ -449,9 +449,10 @@ def _build_portfolio_allocation_charts(holdings_df: pd.DataFrame, symbol_map: Di
             labels=group_df["asset_group"],
             values=group_df["평가금"],
             textinfo="percent+label",
+            textposition="inside",
+            insidetextorientation="horizontal",
             hole=0.5,
             name="자산군",
-            textposition="inside",
             showlegend=False,
             marker=dict(colors=CHART_COLORWAY),
             hovertemplate="<b>%{label}</b><br>평가금: %{value:,.0f}원<br>비중: %{percent}<extra></extra>",
@@ -465,9 +466,10 @@ def _build_portfolio_allocation_charts(holdings_df: pd.DataFrame, symbol_map: Di
             labels=region_df["region"],
             values=region_df["평가금"],
             textinfo="percent+label",
+            textposition="inside",
+            insidetextorientation="horizontal",
             hole=0.5,
             name="지역",
-            textposition="inside",
             showlegend=False,
             marker=dict(colors=CHART_COLORWAY),
             hovertemplate="<b>%{label}</b><br>평가금: %{value:,.0f}원<br>비중: %{percent}<extra></extra>",
@@ -481,9 +483,10 @@ def _build_portfolio_allocation_charts(holdings_df: pd.DataFrame, symbol_map: Di
             labels=class_df["asset_class"],
             values=class_df["평가금"],
             textinfo="percent+label",
+            textposition="inside",
+            insidetextorientation="horizontal",
             hole=0.5,
             name="대표 자산",
-            textposition="inside",
             showlegend=False,
             marker=dict(colors=CHART_COLORWAY),
             hovertemplate="<b>%{label}</b><br>평가금: %{value:,.0f}원<br>비중: %{percent}<extra></extra>",
@@ -537,8 +540,7 @@ def _build_dividends_chart(pivot: pd.DataFrame) -> go.Figure:
         barmode="stack",
         height=320,
         margin=dict(l=15, r=15, t=30, b=25),
-        showlegend=True,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0, font=dict(size=11, family=FONT_FAMILY)),
+        showlegend=False,
         font=dict(family=FONT_FAMILY, size=12),
         paper_bgcolor=THEME_BG,
         plot_bgcolor=THEME_BG,
@@ -588,8 +590,7 @@ def _build_yearly_dividends_chart(pivot: pd.DataFrame) -> go.Figure:
         barmode="stack",
         height=320,
         margin=dict(l=15, r=15, t=30, b=25),
-        showlegend=True,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0, font=dict(size=11, family=FONT_FAMILY)),
+        showlegend=False,
         font=dict(family=FONT_FAMILY, size=12),
         paper_bgcolor=THEME_BG,
         plot_bgcolor=THEME_BG,
@@ -770,31 +771,47 @@ def _build_total_holdings_html_table(holdings_df: pd.DataFrame) -> str:
 
 
 def _build_account_detail_section(
-    data: ReportData,
-    fig_renderer,
+    data: update_fa.MonthlyData,
+    fig_renderer: Callable[[go.Figure], str],
 ) -> str:
-    """계좌별 상세 데이터를 스마트 탭 인터페이스로 렌더링"""
-    if not data.valid_detail_accounts:
-        return ""
-
-    accounts = list(data.valid_detail_accounts)
-
-    # 1. 탭 네비게이션 버튼들
+    """계좌별 상세 현황(비중 차트 + 종목별 카드 + 리밸런싱 가이드)을 탭 UI로 통합 렌더링"""
     tab_btns = []
     tab_panes = []
 
-    for idx, account in enumerate(accounts):
-        is_active = idx == 0
-        active_cls = " active" if is_active else ""
-        label = update_fa.account_label(account)
-        tab_id = f"fa-tab-acc-{account}"
+    # 계좌별/종목별 누적 배당금 사전 계산
+    div_records = data.records[(data.records["배당"].notna()) & (pd.to_numeric(data.records["배당"], errors="coerce") > 0)].copy()
+    div_by_acct_sym: Dict[Tuple[str, str], float] = {}
+    if not div_records.empty:
+        div_records["배당원화"] = div_records.apply(
+            lambda r: update_fa.convert_to_krw(r["계좌"], float(r["배당"]), pd.Timestamp(r["일자"]), data.fx_series_month),
+            axis=1,
+        )
+        for (acct_code, sym), grp in div_records.groupby(["계좌", "종목"]):
+            div_by_acct_sym[(str(acct_code).strip(), str(sym).strip())] = float(grp["배당원화"].sum())
 
+    accounts = list(data.valid_detail_accounts)
+    for idx, account in enumerate(accounts):
+        label = update_fa.account_label(account)
+        tab_id = f"fa-tab-content-{account}"
+        active_cls = " active" if idx == 0 else ""
+
+        # 상단 가로 탭 버튼
         tab_btns.append(
-            f"<button type=\"button\" class=\"fa-tab-btn{active_cls}\" data-target=\"{tab_id}\">{html.escape(label)}</button>"
+            f"<button type='button' class='fa-tab-btn{active_cls}' data-target='{tab_id}'>{html.escape(label)}</button>"
         )
 
-        # 계좌별 데이터 추출
+        # 계좌별 보유 종목 데이터
         account_holdings = data.holdings_df[data.holdings_df["계좌"] == account].copy()
+        if account == "sema" and account_holdings.empty and not status_row.empty:
+            account_holdings = pd.DataFrame([{
+                "계좌": "sema",
+                "종목": "교직원공제회",
+                "매수금": invest_val,
+                "평가금": eval_val,
+                "수익금": profit_val,
+                "수익률": rate_val,
+            }])
+
         if not account_holdings.empty:
             account_holdings = account_holdings.sort_values("평가금", ascending=False)
 
@@ -837,6 +854,7 @@ def _build_account_detail_section(
                         values=account_holdings["평가금"],
                         textinfo="percent+label",
                         textposition="inside",
+                        insidetextorientation="horizontal",
                         hole=0.48,
                         showlegend=False,
                         marker=dict(colors=[_palette_color(i) for i in range(len(account_holdings))]),
@@ -855,40 +873,62 @@ def _build_account_detail_section(
             )
             chart_html = fig_renderer(pie_fig)
 
-        # 종목별 테이블 HTML
-        table_lines = [
-            "<table class='fa-table fa-table-responsive fa-table-account-detail'>",
-            "<thead>",
-            "  <tr>",
-            "    <th>종목</th>",
-            "    <th class='text-right'>매수금</th>",
-            "    <th class='text-right'>평가금</th>",
-            "    <th class='text-right'>수익금</th>",
-            "    <th class='text-right'>수익률</th>",
-            "  </tr>",
-            "</thead>",
-            "<tbody>",
-        ]
+        # 종목별 카드 그리드 HTML (2열 반응형 종목 카드)
+        stock_cards = []
+        total_acct_eval = account_holdings["평가금"].sum() if not account_holdings.empty else 0.0
+
         for _, hrow in account_holdings.iterrows():
-            sym = str(hrow["종목"])
+            sym = str(hrow["종목"]).strip()
             b_amt = _as_float(hrow.get("매수금"))
             e_amt = _as_float(hrow.get("평가금"))
             p_amt = _as_float(hrow.get("수익금"))
             r_rate = _as_float(hrow.get("수익률"))
+            weight_pct = (e_amt / total_acct_eval * 100.0) if total_acct_eval > 0 and e_amt is not None else 0.0
+
+            cum_div = div_by_acct_sym.get((account, sym), 0.0)
+            if cum_div == 0.0 and account == "sema" and dividend_val is not None:
+                cum_div = dividend_val
+            div_str = f"{cum_div:,.0f}원"
 
             p_cls = "fa-num-positive" if (p_amt or 0) > 0 else "fa-num-negative" if (p_amt or 0) < 0 else ""
             p_bdg = "fa-badge-positive" if (p_amt or 0) > 0 else "fa-badge-negative" if (p_amt or 0) < 0 else "fa-badge-neutral"
 
-            table_lines.append("  <tr>")
-            table_lines.append(f"    <td data-label='종목' class='fa-col-symbol'><strong>{html.escape(sym)}</strong></td>")
-            table_lines.append(f"    <td data-label='매수금' class='text-right fa-num'>{b_amt:,.0f}원</td>" if b_amt is not None else "<td data-label='매수금' class='text-right'>-</td>")
-            table_lines.append(f"    <td data-label='평가금' class='text-right fa-num fa-font-bold'>{e_amt:,.0f}원</td>" if e_amt is not None else "<td data-label='평가금' class='text-right'>-</td>")
-            table_lines.append(f"    <td data-label='수익금' class='text-right fa-num {p_cls}'>{p_amt:+,.0f}원</td>" if p_amt is not None else "<td data-label='수익금' class='text-right'>-</td>")
-            table_lines.append(f"    <td data-label='수익률' class='text-right fa-num'><span class='fa-badge {p_bdg}'>{r_rate * 100:+.2f}%</span></td>" if r_rate is not None else "<td data-label='수익률' class='text-right'>-</td>")
-            table_lines.append("  </tr>")
-        table_lines.append("</tbody>")
-        table_lines.append("</table>")
-        table_html = "\n".join(table_lines)
+            b_str = f"{b_amt:,.0f}원" if b_amt is not None else "-"
+            e_str = f"{e_amt:,.0f}원" if e_amt is not None else "-"
+            p_str = f"{p_amt:+,.0f}원" if p_amt is not None and p_amt != 0 else (f"{p_amt:,.0f}원" if p_amt is not None else "-")
+            r_str = f"{r_rate * 100:+.2f}%" if r_rate is not None else "-"
+
+            stock_cards.append(
+                f"<div class='fa-stock-card'>"
+                f"  <div class='fa-stock-card-head'>"
+                f"    <div class='fa-stock-card-title'>{html.escape(sym)}</div>"
+                f"    <div class='fa-stock-card-badges'>"
+                f"      <span class='fa-chip-weight'>비중 {weight_pct:.1f}%</span>"
+                f"      <span class='fa-badge {p_bdg}'>{r_str}</span>"
+                f"    </div>"
+                f"  </div>"
+                f"  <div class='fa-stock-card-body'>"
+                f"    <div class='fa-stock-field'>"
+                f"      <span class='fa-stock-lbl'>평가금</span>"
+                f"      <span class='fa-stock-val fa-font-bold'>{e_str}</span>"
+                f"    </div>"
+                f"    <div class='fa-stock-field'>"
+                f"      <span class='fa-stock-lbl'>매수금</span>"
+                f"      <span class='fa-stock-val'>{b_str}</span>"
+                f"    </div>"
+                f"    <div class='fa-stock-field'>"
+                f"      <span class='fa-stock-lbl'>수익금</span>"
+                f"      <span class='fa-stock-val {p_cls}'>{p_str}</span>"
+                f"    </div>"
+                f"    <div class='fa-stock-field'>"
+                f"      <span class='fa-stock-lbl'>누적 배당금</span>"
+                f"      <span class='fa-stock-val' style='color: var(--fa-purple);'>{div_str}</span>"
+                f"    </div>"
+                f"  </div>"
+                f"</div>"
+            )
+
+        stock_cards_html = f"<div class='fa-stock-grid'>{''.join(stock_cards)}</div>"
 
         # 리밸런싱 가이드 뱃지 카드들
         rebal_cards = []
@@ -938,8 +978,14 @@ def _build_account_detail_section(
             f"<div id='{tab_id}' class='fa-tab-pane{active_cls}'>"
             f"{mini_kpi_html}"
             f"<div class='fa-account-split-grid'>"
-            f"  <div class='fa-account-chart-col'><div class='fa-subcard-title'>자산 비중</div>{chart_html}</div>"
-            f"  <div class='fa-account-table-col'><div class='fa-subcard-title'>보유 종목</div><div class='fa-table-wrapper'>{table_html}</div></div>"
+            f"  <div class='fa-account-chart-col'>"
+            f"    <div class='fa-subcard-title'>자산 비중</div>"
+            f"    <div class='fa-account-chart-card'>{chart_html}</div>"
+            f"  </div>"
+            f"  <div class='fa-account-table-col'>"
+            f"    <div class='fa-subcard-title'>보유 종목 현황</div>"
+            f"    {stock_cards_html}"
+            f"  </div>"
             f"</div>"
             f"{rebal_html}"
             f"</div>"
@@ -962,17 +1008,17 @@ def _build_trading_history(
     records: pd.DataFrame,
     fx_series: pd.Series,
     month_end: pd.Timestamp,
-) -> Tuple[str, List[Tuple[str, str, str, str]]]:
-    """거래 내역을 정형화된 리스트로 반환"""
+) -> Tuple[Dict[str, object], List[Dict[str, str]]]:
+    """거래 내역을 정형화된 데이터와 리스트로 반환"""
     period = month_end.to_period("M")
     start = period.start_time
     end = period.end_time
     month_records = records[(records["일자"] >= start) & (records["일자"] <= end)].copy()
     if month_records.empty:
-        return "", []
+        return {}, []
 
     buy_total = sell_total = invest_total = div_total = 0.0
-    items: List[Tuple[str, str, str, str]] = []  # (kind, date_str, title, detail)
+    items: List[Dict[str, str]] = []
 
     def fmt_currency(val: float) -> str:
         return f"{val:,.0f}원"
@@ -998,91 +1044,145 @@ def _build_trading_history(
             unit_price = update_fa.convert_to_krw(acct_code, float(price), date, fx_series)
             if qty > 0:
                 buy_total += trade_amt
-                items.append((
-                    "buy",
-                    date_str,
-                    f"[{account}] {symbol} 매수",
-                    f"{fmt_currency(trade_amt)} (단가 {fmt_currency(unit_price)}, {abs(qty):g}주)",
-                ))
+                items.append({
+                    "kind": "buy",
+                    "date": date_str,
+                    "account": account,
+                    "symbol": symbol,
+                    "amount_str": f"-{fmt_currency(trade_amt)}",
+                    "sub_detail": f"단가 {fmt_currency(unit_price)} · {abs(qty):g}주",
+                })
             else:
                 sell_total += abs(trade_amt)
-                items.append((
-                    "sell",
-                    date_str,
-                    f"[{account}] {symbol} 매도",
-                    f"{fmt_currency(abs(trade_amt))} (단가 {fmt_currency(unit_price)}, {abs(qty):g}주)",
-                ))
+                items.append({
+                    "kind": "sell",
+                    "date": date_str,
+                    "account": account,
+                    "symbol": symbol,
+                    "amount_str": f"+{fmt_currency(abs(trade_amt))}",
+                    "sub_detail": f"단가 {fmt_currency(unit_price)} · {abs(qty):g}주",
+                })
         if has_dividend:
             div_amt = update_fa.convert_to_krw(acct_code, float(dividend), date, fx_series)
             div_total += div_amt
             native_str = "" if acct_code not in update_fa.USD_ACCOUNTS else f" ({dividend}달러)"
-            items.append((
-                "div",
-                date_str,
-                f"[{account}] {symbol} 배당금 수령",
-                f"{fmt_currency(div_amt)}{native_str}",
-            ))
+            items.append({
+                "kind": "div",
+                "date": date_str,
+                "account": account,
+                "symbol": symbol,
+                "amount_str": f"+{fmt_currency(div_amt)}",
+                "sub_detail": f"배당금 수령{native_str}",
+            })
         if has_invest:
             invest_amt = float(str(invest).replace(",", "")) if invest else 0.0
             if acct_code in update_fa.USD_ACCOUNTS:
                 invest_amt = update_fa.convert_to_krw(acct_code, invest_amt, date, fx_series)
             invest_total += invest_amt
-            items.append((
-                "invest",
-                date_str,
-                f"[{account}] 투자금 증액",
-                f"{fmt_currency(invest_amt)}",
-            ))
+            items.append({
+                "kind": "invest",
+                "date": date_str,
+                "account": account,
+                "symbol": "투자금 증액",
+                "amount_str": f"+{fmt_currency(invest_amt)}",
+                "sub_detail": "계좌 입금",
+            })
 
-    summary = (
-        f"{period.year}년 {period.month:02d}월 총계 — "
-        f"투자금: {fmt_currency(invest_total)}, "
-        f"매수: {fmt_currency(buy_total)}, 매도: {fmt_currency(sell_total)}, "
-        f"배당금: {fmt_currency(div_total)}"
-    )
-    return summary, items
+    summary_data: Dict[str, object] = {
+        "period_str": f"{period.year}년 {period.month:02d}월",
+        "invest_total": invest_total,
+        "buy_total": buy_total,
+        "sell_total": sell_total,
+        "div_total": div_total,
+    }
+    return summary_data, items
 
 
-def _render_history_html(summary: str, items: List[Tuple[str, str, str, str]]) -> str:
-    if not summary and not items:
+def _render_history_html(summary_data: Dict[str, object], items: List[Dict[str, str]]) -> str:
+    if not summary_data and not items:
         return "<p class='fa-empty-text'>해당 월의 거래 내역이 없습니다.</p>"
 
-    summary_card = f"<div class='fa-history-summary-banner'>{html.escape(summary)}</div>"
+    period_str = str(summary_data.get("period_str", "-"))
+    invest_amt = _as_float(summary_data.get("invest_total")) or 0.0
+    buy_amt = _as_float(summary_data.get("buy_total")) or 0.0
+    sell_amt = _as_float(summary_data.get("sell_total")) or 0.0
+    div_amt = _as_float(summary_data.get("div_total")) or 0.0
+
+    cards = [
+        f"<div class='fa-kpi-card'>"
+        f"  <div class='fa-kpi-label'>집계 기간</div>"
+        f"  <div class='fa-kpi-value'>{html.escape(period_str)}</div>"
+        f"  <div class='fa-kpi-sub'>당월 거래</div>"
+        f"</div>",
+        f"<div class='fa-kpi-card'>"
+        f"  <div class='fa-kpi-label'>투자금 증액</div>"
+        f"  <div class='fa-kpi-value'>{invest_amt:,.0f}원</div>"
+        f"  <div class='fa-kpi-sub'>원금 입금</div>"
+        f"</div>",
+        f"<div class='fa-kpi-card'>"
+        f"  <div class='fa-kpi-label'>총 매수금</div>"
+        f"  <div class='fa-kpi-value fa-num-positive'>{buy_amt:,.0f}원</div>"
+        f"  <div class='fa-kpi-sub'>매수 체결</div>"
+        f"</div>",
+        f"<div class='fa-kpi-card'>"
+        f"  <div class='fa-kpi-label'>총 매도금</div>"
+        f"  <div class='fa-kpi-value fa-num-negative'>{sell_amt:,.0f}원</div>"
+        f"  <div class='fa-kpi-sub'>매도 체결</div>"
+        f"</div>",
+        f"<div class='fa-kpi-card'>"
+        f"  <div class='fa-kpi-label'>총 배당금</div>"
+        f"  <div class='fa-kpi-value' style='color: var(--fa-purple);'>{div_amt:,.0f}원</div>"
+        f"  <div class='fa-kpi-sub'>배당 수령</div>"
+        f"</div>",
+    ]
+
+    summary_grid = f"<div class='fa-kpi-grid fa-history-kpi-grid'>{''.join(cards)}</div>"
     item_rows = []
 
     badge_map = {
-        "buy": ("매수", "fa-badge-negative"),
-        "sell": ("매도", "fa-badge-positive"),
-        "div": ("배당", "fa-badge-purple"),
-        "invest": ("투자금", "fa-badge-neutral"),
+        "buy": ("매수", "fa-badge-positive", "fa-num-positive"),
+        "sell": ("매도", "fa-badge-negative", "fa-num-negative"),
+        "div": ("배당", "fa-badge-purple", "fa-num-purple"),
+        "invest": ("투자금", "fa-badge-neutral", ""),
     }
 
-    for kind, date_str, title, detail in items:
-        badge_text, badge_cls = badge_map.get(kind, ("기타", "fa-badge-neutral"))
+    for item in items:
+        kind = item.get("kind", "")
+        badge_text, badge_cls, amt_cls = badge_map.get(kind, ("기타", "fa-badge-neutral", ""))
+        date_str = item.get("date", "")
+        account = item.get("account", "")
+        symbol = item.get("symbol", "")
+        amount_str = item.get("amount_str", "")
+        sub_detail = item.get("sub_detail", "")
+
         item_rows.append(
-            f"<div class='fa-history-row'>"
-            f"  <div class='fa-history-meta'>"
-            f"    <span class='fa-badge {badge_cls}'>{badge_text}</span>"
-            f"    <span class='fa-history-date'>{html.escape(date_str)}</span>"
+            f"<div class='fa-history-card'>"
+            f"  <div class='fa-history-card-left'>"
+            f"    <div class='fa-history-card-header'>"
+            f"      <span class='fa-badge {badge_cls}'>{badge_text}</span>"
+            f"      <span class='fa-history-account'>{html.escape(account)}</span>"
+            f"      <span class='fa-history-date'>{html.escape(date_str)}</span>"
+            f"    </div>"
+            f"    <div class='fa-history-symbol'>{html.escape(symbol)}</div>"
             f"  </div>"
-            f"  <div class='fa-history-body'>"
-            f"    <div class='fa-history-title'>{html.escape(title)}</div>"
-            f"    <div class='fa-history-detail'>{html.escape(detail)}</div>"
+            f"  <div class='fa-history-card-right'>"
+            f"    <div class='fa-history-amount {amt_cls}'>{html.escape(amount_str)}</div>"
+            f"    <div class='fa-history-subdetail'>{html.escape(sub_detail)}</div>"
             f"  </div>"
             f"</div>"
         )
 
-    return f"{summary_card}<div class='fa-history-list'>{''.join(item_rows)}</div>"
+    return f"{summary_grid}<div class='fa-history-list'>{''.join(item_rows)}</div>"
 
 
-def _render_figure_html(fig: go.Figure, *, include_js: bool) -> str:
+def _render_figure_html(fig: go.Figure) -> str:
     fig.update_xaxes(fixedrange=True)
     fig.update_yaxes(fixedrange=True)
     fig.update_layout(dragmode=False)
     return pio.to_html(
         fig,
         full_html=False,
-        include_plotlyjs="cdn" if include_js else False,
+        include_plotlyjs=False,
         config={
             "displayModeBar": False,
             "responsive": True,
@@ -1154,13 +1254,8 @@ def _build_report_data(records: pd.DataFrame) -> ReportData:
 
 
 def _build_dashboard_fragment(data: ReportData) -> str:
-    plotly_included = False
-
     def fig_html(fig: go.Figure) -> str:
-        nonlocal plotly_included
-        rendered = _render_figure_html(fig, include_js=not plotly_included)
-        plotly_included = True
-        return rendered
+        return _render_figure_html(fig)
 
     assets_investment_fig = _build_assets_investment_trend(data.account_df, data.invest_series)
     assets_fig = _build_assets_trend(data.account_df)
@@ -1543,13 +1638,92 @@ html.dark .fa-dashboard {
   }
 }
 .fa-account-chart-col {
+  background: transparent;
+}
+.fa-account-chart-card {
   background: var(--fa-kpi-bg);
   border: 1px solid var(--fa-border);
   border-radius: 12px;
-  padding: 14px;
+  padding: 10px;
 }
 .fa-account-table-col {
+  background: transparent;
+}
+
+/* Stock Cards Grid (2-Column) */
+.fa-stock-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (max-width: 700px) {
+  .fa-stock-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+}
+.fa-stock-card {
   background: var(--fa-card-bg);
+  border: 1px solid var(--fa-card-border);
+  border-radius: 12px;
+  padding: 12px 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.fa-stock-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+.fa-stock-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--fa-border);
+  padding-bottom: 8px;
+}
+.fa-stock-card-title {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--fa-text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fa-stock-card-badges {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+.fa-chip-weight {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--fa-text-muted);
+  background: var(--fa-table-header-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.fa-stock-card-body {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 12px;
+}
+.fa-stock-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.fa-stock-lbl {
+  font-size: 0.74rem;
+  color: var(--fa-text-muted);
+}
+.fa-stock-val {
+  font-size: 0.88rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Rebalancing Guide */
@@ -1580,8 +1754,8 @@ html.dark .fa-dashboard {
   flex-direction: column;
   gap: 4px;
 }
-.fa-rebal-item.buy { border-left: 4px solid var(--fa-loss); }
-.fa-rebal-item.sell { border-left: 4px solid var(--fa-gain); }
+.fa-rebal-item.buy { border-left: 4px solid var(--fa-gain); }
+.fa-rebal-item.sell { border-left: 4px solid var(--fa-loss); }
 .fa-rebal-item.ok { border-left: 4px solid var(--fa-ok); }
 
 .fa-rebal-tag {
@@ -1589,57 +1763,114 @@ html.dark .fa-dashboard {
   font-weight: 700;
   text-transform: uppercase;
 }
-.fa-rebal-tag.buy { color: var(--fa-loss); }
-.fa-rebal-tag.sell { color: var(--fa-gain); }
+.fa-rebal-tag.buy { color: var(--fa-gain); }
+.fa-rebal-tag.sell { color: var(--fa-loss); }
 .fa-rebal-tag.ok { color: var(--fa-ok); }
 .fa-rebal-name { font-size: 0.88rem; font-weight: 600; }
 .fa-rebal-val { font-size: 0.82rem; font-weight: 700; color: var(--fa-text-muted); }
 
-/* Trading History Modern Timeline */
-.fa-history-summary-banner {
-  background: var(--fa-accent-bg);
-  color: var(--fa-accent);
-  font-weight: 700;
-  padding: 12px 16px;
-  border-radius: 10px;
-  font-size: 0.92rem;
-  margin-bottom: 14px;
-}
-.fa-history-list {
-  display: flex;
-  flex-direction: column;
+/* Trading History Modern Timeline & KPI Grid */
+.fa-history-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
+  margin-bottom: 16px;
 }
-.fa-history-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 10px 14px;
-  background: var(--fa-kpi-bg);
-  border: 1px solid var(--fa-border);
-  border-radius: 10px;
-}
-@media (max-width: 600px) {
-  .fa-history-row {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 6px;
+@media (max-width: 990px) {
+  .fa-history-kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
-.fa-history-meta {
+@media (max-width: 600px) {
+  .fa-history-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+}
+.fa-history-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (max-width: 768px) {
+  .fa-history-list {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+}
+.fa-history-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--fa-kpi-bg);
+  border: 1px solid var(--fa-card-border);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.fa-history-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+.fa-history-card-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.fa-history-card-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-width: 130px;
+  gap: 6px;
 }
-.fa-history-date { font-size: 0.82rem; color: var(--fa-text-muted); }
-.fa-history-body { flex: 1; }
-.fa-history-title { font-size: 0.9rem; font-weight: 600; }
-.fa-history-detail { font-size: 0.82rem; color: var(--fa-text-muted); margin-top: 2px; }
+.fa-history-account {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--fa-text-muted);
+  background: var(--fa-card-bg);
+  border: 1px solid var(--fa-border);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.fa-history-date {
+  font-size: 0.78rem;
+  color: var(--fa-text-sub);
+}
+.fa-history-symbol {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--fa-text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fa-history-card-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-left: 14px;
+}
+.fa-history-amount {
+  font-size: 1.02rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.fa-num-purple {
+  color: var(--fa-purple) !important;
+}
+.fa-history-subdetail {
+  font-size: 0.78rem;
+  color: var(--fa-text-muted);
+  white-space: nowrap;
+}
 
 .fa-empty-text { color: var(--fa-text-muted); font-size: 0.9rem; margin: 8px 0; }
 </style>
 
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <script>
 document.addEventListener("DOMContentLoaded", function () {
   // 계좌 탭 전환 이벤트 리스너
@@ -1659,9 +1890,13 @@ document.addEventListener("DOMContentLoaded", function () {
       const targetPane = document.getElementById(targetId);
       if (targetPane) {
         targetPane.classList.add("active");
+        // 해당 패널 내부의 Plotly 차트 리사이즈
+        const chartDiv = targetPane.querySelector(".plotly-graph-div");
+        if (chartDiv && window.Plotly) {
+          window.Plotly.Plots.resize(chartDiv);
+        }
       }
 
-      // Plotly 도넛 차트 리사이즈 트리거
       setTimeout(() => {
         window.dispatchEvent(new Event("resize"));
       }, 50);
@@ -1682,6 +1917,7 @@ def _wrap_standalone_html(content_html: str, title: str) -> str:
             "  <meta charset=\"utf-8\">",
             "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, user-scalable=yes, maximum-scale=5.0\">",
             f"  <title>{html.escape(title)}</title>",
+            "  <script src=\"https://cdn.plot.ly/plotly-2.35.2.min.js\"></script>",
             "  <style>",
             "    :root { color-scheme: light dark; }",
             "    body { margin: 0; background: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif; }",
