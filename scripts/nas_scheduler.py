@@ -191,13 +191,19 @@ def sync_fa_artifacts(web_public: Path) -> None:
 
 
 def apply_permissions(web_public: Path, owner: str) -> None:
-    run(["chown", "-R", owner, str(web_public)], cwd=ROOT)
-    run(["find", str(web_public), "-type", "d", "-exec", "chmod", "755", "{}", ";"], cwd=ROOT)
-    run(["find", str(web_public), "-type", "f", "-exec", "chmod", "644", "{}", ";"], cwd=ROOT)
+    try:
+        run(["chown", "-R", owner, str(web_public)], cwd=ROOT)
+        run(["find", str(web_public), "-type", "d", "-exec", "chmod", "755", "{}", ";"], cwd=ROOT)
+        run(["find", str(web_public), "-type", "f", "-exec", "chmod", "644", "{}", ";"], cwd=ROOT)
+    except Exception as exc:
+        print(f"(참고) 웹 디렉터리 권한 변경 건너뜀 (일반 사용자 실행): {exc}")
 
 
 def apply_workspace_owner(owner: str) -> None:
-    run(["chown", "-R", owner, str(ROOT)], cwd=ROOT)
+    try:
+        run(["chown", "-R", owner, str(ROOT)], cwd=ROOT)
+    except Exception as exc:
+        print(f"(참고) 작업 공간 권한 변경 건너뜀 (일반 사용자 실행): {exc}")
 
 
 def parse_args() -> argparse.Namespace:
