@@ -1333,10 +1333,10 @@ def _build_dashboard_fragment(data: ReportData) -> str:
    FA Modern Fintech Dashboard Design System
    ========================================================= */
 .fa-dashboard {
-  --fa-bg: #f8fafc !important;
+  --fa-bg: transparent;
   --fa-card-bg: #ffffff !important;
   --fa-card-border: #e2e8f0 !important;
-  --fa-card-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05), 0 2px 6px -1px rgba(0, 0, 0, 0.03) !important;
+  --fa-card-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.15), 0 2px 6px -1px rgba(0, 0, 0, 0.08) !important;
   --fa-text-main: #1e293b !important;
   --fa-text-muted: #64748b !important;
   --fa-text-sub: #94a3b8 !important;
@@ -1357,29 +1357,36 @@ def _build_dashboard_fragment(data: ReportData) -> str:
   --fa-ok: #38a169 !important;
   --fa-ok-bg: #f0fff4 !important;
 
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif !important;
-  color: #1e293b !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
+  color: var(--fa-text-main);
   line-height: 1.5;
-  background: #f8fafc !important;
-  border-radius: 16px !important;
-  padding: 24px 20px !important;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08) !important;
-  border: 1px solid #e2e8f0 !important;
-  color-scheme: light !important;
 }
 
-/* 블로그 전역 다크모드 상속 차단 */
-body[data-theme="dark"] .fa-dashboard,
-html[data-theme="dark"] .fa-dashboard,
-.dark .fa-dashboard {
-  background: #f8fafc !important;
+/* 카드 및 블록 내부를 밝은 화이트 테마로 완전 고정 */
+.fa-kpi-card,
+.fa-card,
+.fa-card-head,
+.fa-stock-card,
+.fa-trade-card,
+.fa-rebal-box,
+.fa-rebal-item,
+.fa-account-chart-card,
+.fa-mini-kpi-box,
+.fa-table-wrap,
+.fa-table,
+.fa-table tbody tr {
+  background: #ffffff !important;
   color: #1e293b !important;
-  color-scheme: light !important;
+  border-color: #e2e8f0 !important;
 }
-body[data-theme="dark"] .fa-dashboard *,
-html[data-theme="dark"] .fa-dashboard *,
-.dark .fa-dashboard * {
-  color-scheme: light !important;
+
+/* Hero 타이틀 (다크 배경 위에서도 선명하게 보이도록) */
+.fa-hero-title {
+  color: #f8fafc !important;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+.fa-hero-meta {
+  color: #94a3b8 !important;
 }
 
 /* 숫자 서식 및 색상 유틸리티 */
