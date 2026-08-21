@@ -39,8 +39,8 @@ CHART_COLORWAY = [
     "#ED64A6",  # Pink
 ]
 THEME_BG = "rgba(0,0,0,0)"
-THEME_TEXT = "#1e293b"
-THEME_GRID = "rgba(128,128,128,0.18)"
+THEME_TEXT = "#64748b"
+THEME_GRID = "rgba(148, 163, 184, 0.15)"
 
 MARKET_KPI_CONFIG = [
     {"label": "S&P 500", "ticker": "^GSPC", "decimals": 2},
@@ -1334,59 +1334,81 @@ def _build_dashboard_fragment(data: ReportData) -> str:
    ========================================================= */
 .fa-dashboard {
   --fa-bg: transparent;
-  --fa-card-bg: #ffffff !important;
-  --fa-card-border: #e2e8f0 !important;
-  --fa-card-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.15), 0 2px 6px -1px rgba(0, 0, 0, 0.08) !important;
-  --fa-text-main: #1e293b !important;
-  --fa-text-muted: #64748b !important;
-  --fa-text-sub: #94a3b8 !important;
-  --fa-kpi-bg: #f8fafc !important;
-  --fa-table-header-bg: #f1f5f9 !important;
-  --fa-table-stripe: #f8fafc !important;
-  --fa-table-hover: #f1f5f9 !important;
-  --fa-border: #e2e8f0 !important;
+  --fa-card-bg: #ffffff;
+  --fa-card-border: #e2e8f0;
+  --fa-card-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.06), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
+  --fa-text-main: #0f172a;
+  --fa-text-muted: #64748b;
+  --fa-text-sub: #94a3b8;
+  --fa-kpi-bg: #f8fafc;
+  --fa-table-header-bg: #f1f5f9;
+  --fa-table-stripe: #f8fafc;
+  --fa-table-hover: #f1f5f9;
+  --fa-border: #e2e8f0;
   
-  --fa-gain: #e53e3e !important;
-  --fa-gain-bg: #fff5f5 !important;
-  --fa-loss: #3182ce !important;
-  --fa-loss-bg: #ebf8ff !important;
-  --fa-accent: #4f46e5 !important;
-  --fa-accent-bg: #eef2ff !important;
-  --fa-purple: #805ad5 !important;
-  --fa-purple-bg: #faf5ff !important;
-  --fa-ok: #38a169 !important;
-  --fa-ok-bg: #f0fff4 !important;
+  --fa-gain: #e53e3e;
+  --fa-gain-bg: #fff5f5;
+  --fa-loss: #3182ce;
+  --fa-loss-bg: #ebf8ff;
+  --fa-accent: #4f46e5;
+  --fa-accent-bg: #eef2ff;
+  --fa-purple: #805ad5;
+  --fa-purple-bg: #faf5ff;
+  --fa-ok: #38a169;
+  --fa-ok-bg: #f0fff4;
 
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
   color: var(--fa-text-main);
   line-height: 1.5;
 }
 
-/* 카드 및 블록 내부를 밝은 화이트 테마로 완전 고정 */
-.fa-kpi-card,
-.fa-card,
-.fa-card-head,
-.fa-stock-card,
-.fa-trade-card,
-.fa-rebal-box,
-.fa-rebal-item,
-.fa-account-chart-card,
-.fa-mini-kpi-box,
-.fa-table-wrap,
-.fa-table,
-.fa-table tbody tr {
-  background: #ffffff !important;
-  color: #1e293b !important;
-  border-color: #e2e8f0 !important;
+/* =========================================================
+   Sleek Dark Mode (블로그 다크모드와 완벽하게 어우러지는 세련된 테마)
+   ========================================================= */
+body[data-theme="dark"] .fa-dashboard,
+html[data-theme="dark"] .fa-dashboard,
+html.dark .fa-dashboard,
+.dark .fa-dashboard {
+  --fa-bg: transparent;
+  --fa-card-bg: #1e293b;
+  --fa-card-border: #334155;
+  --fa-card-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.4), 0 2px 6px -1px rgba(0, 0, 0, 0.2);
+  --fa-text-main: #f8fafc;
+  --fa-text-muted: #94a3b8;
+  --fa-text-sub: #64748b;
+  --fa-kpi-bg: #0f172a;
+  --fa-table-header-bg: #0f172a;
+  --fa-table-stripe: #182234;
+  --fa-table-hover: #283548;
+  --fa-border: #334155;
+  
+  --fa-gain: #f87171;
+  --fa-gain-bg: rgba(239, 68, 68, 0.15);
+  --fa-loss: #60a5fa;
+  --fa-loss-bg: rgba(59, 130, 246, 0.15);
+  --fa-accent: #818cf8;
+  --fa-accent-bg: rgba(99, 102, 241, 0.15);
+  --fa-purple: #c084fc;
+  --fa-purple-bg: rgba(168, 85, 247, 0.15);
+  --fa-ok: #4ade80;
+  --fa-ok-bg: rgba(34, 197, 94, 0.15);
 }
 
-/* Hero 타이틀 (다크 배경 위에서도 선명하게 보이도록) */
-.fa-hero-title {
-  color: #f8fafc !important;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+.fa-kpi-card,
+.fa-card,
+.fa-stock-card,
+.fa-trade-card,
+.fa-rebal-item {
+  background: var(--fa-card-bg);
+  border: 1px solid var(--fa-card-border);
+  color: var(--fa-text-main);
+  box-shadow: var(--fa-card-shadow);
 }
-.fa-hero-meta {
-  color: #94a3b8 !important;
+
+.fa-card-head {
+  background: var(--fa-card-bg);
+  border-bottom: 1px solid var(--fa-card-border);
+  color: var(--fa-text-main);
 }
 
 /* 숫자 서식 및 색상 유틸리티 */
