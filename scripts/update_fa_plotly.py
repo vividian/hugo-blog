@@ -1979,7 +1979,7 @@ def _wrap_standalone_html(content_html: str, title: str) -> str:
             "  <style>",
             "    :root { color-scheme: light; }",
             "    body { margin: 0; background: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif; }",
-            "    .fa-standalone-wrap { max-width: 1100px; margin: 0 auto; padding: 20px 16px 40px; }",
+            "    .fa-standalone-wrap { max-width: 1200px; margin: 0 auto; padding: 20px 16px 40px; }",
             "  </style>",
             "</head>",
             "<body>",
