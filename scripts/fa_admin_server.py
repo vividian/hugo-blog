@@ -70,13 +70,39 @@ def export_db_to_csv():
 
 
 def run_dashboard_update():
-    """백그라운드에서 update_fa_plotly.py를 실행하여 대시보드를 재생성합니다."""
+    """백그라운드에서 update_fa.py 및 update_fa_plotly.py를 실행하고 웹 서비스 경로로 즉시 반영합니다."""
     def _worker():
         try:
-            cmd = [sys.executable, str(ROOT_DIR / "scripts" / "update_fa_plotly.py")]
-            res = subprocess.run(cmd, cwd=ROOT_DIR, capture_output=True, text=True)
+            print("⏳ [대시보드 갱신] 자산 계산 및 대시보드 생성 시작...")
+            # 1. update_fa.py (데이터 계산)
+            cmd_calc = [sys.executable, str(ROOT_DIR / "scripts" / "update_fa.py")]
+            subprocess.run(cmd_calc, cwd=ROOT_DIR, capture_output=True, text=True)
+
+            # 2. update_fa_plotly.py (HTML 대시보드 생성)
+            cmd_plot = [sys.executable, str(ROOT_DIR / "scripts" / "update_fa_plotly.py")]
+            res = subprocess.run(cmd_plot, cwd=ROOT_DIR, capture_output=True, text=True)
+
             if res.returncode == 0:
-                print("✅ 대시보드 자동 갱신 완료!")
+                print("✅ [대시보드 갱신] HTML 생성 완료!")
+                # 3. 실시간 배포 경로(public 및 NAS web_public)로 즉시 복사
+                src_html = ROOT_DIR / "content" / "fa" / "latest_fa.html"
+                if src_html.is_file():
+                    # public 복사
+                    pub_target = ROOT_DIR / "public" / "fa" / "latest_fa.html"
+                    pub_target.parent.mkdir(parents=True, exist_ok=True)
+                    import shutil
+                    shutil.copy2(src_html, pub_target)
+
+                    # NAS web_public 경로가 존재할 경우 즉시 덮어쓰기 반영
+                    nas_web_targets = [
+                        Path("/var/services/web/hugo/fa/latest_fa.html"),
+                        Path("/volume1/web/hugo/fa/latest_fa.html"),
+                        Path("/var/services/web/fa/latest_fa.html"),
+                    ]
+                    for target in nas_web_targets:
+                        if target.parent.is_dir():
+                            shutil.copy2(src_html, target)
+                            print(f"🚀 [실시간 반영] {target} 즉시 배포 완료!")
             else:
                 print(f"⚠️ 대시보드 갱신 에러: {res.stderr}")
         except Exception as e:
