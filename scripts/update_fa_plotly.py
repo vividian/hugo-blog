@@ -844,7 +844,7 @@ def _build_account_detail_section(
         ]
         mini_kpi_html = f"<div class='fa-mini-kpi-grid'>{''.join(mini_kpis)}</div>"
 
-        # 도넛 차트 (Plotly 단독 생성 - 종목 설명 및 범례 완벽 표시)
+        # 도넛 차트 (큼직한 도넛 + 내부 % + 하단 종목명 범례)
         chart_html = ""
         if not account_holdings.empty and account_holdings["평가금"].sum() > 0:
             pie_fig = go.Figure(
@@ -852,10 +852,11 @@ def _build_account_detail_section(
                     go.Pie(
                         labels=account_holdings["종목"],
                         values=account_holdings["평가금"],
-                        textinfo="percent+label",
-                        textposition="auto",
+                        textinfo="percent",
+                        textposition="inside",
+                        insidetextfont=dict(size=14, color="#ffffff", family=FONT_FAMILY),
                         insidetextorientation="horizontal",
-                        hole=0.48,
+                        hole=0.46,
                         showlegend=True,
                         marker=dict(colors=[_palette_color(i) for i in range(len(account_holdings))]),
                         hovertemplate="<b>%{label}</b><br>평가금: %{value:,.0f}원<br>비중: %{percent}<extra></extra>",
@@ -863,8 +864,8 @@ def _build_account_detail_section(
                 ]
             )
             pie_fig.update_layout(
-                height=300,
-                margin=dict(l=10, r=10, t=10, b=40),
+                height=320,
+                margin=dict(l=10, r=10, t=10, b=45),
                 paper_bgcolor=THEME_BG,
                 plot_bgcolor=THEME_BG,
                 font=dict(family=FONT_FAMILY, size=13),
@@ -874,7 +875,7 @@ def _build_account_detail_section(
                     y=-0.08,
                     xanchor="center",
                     x=0.5,
-                    font=dict(size=12, family=FONT_FAMILY),
+                    font=dict(size=13, family=FONT_FAMILY),
                 ),
             )
             chart_html = fig_renderer(pie_fig)
