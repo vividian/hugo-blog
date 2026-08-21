@@ -303,13 +303,13 @@ def _build_assets_trend(account_df: pd.DataFrame) -> go.Figure:
     fig.update_layout(
         height=370,
         margin=dict(l=15, r=15, t=65, b=25),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0, font=dict(size=12, family=FONT_FAMILY)),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0, font=dict(size=13.5, family=FONT_FAMILY)),
         showlegend=True,
-        font=dict(family=FONT_FAMILY, size=12),
+        font=dict(family=FONT_FAMILY, size=14),
         paper_bgcolor=THEME_BG,
         plot_bgcolor=THEME_BG,
     )
-    fig.update_xaxes(tickfont=dict(size=11, family=FONT_FAMILY), showgrid=False)
+    fig.update_xaxes(tickfont=dict(size=13, family=FONT_FAMILY), showgrid=False)
     y_max = account_df.max().max() if not account_df.empty else 0
     tickvals, ticktext = _get_korean_y_ticks(y_max, y_min=0)
     fig.update_yaxes(
@@ -317,7 +317,7 @@ def _build_assets_trend(account_df: pd.DataFrame) -> go.Figure:
         tickvals=tickvals,
         ticktext=ticktext,
         rangemode="tozero",
-        tickfont=dict(size=11, family=FONT_FAMILY),
+        tickfont=dict(size=13, family=FONT_FAMILY),
         showgrid=True,
         gridcolor=THEME_GRID,
     )
@@ -352,13 +352,13 @@ def _build_assets_investment_trend(account_df: pd.DataFrame, invest_series: pd.S
     fig.update_layout(
         height=370,
         margin=dict(l=15, r=15, t=65, b=25),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0, font=dict(size=12, family=FONT_FAMILY)),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0, font=dict(size=13.5, family=FONT_FAMILY)),
         showlegend=True,
-        font=dict(family=FONT_FAMILY, size=12),
+        font=dict(family=FONT_FAMILY, size=14),
         paper_bgcolor=THEME_BG,
         plot_bgcolor=THEME_BG,
     )
-    fig.update_xaxes(tickfont=dict(size=11, family=FONT_FAMILY), showgrid=False)
+    fig.update_xaxes(tickfont=dict(size=13, family=FONT_FAMILY), showgrid=False)
     y_max = max(np.nanmax(invest_aligned), np.nanmax(total_valuation)) if len(invest_aligned) > 0 else 0
     tickvals, ticktext = _get_korean_y_ticks(y_max, y_min=0)
     fig.update_yaxes(
@@ -366,7 +366,7 @@ def _build_assets_investment_trend(account_df: pd.DataFrame, invest_series: pd.S
         tickvals=tickvals,
         ticktext=ticktext,
         rangemode="tozero",
-        tickfont=dict(size=11, family=FONT_FAMILY),
+        tickfont=dict(size=13, family=FONT_FAMILY),
         showgrid=True,
         gridcolor=THEME_GRID,
     )
@@ -498,15 +498,15 @@ def _build_portfolio_allocation_charts(holdings_df: pd.DataFrame, symbol_map: Di
     fig.update_layout(
         height=380,
         margin=dict(l=10, r=10, t=45, b=10),
-        font=dict(family=FONT_FAMILY, size=13),
+        font=dict(family=FONT_FAMILY, size=14),
         paper_bgcolor=THEME_BG,
         plot_bgcolor=THEME_BG,
         uniformtext_mode="hide",
-        uniformtext_minsize=11,
+        uniformtext_minsize=12,
     )
 
     for annotation in fig["layout"]["annotations"]:
-        annotation["font"] = dict(size=14, color=THEME_TEXT, family=FONT_FAMILY)
+        annotation["font"] = dict(size=14.5, color=THEME_TEXT, family=FONT_FAMILY)
 
     return fig
 
@@ -531,7 +531,7 @@ def _build_dividends_chart(pivot: pd.DataFrame) -> go.Figure:
                 marker=dict(color=_palette_color(idx)),
                 text=texts,
                 textposition="outside" if is_last else "none",
-                textfont=dict(size=11, color=THEME_TEXT, family=FONT_FAMILY),
+                textfont=dict(size=13, color=THEME_TEXT, family=FONT_FAMILY),
                 cliponaxis=False,
                 hovertemplate=f"<b>{col}</b><br>%{{x|%Y-%m}}: %{{y:,.0f}}원<extra></extra>",
             )
@@ -541,7 +541,7 @@ def _build_dividends_chart(pivot: pd.DataFrame) -> go.Figure:
         height=320,
         margin=dict(l=15, r=15, t=30, b=25),
         showlegend=False,
-        font=dict(family=FONT_FAMILY, size=12),
+        font=dict(family=FONT_FAMILY, size=14),
         paper_bgcolor=THEME_BG,
         plot_bgcolor=THEME_BG,
     )
@@ -551,14 +551,14 @@ def _build_dividends_chart(pivot: pd.DataFrame) -> go.Figure:
         showgrid=True,
         gridcolor=THEME_GRID,
         zeroline=False,
-        tickfont=dict(size=11, family=FONT_FAMILY),
+        tickfont=dict(size=13, family=FONT_FAMILY),
     )
     if not pivot_sorted.empty:
         min_x = pd.to_datetime(pivot_sorted.index.min()) - pd.Timedelta(days=15)
         max_x = pd.to_datetime(pivot_sorted.index.max()) + pd.Timedelta(days=15)
-        fig.update_xaxes(tickformat="%y%m", range=[min_x, max_x], tickfont=dict(size=11, family=FONT_FAMILY))
+        fig.update_xaxes(tickformat="%y%m", range=[min_x, max_x], tickfont=dict(size=13, family=FONT_FAMILY))
     else:
-        fig.update_xaxes(tickformat="%y%m", tickfont=dict(size=11, family=FONT_FAMILY))
+        fig.update_xaxes(tickformat="%y%m", tickfont=dict(size=13, family=FONT_FAMILY))
     return fig
 
 
@@ -581,7 +581,7 @@ def _build_yearly_dividends_chart(pivot: pd.DataFrame) -> go.Figure:
                 marker=dict(color=_palette_color(idx)),
                 text=texts,
                 textposition="outside" if is_last else "none",
-                textfont=dict(size=11, color=THEME_TEXT, family=FONT_FAMILY),
+                textfont=dict(size=13, color=THEME_TEXT, family=FONT_FAMILY),
                 cliponaxis=False,
                 hovertemplate=f"<b>{col}</b><br>%{{x}}년: %{{y:,.0f}}원<extra></extra>",
             )
@@ -591,12 +591,12 @@ def _build_yearly_dividends_chart(pivot: pd.DataFrame) -> go.Figure:
         height=320,
         margin=dict(l=15, r=15, t=30, b=25),
         showlegend=False,
-        font=dict(family=FONT_FAMILY, size=12),
+        font=dict(family=FONT_FAMILY, size=14),
         paper_bgcolor=THEME_BG,
         plot_bgcolor=THEME_BG,
     )
-    fig.update_yaxes(tickformat=",.0f", showgrid=True, gridcolor=THEME_GRID, zeroline=False, tickfont=dict(size=11, family=FONT_FAMILY))
-    fig.update_xaxes(tickfont=dict(size=11, family=FONT_FAMILY))
+    fig.update_yaxes(tickformat=",.0f", showgrid=True, gridcolor=THEME_GRID, zeroline=False, tickfont=dict(size=13, family=FONT_FAMILY))
+    fig.update_xaxes(tickfont=dict(size=13, family=FONT_FAMILY))
     return fig
 
 
@@ -867,9 +867,9 @@ def _build_account_detail_section(
                 margin=dict(l=10, r=10, t=10, b=10),
                 paper_bgcolor=THEME_BG,
                 plot_bgcolor=THEME_BG,
-                font=dict(family=FONT_FAMILY, size=12),
+                font=dict(family=FONT_FAMILY, size=14),
                 uniformtext_mode="hide",
-                uniformtext_minsize=10,
+                uniformtext_minsize=12,
             )
             chart_html = fig_renderer(pie_fig)
 
