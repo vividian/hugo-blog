@@ -18,10 +18,12 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from typing import Any, Dict, List
 from urllib.parse import parse_qs, urlparse
+import yaml
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 DB_PATH = ROOT_DIR / "db" / "fa_records.db"
 CSV_PATH = ROOT_DIR / "config" / "trading_records.csv"
+FA_YAML_PATH = ROOT_DIR / "config" / "fa.yaml"
 
 ACCOUNT_CHOICES = [
     {"code": "usa", "name": "미국 주식"},
@@ -34,6 +36,39 @@ ACCOUNT_CHOICES = [
     {"code": "psf2", "name": "연금저축2"},
     {"code": "isa2", "name": "ISA2"},
 ]
+
+
+def add_symbol_to_fa_yaml(account_code: str, full_name: str, abbrev: str, ticker: str, region: str, asset_class: str) -> bool:
+    """config/fa.yaml 파일의 해당 계좌 항목에 신규 종목 메타데이터를 추가합니다."""
+    try:
+        if not FA_YAML_PATH.exists():
+            return False
+        with open(FA_YAML_PATH, "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+
+        account_name_map = {
+            "usa": "미국", "kor1": "국내1", "kor2": "국내2",
+            "sema": "공제회", "irp": "IRP", "psf1": "연금저축1",
+            "isa1": "ISA1", "psf2": "연금저축2", "isa2": "ISA2"
+        }
+        target_keyword = account_name_map.get(account_code, account_code)
+
+        for acct_entry in cfg.get("accounts", []):
+            acct_name = acct_entry.get("name", "")
+            if target_keyword in acct_name:
+                items = acct_entry.setdefault("items", [])
+                # 이미 존재하는 종목인지 확인
+                exists = any(it[0] == full_name or it[1] == abbrev for it in items if len(it) >= 2)
+                if not exists:
+                    items.append([full_name, abbrev, ticker or abbrev, region or "국내상장미국", asset_class or "주식"])
+                    with open(FA_YAML_PATH, "w", encoding="utf-8") as f:
+                        yaml.dump(cfg, f, allow_unicode=True, sort_keys=False)
+                    print(f"✅ [fa.yaml] 신규 종목 등록 성공: [{acct_name}] {full_name} ({abbrev})")
+                return True
+        return False
+    except Exception as e:
+        print(f"⚠️ [fa.yaml] 신규 종목 등록 실패: {e}")
+        return False
 
 
 def get_db_connection() -> sqlite3.Connection:
@@ -417,9 +452,55 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       transform: translateY(100px);
       opacity: 0;
       transition: all 0.25s ease-out;
-      z-index: 1000;
+      z-index: 3000;
     }
     #toast.show { transform: translateY(0); opacity: 1; }
+
+    /* Modal Styles */
+    .fa-modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 2000;
+      padding: 16px;
+    }
+    .fa-modal-overlay.open { display: flex; animation: faFadeIn 0.2s ease-out; }
+    .fa-modal-box {
+      background: var(--fa-card-bg);
+      border: 1px solid var(--fa-card-border);
+      border-radius: 12px;
+      width: 100%;
+      max-width: 480px;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+      overflow: hidden;
+    }
+    .fa-modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--fa-border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 700;
+      font-size: 1rem;
+    }
+    .fa-modal-body {
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .fa-modal-footer {
+      padding: 14px 20px;
+      border-top: 1px solid var(--fa-border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      background: var(--fa-kpi-bg);
+    }
   </style>
 </head>
 <body>
@@ -428,7 +509,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="fa-header">
       <div class="fa-header-title">
         <span>📈 FA 자산 거래내역 관리자</span>
-        <span class="fa-header-badge">v2.5.3</span>
+        <span class="fa-header-badge">v2.6.0</span>
         <span class="fa-header-badge" style="background:var(--fa-border); color:var(--fa-text-muted);">SQLite DB</span>
       </div>
       <div style="display:flex; gap:8px;">
@@ -504,7 +585,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
           <!-- 종목명 선택 -->
           <div class="fa-field">
-            <label class="fa-label">종목명 선택</label>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+              <label class="fa-label" style="margin-bottom:0;">종목명 선택</label>
+              <button type="button" class="fa-btn-action" style="font-size:0.75rem; padding:2px 7px; color:var(--fa-accent); border-color:var(--fa-accent-bg);" onclick="openNewSymbolModal()">➕ 새 종목 등록</button>
+            </div>
             <select id="f-symbol-select" class="fa-select" onchange="handleSymbolSelectChange()">
               <option value="">-- 종목 선택 --</option>
             </select>
@@ -627,6 +711,64 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
   <div id="toast"></div>
 
+  <!-- New Symbol Modal -->
+  <div id="modal-new-symbol" class="fa-modal-overlay">
+    <div class="fa-modal-box">
+      <div class="fa-modal-header">
+        <span>✨ 계좌 신규 종목 설정 등록 (fa.yaml)</span>
+        <button type="button" class="fa-btn-action" onclick="closeNewSymbolModal()">✕</button>
+      </div>
+      <form id="form-new-symbol" onsubmit="handleNewSymbolSubmit(event)">
+        <div class="fa-modal-body">
+          <div class="fa-field">
+            <label class="fa-label">대상 계좌</label>
+            <select id="m-account" class="fa-select" required>
+              <option value="usa">미국 주식</option>
+              <option value="kor1">국내 주식1</option>
+              <option value="kor2">국내 주식2</option>
+              <option value="sema">공제회 (SEMA)</option>
+              <option value="irp">IRP</option>
+              <option value="psf1">연금저축1</option>
+              <option value="isa1">ISA1</option>
+              <option value="psf2">연금저축2</option>
+              <option value="isa2">ISA2</option>
+            </select>
+          </div>
+          <div class="fa-field">
+            <label class="fa-label">종목 정식 명칭</label>
+            <input type="text" id="m-fullname" class="fa-input" required placeholder="예: ACE 미국배당다우존스">
+          </div>
+          <div class="fa-field">
+            <label class="fa-label">종목 표시 약칭</label>
+            <input type="text" id="m-abbrev" class="fa-input" required placeholder="예: ACE SCHD">
+          </div>
+          <div class="fa-field">
+            <label class="fa-label">거래소 티커 / 코드</label>
+            <input type="text" id="m-ticker" class="fa-input" placeholder="예: KRX:402970 또는 SCHD">
+          </div>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+            <div class="fa-field">
+              <label class="fa-label">지역 분류</label>
+              <select id="m-region" class="fa-select">
+                <option value="국내상장미국">국내상장미국</option>
+                <option value="미국">미국</option>
+                <option value="국내">국내</option>
+              </select>
+            </div>
+            <div class="fa-field">
+              <label class="fa-label">대표 자산군</label>
+              <input type="text" id="m-asset-class" class="fa-input" placeholder="예: SCHD, QQQ, S&P500, 국채">
+            </div>
+          </div>
+        </div>
+        <div class="fa-modal-footer">
+          <button type="button" class="fa-btn-action" onclick="closeNewSymbolModal()">취소</button>
+          <button type="submit" class="fa-btn-primary" style="padding:7px 18px;">설정 저장하기</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script>
     const ACCOUNT_MAP = {
       usa: "미국", kor1: "국내1", kor2: "국내2", sema: "공제회",
@@ -668,6 +810,65 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       document.getElementById("wrap-dividend").style.display = isDiv ? 'flex' : 'none';
       document.getElementById("wrap-deposit").style.display = isDep ? 'flex' : 'none';
       document.getElementById("wrap-evaluation").style.display = isEval ? 'flex' : 'none';
+    }
+
+    function openNewSymbolModal() {
+      const curAcct = document.getElementById("f-account").value;
+      document.getElementById("form-new-symbol").reset();
+      document.getElementById("m-account").value = curAcct;
+      document.getElementById("modal-new-symbol").classList.add("open");
+    }
+
+    function closeNewSymbolModal() {
+      document.getElementById("modal-new-symbol").classList.remove("open");
+    }
+
+    async function handleNewSymbolSubmit(e) {
+      e.preventDefault();
+      const acct = document.getElementById("m-account").value;
+      const fullName = document.getElementById("m-fullname").value.trim();
+      const abbrev = document.getElementById("m-abbrev").value.trim() || fullName;
+      const ticker = document.getElementById("m-ticker").value.trim() || abbrev;
+      const region = document.getElementById("m-region").value;
+      const assetClass = document.getElementById("m-asset-class").value.trim() || "주식";
+
+      try {
+        const res = await fetch("/api/symbols/add", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            account: acct,
+            full_name: fullName,
+            abbrev: abbrev,
+            ticker: ticker,
+            region: region,
+            asset_class: assetClass
+          })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast(`신규 종목 [${abbrev}]이(가) 등록되었습니다! ✨`);
+          closeNewSymbolModal();
+          
+          // 현재 선택된 계좌가 모달에서 추가한 계좌라면 종목 목록 즉시 갱신
+          if (document.getElementById("f-account").value === acct) {
+            await loadSymbols(acct);
+            const sel = document.getElementById("f-symbol-select");
+            // 새로 추가된 종목 선택
+            for (let i = 0; i < sel.options.length; i++) {
+              if (sel.options[i].value === abbrev) {
+                sel.selectedIndex = i;
+                break;
+              }
+            }
+            handleSymbolSelectChange();
+          }
+        } else {
+          alert("종목 등록에 실패했습니다.");
+        }
+      } catch(err) {
+        alert("네트워크 통신 오류가 발생했습니다.");
+      }
     }
 
     let currentAccountSymbols = [];
@@ -1024,6 +1225,35 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
                 """)
             rows = [dict(r) for r in cur.fetchall()]
             conn.close()
+
+            # fa.yaml에 등록된 종목들도 합치기 (중복 제거)
+            existing_symbols = {r["symbol"] for r in rows}
+            if FA_YAML_PATH.exists():
+                try:
+                    with open(FA_YAML_PATH, "r", encoding="utf-8") as f:
+                        cfg = yaml.safe_load(f) or {}
+                    account_name_map = {
+                        "usa": "미국", "kor1": "국내1", "kor2": "국내2",
+                        "sema": "공제회", "irp": "IRP", "psf1": "연금저축1",
+                        "isa1": "ISA1", "psf2": "연금저축2", "isa2": "ISA2"
+                    }
+                    target_kw = account_name_map.get(acct, acct) if acct else ""
+                    for acct_entry in cfg.get("accounts", []):
+                        if not target_kw or target_kw in acct_entry.get("name", ""):
+                            for item in acct_entry.get("items", []):
+                                if len(item) >= 2:
+                                    sym_name = item[1] or item[0]
+                                    if sym_name not in existing_symbols:
+                                        rows.append({
+                                            "symbol": sym_name,
+                                            "latest_price": None,
+                                            "latest_date": "-",
+                                            "net_qty": 0.0
+                                        })
+                                        existing_symbols.add(sym_name)
+                except Exception:
+                    pass
+
             self._send_json(rows)
             return
 
@@ -1058,15 +1288,19 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
             total_count = base_stat["cnt"] if base_stat else 0
             latest_date = base_stat["max_date"] if base_stat else "-"
 
-            # 당월 매수금 / 배당금 합산
-            current_month = date.today().strftime("%Y-%m")
+            # 최신 거래월 기준 당월 매수금 / 배당금 합산 (YYYY.MM 또는 YYYY-MM 지원)
+            month_prefix = latest_date[:7].replace("-", ".") if latest_date and len(latest_date) >= 7 else date.today().strftime("%Y.%m")
             cur.execute("""
                 SELECT
-                    SUM(CASE WHEN kind = '매수' THEN amount ELSE 0 END) AS month_buy,
-                    SUM(CASE WHEN kind = '배당' THEN dividend ELSE 0 END) AS month_div
+                    SUM(CASE 
+                        WHEN (kind = '매수' OR (COALESCE(kind, '') = '' AND quantity > 0))
+                        THEN COALESCE(amount, quantity * unit_price, 0)
+                        ELSE 0 
+                    END) AS month_buy,
+                    SUM(COALESCE(dividend, 0)) AS month_div
                 FROM trading_records
-                WHERE date LIKE ?;
-            """, (f"{current_month}%",))
+                WHERE REPLACE(date, '-', '.') LIKE ?;
+            """, (f"{month_prefix}%",))
             month_stat = cur.fetchone()
             month_buy = month_stat["month_buy"] or 0.0
             month_div = month_stat["month_div"] or 0.0
@@ -1094,6 +1328,21 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
         if path == "/api/build-dashboard":
             run_dashboard_update()
             self._send_json({"ok": True})
+            return
+
+        if path == "/api/symbols/add":
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length).decode("utf-8")
+            data = json.loads(body)
+            acct = data.get("account", "")
+            full_name = data.get("full_name", "").strip()
+            abbrev = data.get("abbrev", "").strip() or full_name
+            ticker = data.get("ticker", "").strip() or abbrev
+            region = data.get("region", "국내상장미국")
+            asset_class = data.get("asset_class", "주식")
+
+            ok = add_symbol_to_fa_yaml(acct, full_name, abbrev, ticker, region, asset_class)
+            self._send_json({"ok": ok})
             return
 
         if path == "/api/records":
