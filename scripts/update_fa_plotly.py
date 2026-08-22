@@ -26,6 +26,8 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
+APP_VERSION = "v2.5.1"
+
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
     "#3182CE",  # Blue
@@ -1386,8 +1388,8 @@ def _build_dashboard_fragment(data: ReportData) -> str:
         "<section class=\"fa-hero\">"
         "<div class=\"fa-hero-header\">"
         "  <div>"
-        f"    <div class=\"fa-hero-title\">{html.escape(data.month_end.strftime('%Y년 %m월 자산 대시보드'))} <span class=\"fa-badge fa-badge-neutral\" style=\"font-size:0.75rem; vertical-align:middle; margin-left:6px;\">v2.5.0</span></div>"
-        f"    <div class=\"fa-hero-meta\">최종 업데이트: {html.escape(data.month_end.strftime('%Y-%m-%d'))} · Engine v2.5.0</div>"
+        f"    <div class=\"fa-hero-title\">{html.escape(data.month_end.strftime('%Y년 %m월 자산 대시보드'))} <span class=\"fa-badge fa-badge-neutral\" style=\"font-size:0.75rem; vertical-align:middle; margin-left:6px;\">{APP_VERSION}</span></div>"
+        f"    <div class=\"fa-hero-meta\">최종 업데이트: {html.escape(data.month_end.strftime('%Y-%m-%d'))} · Engine {APP_VERSION}</div>"
         "  </div>"
         "  <a href=\"https://fa-admin.vividian.net\" class=\"fa-btn-admin\" target=\"_blank\" rel=\"noopener noreferrer\">"
         "    <span>⚙️ 거래내역 관리</span>"
