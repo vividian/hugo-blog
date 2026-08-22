@@ -428,7 +428,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="fa-header">
       <div class="fa-header-title">
         <span>📈 FA 자산 거래내역 관리자</span>
-        <span class="fa-header-badge">v2.5.2</span>
+        <span class="fa-header-badge">v2.5.3</span>
         <span class="fa-header-badge" style="background:var(--fa-border); color:var(--fa-text-muted);">SQLite DB</span>
       </div>
       <div style="display:flex; gap:8px;">
@@ -1001,7 +1001,7 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
                             WHERE t2.account = t1.account AND t2.symbol = t1.symbol AND t2.unit_price > 0
                             ORDER BY t2.date DESC, t2.id DESC LIMIT 1) AS latest_price,
                            MAX(date) AS latest_date,
-                           SUM(CASE WHEN kind = '매수' THEN quantity WHEN kind = '매도' THEN -ABS(quantity) ELSE 0 END) AS net_qty
+                           SUM(COALESCE(quantity, 0)) AS net_qty
                     FROM trading_records t1
                     WHERE symbol != '' AND account = ?
                     GROUP BY symbol
@@ -1015,7 +1015,7 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
                             WHERE t2.symbol = t1.symbol AND t2.unit_price > 0
                             ORDER BY t2.date DESC, t2.id DESC LIMIT 1) AS latest_price,
                            MAX(date) AS latest_date,
-                           SUM(CASE WHEN kind = '매수' THEN quantity WHEN kind = '매도' THEN -ABS(quantity) ELSE 0 END) AS net_qty
+                           SUM(COALESCE(quantity, 0)) AS net_qty
                     FROM trading_records t1
                     WHERE symbol != ''
                     GROUP BY symbol
