@@ -681,8 +681,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         const sel = document.getElementById("f-symbol-select");
         let opts = `<option value="">-- 종목 선택 (${currentAccountSymbols.length}개) --</option>`;
         opts += currentAccountSymbols.map(s => {
-          const priceLabel = s.latest_price ? ` (최근: ${Number(s.latest_price).toLocaleString()}원)` : '';
-          return `<option value="${s.symbol}" data-price="${s.latest_price || ''}">${s.symbol}${priceLabel}</option>`;
+          return `<option value="${s.symbol}" data-price="${s.latest_price || ''}">${s.symbol}</option>`;
         }).join("");
         opts += `<option value="__custom__">➕ [직접 입력...]</option>`;
         sel.innerHTML = opts;
