@@ -900,27 +900,41 @@ def _build_account_detail_section(
         # 종목별 카드 그리드 HTML (2열 반응형 종목 카드)
         stock_cards = []
         total_acct_eval = account_holdings["평가금"].sum() if not account_holdings.empty else 0.0
+        total_acct_buy = buy_val if buy_val > 0 else 1.0
 
         for _, hrow in account_holdings.iterrows():
             sym = str(hrow["종목"]).strip()
-            b_amt = _as_float(hrow.get("매수금"))
-            e_amt = _as_float(hrow.get("평가금"))
-            p_amt = _as_float(hrow.get("수익금"))
-            r_rate = _as_float(hrow.get("수익률"))
-            weight_pct = (e_amt / total_acct_eval * 100.0) if total_acct_eval > 0 and e_amt is not None else 0.0
+            b_amt = _as_float(hrow.get("매수금")) or 0.0
+            e_amt = _as_float(hrow.get("평가금")) or 0.0
+            weight_pct = (e_amt / total_acct_eval * 100.0) if total_acct_eval > 0 else 0.0
+
+            # 종목별 매수금 대비 수익금 및 수익률
+            buy_p_amt = e_amt - b_amt
+            buy_r_rate = (buy_p_amt / b_amt * 100.0) if b_amt > 0 else 0.0
+
+            # 종목별 투자금(계좌 원금 배분액) 대비 수익금 및 수익률
+            alloc_inv_amt = (invest_val * (b_amt / total_acct_buy)) if (invest_val and invest_val > 0 and b_amt > 0) else b_amt
+            inv_p_amt = e_amt - alloc_inv_amt
+            inv_r_rate = (inv_p_amt / alloc_inv_amt * 100.0) if alloc_inv_amt > 0 else 0.0
 
             cum_div = div_by_acct_sym.get((account, sym), 0.0)
             if cum_div == 0.0 and account == "sema" and dividend_val is not None:
                 cum_div = dividend_val
             div_str = f"{cum_div:,.0f}원"
 
-            p_cls = "fa-num-positive" if (p_amt or 0) > 0 else "fa-num-negative" if (p_amt or 0) < 0 else ""
-            p_bdg = "fa-badge-positive" if (p_amt or 0) > 0 else "fa-badge-negative" if (p_amt or 0) < 0 else "fa-badge-neutral"
+            buy_p_cls = "fa-num-positive" if buy_p_amt > 0 else "fa-num-negative" if buy_p_amt < 0 else ""
+            buy_p_bdg = "fa-badge-positive" if buy_p_amt > 0 else "fa-badge-negative" if buy_p_amt < 0 else "fa-badge-neutral"
 
-            b_str = f"{b_amt:,.0f}원" if b_amt is not None else "-"
-            e_str = f"{e_amt:,.0f}원" if e_amt is not None else "-"
-            p_str = f"{p_amt:+,.0f}원" if p_amt is not None and p_amt != 0 else (f"{p_amt:,.0f}원" if p_amt is not None else "-")
-            r_str = f"{r_rate * 100:+.2f}%" if r_rate is not None else "-"
+            inv_p_cls = "fa-num-positive" if inv_p_amt > 0 else "fa-num-negative" if inv_p_amt < 0 else ""
+            inv_p_bdg = "fa-badge-positive" if inv_p_amt > 0 else "fa-badge-negative" if inv_p_amt < 0 else "fa-badge-neutral"
+
+            b_str = f"{b_amt:,.0f}원"
+            e_str = f"{e_amt:,.0f}원"
+            inv_str = f"{alloc_inv_amt:,.0f}원"
+            buy_p_str = f"{buy_p_amt:+,.0f}원" if buy_p_amt != 0 else "0원"
+            buy_r_str = f"{buy_r_rate:+.2f}%"
+            inv_p_str = f"{inv_p_amt:+,.0f}원" if inv_p_amt != 0 else "0원"
+            inv_r_str = f"{inv_r_rate:+.2f}%"
 
             stock_cards.append(
                 f"<div class='fa-stock-card'>"
@@ -928,21 +942,29 @@ def _build_account_detail_section(
                 f"    <div class='fa-stock-card-title'>{html.escape(sym)}</div>"
                 f"    <div class='fa-stock-card-badges'>"
                 f"      <span class='fa-chip-weight'>비중 {weight_pct:.1f}%</span>"
-                f"      <span class='fa-badge {p_bdg}'>{r_str}</span>"
+                f"      <span class='fa-badge {buy_p_bdg}'>{buy_r_str}</span>"
                 f"    </div>"
                 f"  </div>"
                 f"  <div class='fa-stock-card-body'>"
                 f"    <div class='fa-stock-field'>"
-                f"      <span class='fa-stock-lbl'>평가금</span>"
+                f"      <span class='fa-stock-lbl'>현재 평가금</span>"
                 f"      <span class='fa-stock-val fa-font-bold'>{e_str}</span>"
                 f"    </div>"
                 f"    <div class='fa-stock-field'>"
-                f"      <span class='fa-stock-lbl'>매수금</span>"
+                f"      <span class='fa-stock-lbl'>총 매수금</span>"
                 f"      <span class='fa-stock-val'>{b_str}</span>"
                 f"    </div>"
                 f"    <div class='fa-stock-field'>"
-                f"      <span class='fa-stock-lbl'>수익금</span>"
-                f"      <span class='fa-stock-val {p_cls}'>{p_str}</span>"
+                f"      <span class='fa-stock-lbl'>투자금 (원금)</span>"
+                f"      <span class='fa-stock-val'>{inv_str}</span>"
+                f"    </div>"
+                f"    <div class='fa-stock-field'>"
+                f"      <span class='fa-stock-lbl'>매수 대비 수익</span>"
+                f"      <span class='fa-stock-val {buy_p_cls}'>{buy_p_str} <span class='fa-badge {buy_p_bdg}' style='font-size:0.75rem; padding:1px 6px;'>{buy_r_str}</span></span>"
+                f"    </div>"
+                f"    <div class='fa-stock-field'>"
+                f"      <span class='fa-stock-lbl'>투자 대비 수익</span>"
+                f"      <span class='fa-stock-val {inv_p_cls}'>{inv_p_str} <span class='fa-badge {inv_p_bdg}' style='font-size:0.75rem; padding:1px 6px;'>{inv_r_str}</span></span>"
                 f"    </div>"
                 f"    <div class='fa-stock-field'>"
                 f"      <span class='fa-stock-lbl'>누적 배당금</span>"
@@ -1131,7 +1153,7 @@ def _build_trading_history(
                     "date": date_str,
                     "account": account,
                     "symbol": symbol,
-                    "amount_str": f"-{fmt_currency(trade_amt)}",
+                    "amount_str": f"{fmt_currency(trade_amt)}",
                     "sub_detail": f"단가 {fmt_currency(unit_price)} · {abs(qty):g}주",
                 })
             else:
@@ -1141,7 +1163,7 @@ def _build_trading_history(
                     "date": date_str,
                     "account": account,
                     "symbol": symbol,
-                    "amount_str": f"+{fmt_currency(abs(trade_amt))}",
+                    "amount_str": f"{fmt_currency(abs(trade_amt))}",
                     "sub_detail": f"단가 {fmt_currency(unit_price)} · {abs(qty):g}주",
                 })
         if has_dividend:
