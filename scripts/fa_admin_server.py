@@ -428,7 +428,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="fa-header">
       <div class="fa-header-title">
         <span>📈 FA 자산 거래내역 관리자</span>
-        <span class="fa-header-badge">SQLite DB</span>
+        <span class="fa-header-badge">v2.5.0</span>
+        <span class="fa-header-badge" style="background:var(--fa-border); color:var(--fa-text-muted);">SQLite DB</span>
       </div>
       <div style="display:flex; gap:8px;">
         <button class="fa-btn-refresh" onclick="triggerDashboardBuild()">
