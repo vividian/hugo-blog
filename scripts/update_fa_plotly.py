@@ -1153,7 +1153,7 @@ def _build_trading_history(
                     "date": date_str,
                     "account": account,
                     "symbol": symbol,
-                    "amount_str": f"{fmt_currency(trade_amt)}",
+                    "amount_str": f"+{fmt_currency(trade_amt)}",
                     "sub_detail": f"단가 {fmt_currency(unit_price)} · {abs(qty):g}주",
                 })
             else:
@@ -1163,7 +1163,7 @@ def _build_trading_history(
                     "date": date_str,
                     "account": account,
                     "symbol": symbol,
-                    "amount_str": f"{fmt_currency(abs(trade_amt))}",
+                    "amount_str": f"-{fmt_currency(abs(trade_amt))}",
                     "sub_detail": f"단가 {fmt_currency(unit_price)} · {abs(qty):g}주",
                 })
         if has_dividend:
