@@ -850,14 +850,14 @@ def _build_account_detail_section(
         buy_p_cls = "fa-num-positive" if (buy_profit or 0) > 0 else "fa-num-negative" if (buy_profit or 0) < 0 else ""
         buy_p_bdg = "fa-badge-positive" if (buy_profit or 0) > 0 else "fa-badge-negative" if (buy_profit or 0) < 0 else "fa-badge-neutral"
 
-        # 계좌 요약 미니 KPI 그리드 (6대 핵심 지표)
+        # 계좌 요약 미니 KPI 그리드 (평가/배당 -> 투자/투자수익 -> 매수/매수수익)
         mini_kpis = [
-            f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>투자금 (원금)</div><div class='fa-mini-kpi-val'>{invest_val:,.0f}원</div></div>" if invest_val is not None else "",
-            f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>총 매수금</div><div class='fa-mini-kpi-val'>{buy_val:,.0f}원</div></div>" if buy_val > 0 else "",
             f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>현재 평가금</div><div class='fa-mini-kpi-val fa-font-bold'>{eval_val:,.0f}원</div></div>" if eval_val is not None else "",
-            f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>투자 대비 수익</div><div class='fa-mini-kpi-val {inv_p_cls}'>{invest_profit:+,.0f}원 <span class='fa-badge {inv_p_bdg}'>{invest_rate:+.2f}%</span></div></div>" if invest_profit is not None else "",
-            f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>매수 대비 수익</div><div class='fa-mini-kpi-val {buy_p_cls}'>{buy_profit:+,.0f}원 <span class='fa-badge {buy_p_bdg}'>{buy_rate:+.2f}%</span></div></div>" if buy_val > 0 else "",
             f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>누적 배당금</div><div class='fa-mini-kpi-val' style='color: var(--fa-purple);'>{dividend_val:,.0f}원</div></div>" if dividend_val is not None and dividend_val > 0 else "",
+            f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>투자금 (원금)</div><div class='fa-mini-kpi-val'>{invest_val:,.0f}원</div></div>" if invest_val is not None else "",
+            f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>투자 대비 수익</div><div class='fa-mini-kpi-val {inv_p_cls}'>{invest_profit:+,.0f}원 <span class='fa-badge {inv_p_bdg}'>{invest_rate:+.2f}%</span></div></div>" if invest_profit is not None else "",
+            f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>총 매수금</div><div class='fa-mini-kpi-val'>{buy_val:,.0f}원</div></div>" if buy_val > 0 else "",
+            f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>매수 대비 수익</div><div class='fa-mini-kpi-val {buy_p_cls}'>{buy_profit:+,.0f}원 <span class='fa-badge {buy_p_bdg}'>{buy_rate:+.2f}%</span></div></div>" if buy_val > 0 else "",
         ]
         mini_kpi_html = f"<div class='fa-mini-kpi-grid'>{''.join(mini_kpis)}</div>"
 
@@ -951,24 +951,24 @@ def _build_account_detail_section(
                 f"      <span class='fa-stock-val fa-font-bold'>{e_str}</span>"
                 f"    </div>"
                 f"    <div class='fa-stock-field'>"
-                f"      <span class='fa-stock-lbl'>총 매수금</span>"
-                f"      <span class='fa-stock-val'>{b_str}</span>"
+                f"      <span class='fa-stock-lbl'>누적 배당금</span>"
+                f"      <span class='fa-stock-val' style='color: var(--fa-purple);'>{div_str}</span>"
                 f"    </div>"
                 f"    <div class='fa-stock-field'>"
                 f"      <span class='fa-stock-lbl'>투자금 (원금)</span>"
                 f"      <span class='fa-stock-val'>{inv_str}</span>"
                 f"    </div>"
                 f"    <div class='fa-stock-field'>"
-                f"      <span class='fa-stock-lbl'>매수 대비 수익</span>"
-                f"      <span class='fa-stock-val {buy_p_cls}'>{buy_p_str} <span class='fa-badge {buy_p_bdg}' style='font-size:0.75rem; padding:1px 6px;'>{buy_r_str}</span></span>"
-                f"    </div>"
-                f"    <div class='fa-stock-field'>"
                 f"      <span class='fa-stock-lbl'>투자 대비 수익</span>"
                 f"      <span class='fa-stock-val {inv_p_cls}'>{inv_p_str} <span class='fa-badge {inv_p_bdg}' style='font-size:0.75rem; padding:1px 6px;'>{inv_r_str}</span></span>"
                 f"    </div>"
                 f"    <div class='fa-stock-field'>"
-                f"      <span class='fa-stock-lbl'>누적 배당금</span>"
-                f"      <span class='fa-stock-val' style='color: var(--fa-purple);'>{div_str}</span>"
+                f"      <span class='fa-stock-lbl'>총 매수금</span>"
+                f"      <span class='fa-stock-val'>{b_str}</span>"
+                f"    </div>"
+                f"    <div class='fa-stock-field'>"
+                f"      <span class='fa-stock-lbl'>매수 대비 수익</span>"
+                f"      <span class='fa-stock-val {buy_p_cls}'>{buy_p_str} <span class='fa-badge {buy_p_bdg}' style='font-size:0.75rem; padding:1px 6px;'>{buy_r_str}</span></span>"
                 f"    </div>"
                 f"  </div>"
                 f"</div>"
