@@ -501,16 +501,19 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             </div>
           </div>
 
-          <!-- 종목명 -->
+          <!-- 종목명 선택 -->
           <div class="fa-field">
-            <label class="fa-label">종목명 / 티커</label>
-            <input type="text" id="f-symbol" class="fa-input" list="symbol-datalist" placeholder="예: ACE S&P500, SPYM">
-            <datalist id="symbol-datalist"></datalist>
+            <label class="fa-label">종목명 선택</label>
+            <select id="f-symbol-select" class="fa-select" onchange="handleSymbolSelectChange()">
+              <option value="">-- 종목 선택 --</option>
+            </select>
+            <input type="text" id="f-symbol-custom" class="fa-input" placeholder="종목명 직접 입력..." style="display:none; margin-top:6px;" oninput="handleCustomSymbolInput()">
+            <input type="hidden" id="f-symbol" value="">
           </div>
 
           <!-- 단가 -->
           <div class="fa-field" id="wrap-unit-price">
-            <label class="fa-label">체결 단가 (원/$)</label>
+            <label class="fa-label">체결 단가 (원/$) <span id="symbol-price-hint" style="color:var(--fa-accent); font-weight:700; font-size:0.78rem; margin-left:6px;"></span></label>
             <input type="number" step="any" id="f-unit-price" class="fa-input" placeholder="0" oninput="calcAmount()">
           </div>
 
@@ -666,6 +669,32 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       document.getElementById("wrap-evaluation").style.display = isEval ? 'flex' : 'none';
     }
 
+    let currentAccountSymbols = [];
+
+    async function loadSymbols(acct) {
+      if (!acct) acct = document.getElementById("f-account").value;
+      try {
+        const res = await fetch("/api/symbols?account=" + encodeURIComponent(acct));
+        currentAccountSymbols = await res.json();
+        
+        const sel = document.getElementById("f-symbol-select");
+        let opts = `<option value="">-- 종목 선택 (${currentAccountSymbols.length}개) --</option>`;
+        opts += currentAccountSymbols.map(s => {
+          const priceLabel = s.latest_price ? ` (최근: ${Number(s.latest_price).toLocaleString()}원)` : '';
+          return `<option value="${s.symbol}" data-price="${s.latest_price || ''}">${s.symbol}${priceLabel}</option>`;
+        }).join("");
+        opts += `<option value="__custom__">➕ [직접 입력...]</option>`;
+        sel.innerHTML = opts;
+
+        // 종목 상태 초기화
+        document.getElementById("f-symbol-custom").style.display = "none";
+        document.getElementById("f-symbol").value = "";
+        document.getElementById("symbol-price-hint").innerText = "";
+      } catch(e) {
+        console.error("종목 로드 실패:", e);
+      }
+    }
+
     function handleAccountChange() {
       const acct = document.getElementById("f-account").value;
       const exField = document.getElementById("f-exchange");
@@ -674,6 +703,45 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       } else {
         exField.value = 1.0;
       }
+      loadSymbols(acct);
+    }
+
+    function handleSymbolSelectChange() {
+      const sel = document.getElementById("f-symbol-select");
+      const customInput = document.getElementById("f-symbol-custom");
+      const hiddenSymbol = document.getElementById("f-symbol");
+      const hint = document.getElementById("symbol-price-hint");
+      const val = sel.value;
+
+      if (val === '__custom__') {
+        customInput.style.display = "block";
+        customInput.focus();
+        hiddenSymbol.value = customInput.value.trim();
+        hint.innerText = "";
+      } else if (val) {
+        customInput.style.display = "none";
+        hiddenSymbol.value = val;
+        
+        // 최근 단가 자동 입력 및 힌트 표시
+        const selectedOpt = sel.options[sel.selectedIndex];
+        const latestPrice = selectedOpt.getAttribute("data-price");
+        if (latestPrice && parseFloat(latestPrice) > 0) {
+          const numPrice = parseFloat(latestPrice);
+          document.getElementById("f-unit-price").value = numPrice;
+          hint.innerText = `💡 최근 체결단가: ${numPrice.toLocaleString()}원`;
+          calcAmount();
+        } else {
+          hint.innerText = "";
+        }
+      } else {
+        customInput.style.display = "none";
+        hiddenSymbol.value = "";
+        hint.innerText = "";
+      }
+    }
+
+    function handleCustomSymbolInput() {
+      document.getElementById("f-symbol").value = document.getElementById("f-symbol-custom").value.trim();
     }
 
     function calcAmount() {
@@ -682,15 +750,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       if (price > 0 && qty > 0) {
         document.getElementById("f-amount").value = Math.round(price * qty);
       }
-    }
-
-    async function loadSymbols() {
-      try {
-        const res = await fetch("/api/symbols");
-        const symbols = await res.json();
-        const dl = document.getElementById("symbol-datalist");
-        dl.innerHTML = symbols.map(s => `<option value="${s}">`).join("");
-      } catch(e) {}
     }
 
     let debounceTimer = null;
@@ -820,11 +879,37 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       }
     }
 
-    function startEdit(r) {
+    async function startEdit(r) {
       document.getElementById("edit-id").value = r.id;
       document.getElementById("f-date").value = r.date;
       document.getElementById("f-account").value = r.account;
-      document.getElementById("f-symbol").value = r.symbol || "";
+      
+      // 계좌별 종목 목록 로드 후 대기
+      await loadSymbols(r.account);
+
+      // 종목 셀렉트 매칭
+      const sel = document.getElementById("f-symbol-select");
+      const customInput = document.getElementById("f-symbol-custom");
+      const hiddenSymbol = document.getElementById("f-symbol");
+      const sym = r.symbol || "";
+      hiddenSymbol.value = sym;
+
+      let found = false;
+      for (let i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].value === sym) {
+          sel.selectedIndex = i;
+          found = true;
+          break;
+        }
+      }
+      if (!found && sym) {
+        sel.value = "__custom__";
+        customInput.style.display = "block";
+        customInput.value = sym;
+      } else {
+        customInput.style.display = "none";
+      }
+
       document.getElementById("f-unit-price").value = r.unit_price || "";
       document.getElementById("f-quantity").value = r.quantity || "";
       document.getElementById("f-amount").value = r.amount || "";
@@ -853,6 +938,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       document.getElementById("form-heading").innerText = "✨ 새 거래 등록";
       document.getElementById("btn-submit").innerText = "거래 등록하기";
       document.getElementById("btn-cancel-edit").style.display = "none";
+      document.getElementById("f-symbol-custom").style.display = "none";
+      document.getElementById("symbol-price-hint").innerText = "";
+      loadSymbols();
     }
 
     async function deleteRecord(id) {
@@ -901,12 +989,38 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
             return
 
         if path == "/api/symbols":
+            qs = parse_qs(parsed.query)
+            acct = qs.get("account", [""])[0]
+
             conn = get_db_connection()
             cur = conn.cursor()
-            cur.execute("SELECT DISTINCT symbol FROM trading_records WHERE symbol != '' ORDER BY symbol ASC;")
-            symbols = [r["symbol"] for r in cur.fetchall()]
+            if acct:
+                cur.execute("""
+                    SELECT symbol,
+                           (SELECT unit_price FROM trading_records t2
+                            WHERE t2.account = t1.account AND t2.symbol = t1.symbol AND t2.unit_price > 0
+                            ORDER BY t2.date DESC, t2.id DESC LIMIT 1) AS latest_price,
+                           MAX(date) AS latest_date
+                    FROM trading_records t1
+                    WHERE symbol != '' AND account = ?
+                    GROUP BY symbol
+                    ORDER BY latest_date DESC, symbol ASC;
+                """, (acct,))
+            else:
+                cur.execute("""
+                    SELECT symbol,
+                           (SELECT unit_price FROM trading_records t2
+                            WHERE t2.symbol = t1.symbol AND t2.unit_price > 0
+                            ORDER BY t2.date DESC, t2.id DESC LIMIT 1) AS latest_price,
+                           MAX(date) AS latest_date
+                    FROM trading_records t1
+                    WHERE symbol != ''
+                    GROUP BY symbol
+                    ORDER BY latest_date DESC, symbol ASC;
+                """)
+            rows = [dict(r) for r in cur.fetchall()]
             conn.close()
-            self._send_json(symbols)
+            self._send_json(rows)
             return
 
         if path == "/api/records":
