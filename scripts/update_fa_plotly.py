@@ -800,6 +800,14 @@ def _build_account_detail_section(
             f"<button type='button' class='fa-tab-btn{active_cls}' data-target='{tab_id}'>{html.escape(label)}</button>"
         )
 
+        # 계좌 요약 데이터
+        status_row = data.summary_df[data.summary_df["계좌"] == account]
+        status_data = status_row.iloc[0] if not status_row.empty else {}
+
+        invest_val = _as_float(status_data.get("투자금"))
+        eval_val = _as_float(status_data.get("평가금"))
+        dividend_val = _as_float(status_data.get("배당금"))
+
         # 계좌별 보유 종목 데이터
         account_holdings = data.holdings_df[data.holdings_df["계좌"] == account].copy()
         if account == "sema" and account_holdings.empty and not status_row.empty:
@@ -808,15 +816,12 @@ def _build_account_detail_section(
                 "종목": "교직원공제회",
                 "매수금": invest_val,
                 "평가금": eval_val,
-                "수익금": profit_val,
-                "수익률": rate_val,
+                "수익금": _as_float(status_data.get("수익금")),
+                "수익률": (_as_float(status_data.get("수익금")) / invest_val) if (invest_val and invest_val > 0) else 0.0,
             }])
 
         if not account_holdings.empty:
             account_holdings = account_holdings.sort_values("평가금", ascending=False)
-
-        status_row = data.summary_df[data.summary_df["계좌"] == account]
-        status_data = status_row.iloc[0] if not status_row.empty else {}
 
         raw_account_name = update_fa.ACCOUNT_RAW_NAMES.get(account)
         if not raw_account_name:
@@ -825,22 +830,34 @@ def _build_account_detail_section(
 
         rebal_df = update_fa.calculate_rebalancing_df(raw_account_name, account_holdings, data.symbol_map)
 
-        invest_val = _as_float(status_data.get("투자금"))
-        eval_val = _as_float(status_data.get("평가금"))
-        profit_val = _as_float(status_data.get("수익금"))
-        dividend_val = _as_float(status_data.get("배당금"))
-        rate_val = (profit_val / invest_val) if (invest_val and invest_val > 0 and profit_val is not None) else 0.0
+        buy_val = account_holdings["매수금"].sum() if not account_holdings.empty else 0.0
+        if buy_val == 0.0 and account == "sema" and invest_val is not None:
+            buy_val = invest_val
 
-        profit_cls = "fa-num-positive" if (profit_val or 0) > 0 else "fa-num-negative" if (profit_val or 0) < 0 else ""
-        profit_badge = "fa-badge-positive" if (profit_val or 0) > 0 else "fa-badge-negative" if (profit_val or 0) < 0 else "fa-badge-neutral"
+        # 투자금 대비 수익금 및 수익률
+        invest_profit = _as_float(status_data.get("수익금"))
+        if invest_profit is None and eval_val is not None and invest_val is not None:
+            invest_profit = eval_val - invest_val
+        invest_rate = (invest_profit / invest_val * 100.0) if (invest_val and invest_val > 0 and invest_profit is not None) else 0.0
 
-        # 계좌 요약 미니 KPI 그리드
+        # 매수금 대비 수익금 및 수익률
+        buy_profit = (eval_val - buy_val) if (eval_val is not None and buy_val > 0) else 0.0
+        buy_rate = (buy_profit / buy_val * 100.0) if (buy_val > 0 and buy_profit is not None) else 0.0
+
+        inv_p_cls = "fa-num-positive" if (invest_profit or 0) > 0 else "fa-num-negative" if (invest_profit or 0) < 0 else ""
+        inv_p_bdg = "fa-badge-positive" if (invest_profit or 0) > 0 else "fa-badge-negative" if (invest_profit or 0) < 0 else "fa-badge-neutral"
+
+        buy_p_cls = "fa-num-positive" if (buy_profit or 0) > 0 else "fa-num-negative" if (buy_profit or 0) < 0 else ""
+        buy_p_bdg = "fa-badge-positive" if (buy_profit or 0) > 0 else "fa-badge-negative" if (buy_profit or 0) < 0 else "fa-badge-neutral"
+
+        # 계좌 요약 미니 KPI 그리드 (6대 핵심 지표)
         mini_kpis = [
-            f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>투자금</div><div class='fa-mini-kpi-val'>{invest_val:,.0f}원</div></div>" if invest_val is not None else "",
-            f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>평가금</div><div class='fa-mini-kpi-val fa-font-bold'>{eval_val:,.0f}원</div></div>" if eval_val is not None else "",
-            f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>수익금</div><div class='fa-mini-kpi-val {profit_cls}'>{profit_val:+,.0f}원</div></div>" if profit_val is not None else "",
-            f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>수익률</div><div class='fa-mini-kpi-val'><span class='fa-badge {profit_badge}'>{rate_val * 100:+.2f}%</span></div></div>",
-            f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>누적 배당금</div><div class='fa-mini-kpi-val'>{dividend_val:,.0f}원</div></div>" if dividend_val is not None and dividend_val > 0 else "",
+            f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>투자금 (원금)</div><div class='fa-mini-kpi-val'>{invest_val:,.0f}원</div></div>" if invest_val is not None else "",
+            f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>총 매수금</div><div class='fa-mini-kpi-val'>{buy_val:,.0f}원</div></div>" if buy_val > 0 else "",
+            f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>현재 평가금</div><div class='fa-mini-kpi-val fa-font-bold'>{eval_val:,.0f}원</div></div>" if eval_val is not None else "",
+            f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>투자 대비 수익</div><div class='fa-mini-kpi-val {inv_p_cls}'>{invest_profit:+,.0f}원 <span class='fa-badge {inv_p_bdg}'>{invest_rate:+.2f}%</span></div></div>" if invest_profit is not None else "",
+            f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>매수 대비 수익</div><div class='fa-mini-kpi-val {buy_p_cls}'>{buy_profit:+,.0f}원 <span class='fa-badge {buy_p_bdg}'>{buy_rate:+.2f}%</span></div></div>" if buy_val > 0 else "",
+            f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>누적 배당금</div><div class='fa-mini-kpi-val' style='color: var(--fa-purple);'>{dividend_val:,.0f}원</div></div>" if dividend_val is not None and dividend_val > 0 else "",
         ]
         mini_kpi_html = f"<div class='fa-mini-kpi-grid'>{''.join(mini_kpis)}</div>"
 
@@ -972,12 +989,53 @@ def _build_account_detail_section(
                     )
 
         rebal_html = ""
-        if rebal_cards:
-            rebal_html = (
-                "<div class='fa-rebal-box'>"
-                "<div class='fa-rebal-title'>💡 리밸런싱 가이드 (목표 비중 대비)</div>"
-                f"<div class='fa-rebal-grid'>{''.join(rebal_cards)}</div>"
-                "</div>"
+        # 계좌별 최근 거래내역 HTML 생성
+        acct_summary, acct_items = _build_trading_history(
+            data.records,
+            data.fx_series_month,
+            data.month_end,
+            filter_account=account,
+            limit=8,
+        )
+        acct_history_html = ""
+        if acct_items:
+            badge_map = {
+                "buy": ("매수", "fa-badge-positive", "fa-num-positive"),
+                "sell": ("매도", "fa-badge-negative", "fa-num-negative"),
+                "div": ("배당", "fa-badge-purple", "fa-num-purple"),
+                "invest": ("투자금", "fa-badge-neutral", ""),
+            }
+            acct_item_rows = []
+            for a_item in acct_items:
+                kind = a_item.get("kind", "")
+                badge_text, badge_cls, amt_cls = badge_map.get(kind, ("기타", "fa-badge-neutral", ""))
+                date_str = a_item.get("date", "")
+                symbol = a_item.get("symbol", "")
+                amount_str = a_item.get("amount_str", "")
+                sub_detail = a_item.get("sub_detail", "")
+
+                acct_item_rows.append(
+                    f"<div class='fa-history-card'>"
+                    f"  <div class='fa-history-card-left'>"
+                    f"    <div class='fa-history-card-header'>"
+                    f"      <span class='fa-badge {badge_cls}'>{badge_text}</span>"
+                    f"      <span class='fa-history-date'>{html.escape(date_str)}</span>"
+                    f"    </div>"
+                    f"    <div class='fa-history-symbol'>{html.escape(symbol)}</div>"
+                    f"  </div>"
+                    f"  <div class='fa-history-card-right'>"
+                    f"    <div class='fa-history-amount {amt_cls}'>{html.escape(amount_str)}</div>"
+                    f"    <div class='fa-history-subdetail'>{html.escape(sub_detail)}</div>"
+                    f"  </div>"
+                    f"</div>"
+                )
+
+            period_label = str(acct_summary.get("period_str", "최근 거래"))
+            acct_history_html = (
+                f"<div class='fa-acct-history-section'>"
+                f"  <div class='fa-subcard-title'>📋 최근 계좌 거래내역 ({period_label})</div>"
+                f"  <div class='fa-history-list'>{''.join(acct_item_rows)}</div>"
+                f"</div>"
             )
 
         # 탭 패널 완성
@@ -995,6 +1053,7 @@ def _build_account_detail_section(
             f"  </div>"
             f"</div>"
             f"{rebal_html}"
+            f"{acct_history_html}"
             f"</div>"
         )
         tab_panes.append(pane_html)
@@ -1015,12 +1074,25 @@ def _build_trading_history(
     records: pd.DataFrame,
     fx_series: pd.Series,
     month_end: pd.Timestamp,
+    filter_account: Optional[str] = None,
+    limit: Optional[int] = None,
 ) -> Tuple[Dict[str, object], List[Dict[str, str]]]:
-    """거래 내역을 정형화된 데이터와 리스트로 반환"""
+    """거래 내역을 정형화된 데이터와 리스트로 반환 (특정 계좌 필터 지원)"""
+    target_records = records.copy()
+    if filter_account:
+        target_records = target_records[target_records["계좌"].astype(str).str.strip() == filter_account]
+
     period = month_end.to_period("M")
     start = period.start_time
     end = period.end_time
-    month_records = records[(records["일자"] >= start) & (records["일자"] <= end)].copy()
+    month_records = target_records[(target_records["일자"] >= start) & (target_records["일자"] <= end)].copy()
+
+    is_recent_mode = False
+    # 특정 계좌 필터인데 당월 거래가 없을 경우, 해당 계좌의 가장 최근 거래 N건 가져오기
+    if month_records.empty and filter_account and not target_records.empty:
+        month_records = target_records.sort_values("일자", ascending=False).head(limit or 5).copy()
+        is_recent_mode = True
+
     if month_records.empty:
         return {}, []
 
@@ -1031,6 +1103,9 @@ def _build_trading_history(
         return f"{val:,.0f}원"
 
     month_records = month_records.sort_values("일자", ascending=False)
+    if limit and limit > 0:
+        month_records = month_records.head(limit)
+
     for _, row in month_records.iterrows():
         date = pd.Timestamp(row["일자"])
         date_str = f"{date:%Y.%m.%d}"
@@ -1095,8 +1170,9 @@ def _build_trading_history(
                 "sub_detail": "계좌 입금",
             })
 
+    period_str = f"{period.year}년 {period.month:02d}월" if not is_recent_mode else "최근 거래"
     summary_data: Dict[str, object] = {
-        "period_str": f"{period.year}년 {period.month:02d}월",
+        "period_str": period_str,
         "invest_total": invest_total,
         "buy_total": buy_total,
         "sell_total": sell_total,
@@ -1675,10 +1751,13 @@ html.dark .fa-dashboard,
 /* Account Mini KPI Grid */
 .fa-mini-kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 18px;
 }
+@media (max-width: 1100px) { .fa-mini-kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .fa-mini-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } }
+
 .fa-mini-kpi {
   background: var(--fa-kpi-bg);
   border: 1px solid var(--fa-border);
@@ -1686,7 +1765,24 @@ html.dark .fa-dashboard,
   padding: 10px 12px;
 }
 .fa-mini-kpi-lbl { font-size: 0.76rem; color: var(--fa-text-muted); font-weight: 500; }
-.fa-mini-kpi-val { font-size: 1rem; font-weight: 700; margin-top: 3px; }
+.fa-mini-kpi-val { font-size: 0.98rem; font-weight: 700; margin-top: 3px; }
+
+/* Account Detail Transaction History Section */
+.fa-acct-history-section {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px dashed var(--fa-border);
+}
+.fa-acct-history-section .fa-history-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+@media (max-width: 768px) {
+  .fa-acct-history-section .fa-history-list {
+    grid-template-columns: 1fr;
+  }
+}
 
 /* Account Split Grid (Chart + Table) */
 .fa-account-split-grid {
