@@ -45,6 +45,123 @@ ACCOUNT_CODE_TO_KEYWORD = {
 }
 
 
+def parse_target_allocation_from_name(name: str) -> Optional[Dict[str, float]]:
+    match = re.search(r"\((.*?)=(.*?)\)", name)
+    if not match:
+        return None
+    keys_part = match.group(1).strip()
+    ratios_part = match.group(2).strip()
+    keys = [k.strip() for k in keys_part.split(":") if k.strip()]
+    try:
+        ratios = [float(r.strip()) for r in ratios_part.split(":") if r.strip()]
+    except ValueError:
+        return None
+    if len(keys) != len(ratios) or len(keys) == 0:
+        return None
+    total_ratio = sum(ratios)
+    if total_ratio <= 0:
+        return None
+    return {k: r / total_ratio for k, r in zip(keys, ratios)}
+
+
+def get_all_account_allocations() -> List[Dict[str, Any]]:
+    """config/fa.yaml의 각 계좌별 목표 비중 설정 정보를 반환합니다."""
+    results = []
+    if not FA_YAML_PATH.exists():
+        return results
+
+    try:
+        with open(FA_YAML_PATH, "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+
+        for acct_entry in cfg.get("accounts", []):
+            full_title = acct_entry.get("name", "")
+            # 매칭 계좌 코드
+            matched_code = "기타"
+            for code, kw in ACCOUNT_CODE_TO_KEYWORD.items():
+                if kw in full_title:
+                    matched_code = code
+                    break
+
+            # 순수 계좌명 추출 (괄호 앞부분)
+            base_name = re.sub(r"\s*\(.*?\)", "", full_title).strip()
+            
+            # 수식 추출
+            formula_match = re.search(r"\((.*?)\)", full_title)
+            formula_str = formula_match.group(1).strip() if formula_match else ""
+            
+            # 파싱된 비중
+            parsed_alloc = parse_target_allocation_from_name(full_title)
+            alloc_list = []
+            if parsed_alloc:
+                for k, ratio in parsed_alloc.items():
+                    alloc_list.append({
+                        "key": k,
+                        "ratio": ratio,
+                        "pct": round(ratio * 100, 1)
+                    })
+
+            # 해당 계좌에 등록된 종목들의 asset_class 및 abbrev 목록 추출 (추천 키워드용)
+            item_keys = set()
+            for it in acct_entry.get("items", []):
+                if len(it) >= 2 and it[1]:
+                    item_keys.add(it[1])
+                if len(it) >= 5 and it[4]:
+                    item_keys.add(it[4])
+
+            results.append({
+                "account": matched_code,
+                "full_title": full_title,
+                "base_name": base_name,
+                "formula": formula_str,
+                "has_target": bool(parsed_alloc),
+                "allocations": alloc_list,
+                "available_keys": sorted(list(item_keys)),
+            })
+    except Exception as e:
+        print(f"⚠️ [fa.yaml] 계좌 목표 비중 로드 실패: {e}")
+    return results
+
+
+def update_account_allocation(account_code: str, new_formula: str) -> bool:
+    """특정 계좌의 목표 비중 수식(예: 'SCHD:QQQ:MMA = 5:4:1')을 fa.yaml에 반영합니다."""
+    try:
+        if not FA_YAML_PATH.exists():
+            return False
+        with open(FA_YAML_PATH, "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+
+        target_kw = ACCOUNT_CODE_TO_KEYWORD.get(account_code, account_code)
+        updated = False
+
+        for acct_entry in cfg.get("accounts", []):
+            full_title = acct_entry.get("name", "")
+            if target_kw in full_title or account_code == full_title:
+                base_name = re.sub(r"\s*\(.*?\)", "", full_title).strip()
+                clean_formula = new_formula.strip()
+                if clean_formula:
+                    if not (clean_formula.startswith("(") and clean_formula.endswith(")")):
+                        clean_formula = f"({clean_formula})"
+                    new_full_title = f"{base_name} {clean_formula}"
+                else:
+                    new_full_title = base_name
+
+                acct_entry["name"] = new_full_title
+                updated = True
+                break
+
+        if updated:
+            with open(FA_YAML_PATH, "w", encoding="utf-8") as f:
+                yaml.dump(cfg, f, allow_unicode=True, sort_keys=False)
+            print(f"✅ [fa.yaml] 계좌 목표 비중 수정 완료: [{account_code}] {new_full_title}")
+            run_dashboard_update()
+            return True
+        return False
+    except Exception as e:
+        print(f"⚠️ [fa.yaml] 계좌 목표 비중 수정 실패: {e}")
+        return False
+
+
 def get_all_symbols_from_fa_yaml() -> List[Dict[str, str]]:
     """config/fa.yaml에 정의된 모든 계좌별 종목 목록을 반환합니다."""
     symbols = []
@@ -701,10 +818,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="fa-header">
       <div class="fa-header-title">
         <span>📈 FA 자산 거래내역 관리자</span>
-        <span class="fa-header-badge">v2.7.26</span>
+        <span class="fa-header-badge">v2.7.27</span>
         <span class="fa-header-badge" style="background:var(--fa-border); color:var(--fa-text-muted);">SQLite DB</span>
       </div>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="fa-btn-refresh" style="background:#7c3aed; border-color:#7c3aed; color:#fff;" onclick="openManageAllocationsModal()">
+          <span>🎯 목표 비중 설정</span>
+        </button>
         <button class="fa-btn-refresh" style="background:#0284c7; border-color:#0284c7; color:#fff;" onclick="openManageSymbolsModal()">
           <span>🏷️ 종목 및 단축명 관리</span>
         </button>
@@ -1084,6 +1204,28 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           <button type="submit" class="fa-btn-primary" style="padding:7px 18px;">수정 저장하기</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- 계좌별 목표 비중 설정 모달 -->
+  <div id="modal-manage-allocations" class="fa-modal-overlay">
+    <div class="fa-modal" style="max-width:880px; width:95%;">
+      <div class="fa-modal-header">
+        <div class="fa-modal-title">🎯 계좌별 리밸런싱 목표 비중 설정</div>
+        <button type="button" class="fa-modal-close" onclick="closeManageAllocationsModal()">&times;</button>
+      </div>
+      <div class="fa-modal-body" style="padding:16px;">
+        <div style="background:#faf5ff; border:1px solid #e9d5ff; border-radius:10px; padding:12px 16px; margin-bottom:14px; font-size:0.84rem; color:#6b21a8; line-height:1.5;">
+          💡 <strong>안내:</strong> 계좌별 목표 비중(예: <code>SCHD:QQQ:MMA = 5:4:1</code> 또는 <code>SPYM:SGOV = 9:1</code>)을 설정하면, 대시보드에서 비중이 <strong>±3%p 이상 격차</strong> 발생 시 상단 리밸런싱 알림이 자동 생성됩니다.
+        </div>
+
+        <div id="alloc-accounts-list" style="display:flex; flex-direction:column; gap:12px; max-height:520px; overflow-y:auto; padding-right:4px;">
+          <!-- JS에서 동적 계좌 카드 렌더링 -->
+        </div>
+      </div>
+      <div class="fa-modal-footer">
+        <button type="button" class="fa-btn-action" onclick="closeManageAllocationsModal()">닫기</button>
+      </div>
     </div>
   </div>
 
@@ -1687,6 +1829,186 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         alert("통신 오류");
       }
     }
+
+    let accountAllocationsList = [];
+
+    async function openManageAllocationsModal() {
+      document.getElementById("modal-manage-allocations").classList.add("open");
+      await fetchAccountAllocations();
+    }
+
+    function closeManageAllocationsModal() {
+      document.getElementById("modal-manage-allocations").classList.remove("open");
+    }
+
+    async function fetchAccountAllocations() {
+      try {
+        const res = await fetch("/api/accounts/allocations");
+        accountAllocationsList = await res.json();
+        renderAccountAllocations();
+      } catch(e) {
+        alert("목표 비중 불러오기 실패");
+      }
+    }
+
+    function renderAccountAllocations() {
+      const container = document.getElementById("alloc-accounts-list");
+      if (!accountAllocationsList || accountAllocationsList.length === 0) {
+        container.innerHTML = `<div style="text-align:center; color:var(--fa-text-muted); padding:30px;">계좌 정보를 불러올 수 없습니다.</div>`;
+        return;
+      }
+
+      container.innerHTML = accountAllocationsList.map(acct => {
+        const acctLabel = ACCOUNT_MAP[acct.account] || acct.base_name;
+        
+        let allocBadges = "";
+        if (acct.has_target && acct.allocations.length > 0) {
+          allocBadges = acct.allocations.map(a => `
+            <span class="badge" style="background:#e0e7ff; color:#3730a3; font-weight:700; font-size:0.8rem; padding:3px 8px;">
+              ${escapeHtml(a.key)}: ${a.pct}%
+            </span>
+          `).join(" ");
+        } else {
+          allocBadges = `<span class="badge" style="background:#f1f5f9; color:#94a3b8; font-size:0.75rem;">목표 비중 미설정</span>`;
+        }
+
+        // 추천 키워드 칩
+        let chipHtml = "";
+        if (acct.available_keys && acct.available_keys.length > 0) {
+          chipHtml = `
+            <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:6px;">
+              <span style="font-size:0.75rem; color:var(--fa-text-muted);">추천 키워드:</span>
+              ${acct.available_keys.map(k => `
+                <button type="button" class="fa-btn-action" style="font-size:0.72rem; padding:1px 6px; border-radius:4px;" onclick="insertKeyToFormula('${acct.account}', '${escapeHtml(k)}')">+${escapeHtml(k)}</button>
+              `).join("")}
+            </div>
+          `;
+        }
+
+        return `
+          <div style="background:#ffffff; border:1px solid var(--fa-border); border-radius:12px; padding:14px 16px; box-shadow:0 1px 4px rgba(0,0,0,0.03);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span class="badge badge-account" style="font-size:0.82rem; padding:3px 8px;">${escapeHtml(acctLabel)}</span>
+                <strong style="font-size:0.95rem; color:var(--fa-text-main);">${escapeHtml(acct.base_name)}</strong>
+              </div>
+              <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                ${allocBadges}
+              </div>
+            </div>
+
+            <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
+              <div style="flex:1; position:relative;">
+                <input type="text" id="alloc-formula-${acct.account}" class="fa-input" 
+                       placeholder="예: SCHD:QQQ:MMA = 5:4:1 또는 SPYM:SGOV = 9:1" 
+                       value="${escapeHtml(acct.formula)}" 
+                       style="font-family:monospace; font-weight:600; font-size:0.9rem;"
+                       oninput="previewFormulaCalc('${acct.account}')">
+              </div>
+              <button type="button" class="fa-btn-primary" style="padding:6px 14px; font-size:0.85rem; white-space:nowrap;" onclick="saveAccountAllocation('${acct.account}')">💾 저장</button>
+              ${acct.has_target ? `<button type="button" class="fa-btn-action" style="color:var(--fa-loss); border-color:#fed7aa; padding:6px 10px; font-size:0.8rem; white-space:nowrap;" onclick="clearAccountAllocation('${acct.account}')">해제</button>` : ''}
+            </div>
+            ${chipHtml}
+            <div id="alloc-preview-${acct.account}" style="margin-top:6px; font-size:0.78rem; color:var(--fa-text-muted);"></div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function insertKeyToFormula(acctCode, key) {
+      const input = document.getElementById(`alloc-formula-${acctCode}`);
+      if (!input) return;
+      let val = input.value.trim();
+      if (!val) {
+        input.value = `${key} = 1`;
+      } else if (val.includes("=")) {
+        const parts = val.split("=");
+        const keys = parts[0].trim().split(":").map(k => k.trim()).filter(Boolean);
+        const ratios = parts[1].trim().split(":").map(r => r.trim()).filter(Boolean);
+        if (!keys.includes(key)) {
+          keys.push(key);
+          ratios.push("1");
+          input.value = `${keys.join(":")} = ${ratios.join(":")}`;
+        }
+      } else {
+        input.value = `${val}:${key} = 1:1`;
+      }
+      previewFormulaCalc(acctCode);
+    }
+
+    function previewFormulaCalc(acctCode) {
+      const input = document.getElementById(`alloc-formula-${acctCode}`);
+      const previewEl = document.getElementById(`alloc-preview-${acctCode}`);
+      if (!input || !previewEl) return;
+      const val = input.value.trim();
+      if (!val) {
+        previewEl.innerHTML = "";
+        return;
+      }
+
+      const match = val.match(/^(.*?)=(.*?)$/);
+      if (!match) {
+        previewEl.innerHTML = `<span style="color:var(--fa-loss);">형식: [자산1:자산2 = 비율1:비율2] 형태로 입력해주세요.</span>`;
+        return;
+      }
+
+      const keys = match[1].split(":").map(k => k.trim()).filter(Boolean);
+      const ratios = match[2].split(":").map(r => parseFloat(r.trim())).filter(r => !isNaN(r));
+
+      if (keys.length !== ratios.length || keys.length === 0) {
+        previewEl.innerHTML = `<span style="color:var(--fa-loss);">자산군 개수(${keys.length}개)와 비율 개수(${ratios.length}개)가 일치해야 합니다.</span>`;
+        return;
+      }
+
+      const total = ratios.reduce((a, b) => a + b, 0);
+      if (total <= 0) return;
+
+      const pcts = keys.map((k, i) => `${k} <strong>${((ratios[i] / total) * 100).toFixed(1)}%</strong>`).join(" · ");
+      previewEl.innerHTML = `✨ 계산된 비중: <span style="color:var(--fa-accent);">${pcts}</span>`;
+    }
+
+    async function saveAccountAllocation(acctCode) {
+      const input = document.getElementById(`alloc-formula-${acctCode}`);
+      if (!input) return;
+      const formula = input.value.trim();
+
+      try {
+        const res = await fetch("/api/accounts/allocations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ account: acctCode, formula: formula })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast(`계좌 목표 비중이 성공적으로 저장되었습니다! 🎯`);
+          await fetchAccountAllocations();
+        } else {
+          alert("저장 실패: " + (data.error || "오류가 발생했습니다."));
+        }
+      } catch(e) {
+        alert("통신 오류가 발생했습니다.");
+      }
+    }
+
+    async function clearAccountAllocation(acctCode) {
+      if (!confirm("이 계좌의 목표 비중 설정을 해제하시겠습니까?")) return;
+      try {
+        const res = await fetch("/api/accounts/allocations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ account: acctCode, formula: "" })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast(`계좌 목표 비중이 해제되었습니다.`);
+          await fetchAccountAllocations();
+        } else {
+          alert("해제 실패");
+        }
+      } catch(e) {
+        alert("통신 오류");
+      }
+    }
   </script>
 </body>
 </html>
@@ -1710,6 +2032,11 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
             self.wfile.write(HTML_TEMPLATE.encode("utf-8"))
+            return
+
+        if path == "/api/accounts/allocations":
+            allocations = get_all_account_allocations()
+            self._send_json(allocations)
             return
 
         if path == "/api/symbols/all":
@@ -1827,6 +2154,17 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
         if path == "/api/build-dashboard":
             run_dashboard_update()
             self._send_json({"ok": True})
+            return
+
+        if path == "/api/accounts/allocations":
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length).decode("utf-8")
+            data = json.loads(body)
+            acct = data.get("account", "")
+            formula = data.get("formula", "").strip()
+
+            ok = update_account_allocation(acct, formula)
+            self._send_json({"ok": ok})
             return
 
         if path == "/api/symbols/add":

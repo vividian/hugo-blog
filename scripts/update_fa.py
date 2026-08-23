@@ -480,6 +480,8 @@ def load_symbol_map() -> Dict[str, AssetConfig]:
 
 def build_fx_series(records: pd.DataFrame, end: Optional[pd.Timestamp] = None) -> pd.Series:
     """거래 데이터 범위를 기준으로 환율(USD/KRW) 시계열 데이터를 생성한다."""
+    fx_cache_file = ROOT_DIR / "data" / "fx_cache.csv"
+
     if records.empty:
         start = pd.Timestamp.today() - pd.Timedelta(days=60)
     else:
@@ -495,22 +497,49 @@ def build_fx_series(records: pd.DataFrame, end: Optional[pd.Timestamp] = None) -
     else:
         end = max(end + pd.Timedelta(days=2), today_buffer)
 
-    data = yf.download(
-        FX_TICKER,
-        start=start,
-        end=end,
-        progress=False,
-        auto_adjust=False,
-    )
-    if data.empty:
-        raise RuntimeError("환율 데이터를 불러오지 못했습니다.")
+    data = pd.DataFrame()
+    try:
+        data = yf.download(
+            FX_TICKER,
+            start=start,
+            end=end,
+            progress=False,
+            auto_adjust=False,
+        )
+    except Exception as e:
+        print(f"⚠️ [환율 다운로드 경고] yfinance 환율 조회 실패: {e}")
 
-    series = data["Adj Close"] if "Adj Close" in data else data
-    if isinstance(series, pd.DataFrame):
-        series = series.iloc[:, 0]
-    series = pd.Series(series).ffill()
-    series.index = pd.to_datetime(series.index).tz_localize(None)
-    return series
+    if not data.empty:
+        series = data["Adj Close"] if "Adj Close" in data else data
+        if isinstance(series, pd.DataFrame):
+            series = series.iloc[:, 0]
+        series = pd.Series(series).ffill()
+        series.index = pd.to_datetime(series.index).tz_localize(None)
+
+        # 로컬 캐시에 저장
+        try:
+            fx_cache_file.parent.mkdir(parents=True, exist_ok=True)
+            series.to_csv(fx_cache_file, header=True)
+        except Exception:
+            pass
+        return series
+
+    # 다운로드 실패 시 로컬 캐시 로드
+    if fx_cache_file.exists():
+        try:
+            cached_df = pd.read_csv(fx_cache_file, index_col=0, parse_dates=True)
+            cached_series = cached_df.iloc[:, 0].ffill()
+            cached_series.index = pd.to_datetime(cached_series.index).tz_localize(None)
+            print(f"ℹ️ [환율 캐시 사용] {fx_cache_file} 캐시된 환율 데이터를 사용합니다.")
+            return cached_series
+        except Exception as e:
+            print(f"⚠️ [환율 캐시 로드 실패] {e}")
+
+    # 최종 fallback: 기본 환율 시리즈 생성
+    date_range = pd.date_range(start=start, end=end, freq="D")
+    fallback_series = pd.Series(1380.0, index=date_range)
+    print("ℹ️ [환율 기본값 사용] 1,380원 기본 환율 시계열을 생성합니다.")
+    return fallback_series
 
 
 def fx_rate_on(date: pd.Timestamp, fx_series: pd.Series) -> float:
