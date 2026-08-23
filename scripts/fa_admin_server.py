@@ -105,7 +105,7 @@ def export_db_to_csv():
 
 
 def run_dashboard_update():
-    """백그라운드에서 update_fa.py 및 update_fa_plotly.py를 실행하고 웹 서비스 경로로 즉시 반영합니다."""
+    """백그라운드에서 update_fa.py, update_fa_plotly.py 및 nas_scheduler.py를 실행하여 웹 서비스에 즉시 100% 반영합니다."""
     def _worker():
         try:
             print("⏳ [대시보드 갱신] 자산 계산 및 대시보드 생성 시작...")
@@ -119,25 +119,13 @@ def run_dashboard_update():
 
             if res.returncode == 0:
                 print("✅ [대시보드 갱신] HTML 생성 완료!")
-                # 3. 실시간 배포 경로(public 및 NAS web_public)로 즉시 복사
-                src_html = ROOT_DIR / "content" / "fa" / "latest_fa.html"
-                if src_html.is_file():
-                    # public 복사
-                    pub_target = ROOT_DIR / "public" / "fa" / "latest_fa.html"
-                    pub_target.parent.mkdir(parents=True, exist_ok=True)
-                    import shutil
-                    shutil.copy2(src_html, pub_target)
-
-                    # NAS web_public 경로가 존재할 경우 즉시 덮어쓰기 반영
-                    nas_web_targets = [
-                        Path("/var/services/web/hugo/fa/latest_fa.html"),
-                        Path("/volume1/web/hugo/fa/latest_fa.html"),
-                        Path("/var/services/web/fa/latest_fa.html"),
-                    ]
-                    for target in nas_web_targets:
-                        if target.parent.is_dir():
-                            shutil.copy2(src_html, target)
-                            print(f"🚀 [실시간 반영] {target} 즉시 배포 완료!")
+                # 3. nas_scheduler.py --skip-permissions 실행하여 웹 서비스 경로로 자동 동기화
+                cmd_sync = [sys.executable, str(ROOT_DIR / "scripts" / "nas_scheduler.py"), "--skip-permissions"]
+                res_sync = subprocess.run(cmd_sync, cwd=ROOT_DIR, capture_output=True, text=True)
+                if res_sync.returncode == 0:
+                    print("🚀 [실시간 배포] 웹 서버 동기화 성공!")
+                else:
+                    print(f"⚠️ [실시간 배포] nas_scheduler 경고: {res_sync.stderr}")
             else:
                 print(f"⚠️ 대시보드 갱신 에러: {res.stderr}")
         except Exception as e:
@@ -509,7 +497,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="fa-header">
       <div class="fa-header-title">
         <span>📈 FA 자산 거래내역 관리자</span>
-        <span class="fa-header-badge">v2.6.0</span>
+        <span class="fa-header-badge">v2.6.1</span>
         <span class="fa-header-badge" style="background:var(--fa-border); color:var(--fa-text-muted);">SQLite DB</span>
       </div>
       <div style="display:flex; gap:8px;">
@@ -1003,11 +991,20 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         else if (kindText === "입금") badgeClass = "badge-deposit";
         else if (kindText === "평가금") badgeClass = "badge-eval";
 
+        let displaySymbol = r.symbol || "";
+        if (!displaySymbol) {
+          if (kindText === "입금") displaySymbol = "계좌 입금";
+          else if (kindText === "평가금") displaySymbol = "계좌 총 평가금";
+          else displaySymbol = "-";
+        }
+
         let mainAmountStr = "-";
-        if (r.dividend > 0) mainAmountStr = `${r.dividend.toLocaleString()}원`;
-        else if (r.deposit > 0) mainAmountStr = `${r.deposit.toLocaleString()}원`;
+        if (r.dividend > 0) mainAmountStr = `+${r.dividend.toLocaleString()}원`;
+        else if (r.deposit > 0) mainAmountStr = `+${r.deposit.toLocaleString()}원`;
         else if (r.evaluation > 0) mainAmountStr = `${r.evaluation.toLocaleString()}원`;
-        else if (r.amount > 0) mainAmountStr = `${r.amount.toLocaleString()}원`;
+        else if (r.amount > 0) {
+          mainAmountStr = (kindText === "매도" ? `-${r.amount.toLocaleString()}원` : `+${r.amount.toLocaleString()}원`);
+        }
 
         const acctLabel = ACCOUNT_MAP[r.account] || r.account;
 
@@ -1016,7 +1013,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <td style="font-weight:600;">${r.date}</td>
             <td><span class="badge badge-account">${acctLabel}</span></td>
             <td><span class="badge ${badgeClass}">${kindText}</span></td>
-            <td style="font-weight:700; color:var(--fa-text-main);">${r.symbol || "-"}</td>
+            <td style="font-weight:700; color:var(--fa-text-main);">${displaySymbol}</td>
             <td class="text-right">${r.unit_price > 0 ? r.unit_price.toLocaleString() : "-"}</td>
             <td class="text-right">${r.quantity > 0 ? r.quantity.toLocaleString() : "-"}</td>
             <td class="text-right" style="font-weight:700;">${mainAmountStr}</td>
@@ -1033,11 +1030,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     async function handleFormSubmit(e) {
       e.preventDefault();
       const editId = document.getElementById("edit-id").value;
+      const kind = document.getElementById("f-kind").value;
 
       const payload = {
         date: document.getElementById("f-date").value,
         account: document.getElementById("f-account").value,
-        kind: document.getElementById("f-kind").value,
+        kind: kind,
         symbol: document.getElementById("f-symbol").value.trim(),
         unit_price: parseFloat(document.getElementById("f-unit-price").value) || 0.0,
         quantity: parseFloat(document.getElementById("f-quantity").value) || 0.0,
@@ -1048,6 +1046,28 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         exchange_rate: parseFloat(document.getElementById("f-exchange").value) || 1.0,
         memo: document.getElementById("f-memo").value.trim()
       };
+
+      if (kind === "입금") {
+        if (payload.deposit <= 0) {
+          alert("입금액 / 투자금을 올바르게 입력해주세요.");
+          document.getElementById("f-deposit").focus();
+          return;
+        }
+        if (!payload.symbol) payload.symbol = "계좌 입금";
+      } else if (kind === "평가금") {
+        if (payload.evaluation <= 0) {
+          alert("평가금을 올바르게 입력해주세요.");
+          document.getElementById("f-evaluation").focus();
+          return;
+        }
+        if (!payload.symbol) payload.symbol = "계좌 평가금";
+      } else if (kind === "배당") {
+        if (payload.dividend <= 0) {
+          alert("배당금을 올바르게 입력해주세요.");
+          document.getElementById("f-dividend").focus();
+          return;
+        }
+      }
 
       try {
         let res;
@@ -1275,8 +1295,8 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
                 query += " AND kind = ?"
                 params.append(kind)
             if q:
-                query += " AND symbol LIKE ?"
-                params.append(f"%{q}%")
+                query += " AND (symbol LIKE ? OR account LIKE ? OR kind LIKE ? OR memo LIKE ?)"
+                params.extend([f"%{q}%", f"%{q}%", f"%{q}%", f"%{q}%"])
 
             query += " ORDER BY date DESC, id DESC"
             cur.execute(query, params)
