@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.21"
+APP_VERSION = "v2.7.22"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -601,17 +601,24 @@ def _build_quarterly_dividend_line_chart(quarterly_agg: pd.DataFrame) -> go.Figu
 
     x_labels = []
     hover_labels = []
+    year_indices: Dict[int, List[int]] = {}
     seen_years = set()
-    for _, r in quarterly_agg.iterrows():
+
+    for idx, (_, r) in enumerate(quarterly_agg.iterrows()):
         q_per = r["분기key"]
         yr = q_per.year
         q_num = q_per.quarter
         yr_short = str(yr)[-2:]
+
+        if yr not in year_indices:
+            year_indices[yr] = []
+        year_indices[yr].append(idx)
+
         if q_num == 1 or yr not in seen_years:
             seen_years.add(yr)
-            x_labels.append(f"'{yr_short}.{q_num}Q")
+            x_labels.append(f"'{yr_short}.1Q" if q_num == 1 else f"'{yr_short}.{q_num}Q")
         else:
-            x_labels.append(f"{q_num}Q")
+            x_labels.append("")
         hover_labels.append(f"'{yr_short}년 {q_num}분기")
 
     y_raw = quarterly_agg["배당원화"].values
@@ -620,6 +627,17 @@ def _build_quarterly_dividend_line_chart(quarterly_agg: pd.DataFrame) -> go.Figu
     y_range = [0, y_max * 1.15]
 
     customdata = np.stack((hover_labels, y_raw), axis=-1)
+
+    # 연도별 배경 음영 밴드 적용
+    for yr_idx, (yr, idxs) in enumerate(year_indices.items()):
+        if yr_idx % 2 == 1:
+            fig.add_vrect(
+                x0=min(idxs) - 0.5,
+                x1=max(idxs) + 0.5,
+                fillcolor="rgba(148, 163, 184, 0.08)",
+                layer="below",
+                line_width=0,
+            )
 
     fig.add_trace(
         go.Scatter(
@@ -665,9 +683,17 @@ def _build_monthly_dividend_line_chart(monthly_series: pd.Series) -> go.Figure:
 
     x_labels = []
     hover_labels = []
-    for d in monthly_series.index:
+    year_indices: Dict[int, List[int]] = {}
+
+    for idx, d in enumerate(monthly_series.index):
+        yr = d.year
         yr_short = d.strftime("%y")
         m = d.month
+
+        if yr not in year_indices:
+            year_indices[yr] = []
+        year_indices[yr].append(idx)
+
         if m == 1:
             x_labels.append(f"'{yr_short}.1")
         elif m == 7:
@@ -682,6 +708,17 @@ def _build_monthly_dividend_line_chart(monthly_series: pd.Series) -> go.Figure:
     y_range = [0, y_max * 1.15]
 
     customdata = np.stack((hover_labels, y_raw), axis=-1)
+
+    # 연도별 배경 음영 밴드 적용
+    for yr_idx, (yr, idxs) in enumerate(year_indices.items()):
+        if yr_idx % 2 == 1:
+            fig.add_vrect(
+                x0=min(idxs) - 0.5,
+                x1=max(idxs) + 0.5,
+                fillcolor="rgba(148, 163, 184, 0.08)",
+                layer="below",
+                line_width=0,
+            )
 
     fig.add_trace(
         go.Scatter(
