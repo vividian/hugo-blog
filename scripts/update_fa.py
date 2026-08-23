@@ -1334,39 +1334,54 @@ def fetch_latest_prices(tickers: List[str]) -> Dict[str, Tuple[float, float]]:
     """여러 티커의 가장 최근 가격과 전일 가격을 조회한다."""
     if not tickers:
         return {}
-    data = yf.download(
-        tickers,
-        period="5d",
-        interval="1d",
-        progress=False,
-        auto_adjust=False,
-    )
-    if data.empty:
-        return {}
-        
-    adj_close = data["Adj Close"] if "Adj Close" in data.columns else data
-    if adj_close.index.tz is not None:
-        adj_close.index = adj_close.index.tz_localize(None)
-    adj_close.index = adj_close.index.normalize()
-    
-    if isinstance(adj_close, pd.Series):
-        series = adj_close[~adj_close.index.duplicated(keep="last")]
-        series = series.ffill().dropna()
-        if series.empty:
-            return {}
-        last_price = float(series.iloc[-1])
-        prev_price = float(series.iloc[-2]) if len(series) > 1 else last_price
-        return {tickers[0]: (last_price, prev_price)}
-        
-    adj_close = adj_close[~adj_close.index.duplicated(keep="last")]
-    result = {}
-    for col in adj_close.columns:
-        series = adj_close[col].dropna()
-        if series.empty:
-            continue
-        last_price = float(series.iloc[-1])
-        prev_price = float(series.iloc[-2]) if len(series) > 1 else last_price
-        result[col] = (last_price, prev_price)
+    result: Dict[str, Tuple[float, float]] = {}
+    try:
+        data = yf.download(
+            tickers,
+            period="5d",
+            interval="1d",
+            progress=False,
+            auto_adjust=False,
+        )
+        if not data.empty:
+            adj_close = data["Adj Close"] if "Adj Close" in data.columns else data
+            if adj_close.index.tz is not None:
+                adj_close.index = adj_close.index.tz_localize(None)
+            adj_close.index = adj_close.index.normalize()
+            
+            if isinstance(adj_close, pd.Series):
+                series = adj_close[~adj_close.index.duplicated(keep="last")]
+                series = series.ffill().dropna()
+                if not series.empty:
+                    last_price = float(series.iloc[-1])
+                    prev_price = float(series.iloc[-2]) if len(series) > 1 else last_price
+                    result[tickers[0]] = (last_price, prev_price)
+            else:
+                adj_close = adj_close[~adj_close.index.duplicated(keep="last")]
+                for col in adj_close.columns:
+                    series = adj_close[col].dropna()
+                    if series.empty:
+                        continue
+                    last_price = float(series.iloc[-1])
+                    prev_price = float(series.iloc[-2]) if len(series) > 1 else last_price
+                    result[col] = (last_price, prev_price)
+    except Exception:
+        pass
+
+    # 일괄 다운로드에서 누락된 티커 개별 재시도
+    missing = [t for t in tickers if t not in result]
+    for t in missing:
+        try:
+            hist = yf.Ticker(t).history(period="5d")
+            if not hist.empty and "Close" in hist.columns:
+                series = hist["Close"].dropna()
+                if not series.empty:
+                    last_price = float(series.iloc[-1])
+                    prev_price = float(series.iloc[-2]) if len(series) > 1 else last_price
+                    result[t] = (last_price, prev_price)
+        except Exception:
+            pass
+
     return result
 
 
@@ -1385,8 +1400,12 @@ def build_holdings_df(records: pd.DataFrame, fx_series: pd.Series) -> pd.DataFra
     for pos in positions:
         price_info = prices.get(pos.ticker)
         if price_info is None:
-            continue
-        latest_price_native, prev_price_native = price_info
+            # 주가 조회 실패 시 평단가로 fallback하여 보유 종목 누락 방지
+            latest_price_native = pos.avg_price_native or 0.0
+            prev_price_native = latest_price_native
+        else:
+            latest_price_native, prev_price_native = price_info
+
         valuation_native = pos.quantity * latest_price_native
         valuation = convert_to_krw(pos.account, valuation_native, None, fx_series, use_latest=True)
         avg_price = pos.cost / pos.quantity if pos.quantity else 0.0
