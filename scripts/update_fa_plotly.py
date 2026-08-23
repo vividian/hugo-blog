@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.17"
+APP_VERSION = "v2.7.18"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -1028,9 +1028,9 @@ def _build_account_detail_section(
                 f"  <div class='fa-stock-card-head'>"
                 f"    <div class='fa-stock-card-title'>{html.escape(sym)}</div>"
                 f"    <div class='fa-stock-card-badges'>"
-                f"      <span class='fa-badge {inv_p_bdg}'>{inv_r_str}</span>"
+                f"      <span class='fa-badge {inv_p_bdg}'>투 {inv_r_str}</span>"
                 f"      <span class='fa-rate-divider'>/</span>"
-                f"      <span class='fa-badge {buy_p_bdg}'>{buy_r_str}</span>"
+                f"      <span class='fa-badge {buy_p_bdg}'>매 {buy_r_str}</span>"
                 f"    </div>"
                 f"  </div>"
                 f"  <div class='fa-stock-card-body'>"
