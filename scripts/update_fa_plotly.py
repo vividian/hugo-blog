@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.6"
+APP_VERSION = "v2.7.8"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -1805,6 +1805,56 @@ html.dark .fa-dashboard,
     padding-bottom: 8px;
     margin-bottom: 4px;
     border-bottom: 1px solid var(--fa-border);
+  }
+
+  /* 보유 종목 카드 내부 2열 그리드 레이아웃 */
+  .fa-table-holdings tr {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px 14px !important;
+    padding: 14px 16px !important;
+  }
+  .fa-table-holdings td[data-label='계좌'] {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    border-bottom: none !important;
+    padding: 0 !important;
+  }
+  .fa-table-holdings td[data-label='계좌']::before {
+    display: none;
+  }
+  .fa-table-holdings td[data-label='종목'] {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    font-size: 1.05rem;
+    font-weight: 700;
+    padding-bottom: 8px !important;
+    margin-bottom: 2px;
+    border-bottom: 1px solid var(--fa-border) !important;
+  }
+  .fa-table-holdings td[data-label='종목']::before {
+    display: none;
+  }
+  .fa-table-holdings td:not([data-label='계좌']):not([data-label='종목']) {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 4px 0 !important;
+    border-bottom: none !important;
+    background: transparent;
+    font-size: 0.95rem;
+    font-weight: 600;
+  }
+  .fa-table-holdings td:not([data-label='계좌']):not([data-label='종목'])::before {
+    font-size: 0.74rem;
+    color: var(--fa-text-muted);
+    font-weight: 500;
+    margin-right: 0;
   }
 }
 
