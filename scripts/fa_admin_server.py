@@ -497,7 +497,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="fa-header">
       <div class="fa-header-title">
         <span>📈 FA 자산 거래내역 관리자</span>
-        <span class="fa-header-badge">v2.6.2</span>
+        <span class="fa-header-badge">v2.6.3</span>
         <span class="fa-header-badge" style="background:var(--fa-border); color:var(--fa-text-muted);">SQLite DB</span>
       </div>
       <div style="display:flex; gap:8px;">
@@ -1270,7 +1270,7 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
                 query += " AND (symbol LIKE ? OR account LIKE ? OR kind LIKE ? OR memo LIKE ?)"
                 params.extend([f"%{q}%", f"%{q}%", f"%{q}%", f"%{q}%"])
 
-            query += " ORDER BY date DESC, id DESC"
+            query += " ORDER BY REPLACE(date, '-', '.') DESC, id DESC"
             cur.execute(query, params)
             rows = [dict(r) for r in cur.fetchall()]
 
@@ -1341,6 +1341,7 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length).decode("utf-8")
             data = json.loads(body)
+            clean_date = str(data.get("date") or "").replace("-", ".").strip()
 
             conn = get_db_connection()
             cur = conn.cursor()
@@ -1350,7 +1351,7 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
                     amount, dividend, deposit, evaluation, exchange_rate, memo
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """, (
-                data.get("date"), data.get("account"), data.get("symbol", ""),
+                clean_date, data.get("account"), data.get("symbol", ""),
                 data.get("kind", "매수"), float(data.get("unit_price") or 0),
                 float(data.get("quantity") or 0), float(data.get("amount") or 0),
                 float(data.get("dividend") or 0), float(data.get("deposit") or 0),
@@ -1375,6 +1376,7 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length).decode("utf-8")
             data = json.loads(body)
+            clean_date = str(data.get("date") or "").replace("-", ".").strip()
 
             conn = get_db_connection()
             cur = conn.cursor()
@@ -1385,7 +1387,7 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
                     evaluation = ?, exchange_rate = ?, memo = ?
                 WHERE id = ?;
             """, (
-                data.get("date"), data.get("account"), data.get("symbol", ""),
+                clean_date, data.get("account"), data.get("symbol", ""),
                 data.get("kind", "매수"), float(data.get("unit_price") or 0),
                 float(data.get("quantity") or 0), float(data.get("amount") or 0),
                 float(data.get("dividend") or 0), float(data.get("deposit") or 0),
