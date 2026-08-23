@@ -498,7 +498,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="fa-header">
       <div class="fa-header-title">
         <span>📈 FA 자산 거래내역 관리자</span>
-        <span class="fa-header-badge">v2.6.4</span>
+        <span class="fa-header-badge">v2.6.5</span>
         <span class="fa-header-badge" style="background:var(--fa-border); color:var(--fa-text-muted);">SQLite DB</span>
       </div>
       <div style="display:flex; gap:8px;">
@@ -685,13 +685,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
               <th>종목명</th>
               <th class="text-right">단가</th>
               <th class="text-right">수량</th>
+              <th class="text-right">투자금 (입/출금)</th>
               <th class="text-right">체결/배당금액</th>
               <th>비고</th>
               <th class="text-right">관리</th>
             </tr>
           </thead>
           <tbody id="records-tbody">
-            <tr><td colspan="9" style="text-align:center; padding:30px; color:var(--fa-text-muted);">데이터 불러오는 중...</td></tr>
+            <tr><td colspan="10" style="text-align:center; padding:30px; color:var(--fa-text-muted);">데이터 불러오는 중...</td></tr>
           </tbody>
         </table>
       </div>
@@ -981,7 +982,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     function renderTable(records) {
       const tbody = document.getElementById("records-tbody");
       if (!records || records.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:30px; color:var(--fa-text-muted);">등록된 거래 내역이 없습니다.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding:30px; color:var(--fa-text-muted);">등록된 거래 내역이 없습니다.</td></tr>`;
         return;
       }
 
@@ -991,21 +992,40 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         if (kindText === "매도") badgeClass = "badge-sell";
         else if (kindText === "배당") badgeClass = "badge-div";
         else if (kindText === "입금") badgeClass = "badge-deposit";
+        else if (kindText === "출금") badgeClass = "badge-sell";
         else if (kindText === "평가금") badgeClass = "badge-eval";
 
         let displaySymbol = r.symbol || "";
         if (!displaySymbol) {
           if (kindText === "입금") displaySymbol = "계좌 입금";
+          else if (kindText === "출금") displaySymbol = "계좌 출금";
           else if (kindText === "평가금") displaySymbol = "계좌 총 평가금";
           else displaySymbol = "-";
         }
 
-        let mainAmountStr = "-";
-        if (r.dividend > 0) mainAmountStr = `+${r.dividend.toLocaleString()}원`;
-        else if (r.deposit > 0) mainAmountStr = `+${r.deposit.toLocaleString()}원`;
-        else if (r.evaluation > 0) mainAmountStr = `${r.evaluation.toLocaleString()}원`;
-        else if (r.amount > 0) {
-          mainAmountStr = (kindText === "매도" ? `-${r.amount.toLocaleString()}원` : `+${r.amount.toLocaleString()}원`);
+        // 1. 투자금 (입/출금) 컬럼
+        let depositStr = "-";
+        if (r.deposit > 0) {
+          depositStr = `<span style="color:var(--fa-gain); font-weight:700;">+${r.deposit.toLocaleString()}원</span>`;
+        } else if (r.deposit < 0) {
+          depositStr = `<span style="color:var(--fa-loss); font-weight:700;">-${Math.abs(r.deposit).toLocaleString()}원</span>`;
+        }
+
+        // 2. 체결/배당금액 컬럼
+        let tradeAmountStr = "-";
+        if (r.dividend > 0) {
+          tradeAmountStr = `<span style="color:var(--fa-purple); font-weight:700;">+${r.dividend.toLocaleString()}원</span>`;
+        } else if (r.evaluation > 0) {
+          tradeAmountStr = `<span style="font-weight:700;">${r.evaluation.toLocaleString()}원</span>`;
+        } else if (r.amount > 0) {
+          tradeAmountStr = (kindText === "매도" || r.quantity < 0)
+            ? `<span style="color:var(--fa-loss); font-weight:700;">-${r.amount.toLocaleString()}원</span>`
+            : `<span style="color:var(--fa-gain); font-weight:700;">+${r.amount.toLocaleString()}원</span>`;
+        } else if (r.unit_price > 0 && r.quantity !== 0) {
+          const calcAmt = Math.abs(r.unit_price * r.quantity);
+          tradeAmountStr = (kindText === "매도" || r.quantity < 0)
+            ? `<span style="color:var(--fa-loss); font-weight:700;">-${calcAmt.toLocaleString()}원</span>`
+            : `<span style="color:var(--fa-gain); font-weight:700;">+${calcAmt.toLocaleString()}원</span>`;
         }
 
         const acctLabel = ACCOUNT_MAP[r.account] || r.account;
@@ -1017,8 +1037,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <td><span class="badge ${badgeClass}">${kindText}</span></td>
             <td style="font-weight:700; color:var(--fa-text-main);">${displaySymbol}</td>
             <td class="text-right">${r.unit_price > 0 ? r.unit_price.toLocaleString() : "-"}</td>
-            <td class="text-right">${r.quantity > 0 ? r.quantity.toLocaleString() : "-"}</td>
-            <td class="text-right" style="font-weight:700;">${mainAmountStr}</td>
+            <td class="text-right">${r.quantity !== 0 && r.quantity !== null && r.quantity !== undefined ? r.quantity.toLocaleString() : "-"}</td>
+            <td class="text-right">${depositStr}</td>
+            <td class="text-right">${tradeAmountStr}</td>
             <td style="color:var(--fa-text-muted); font-size:0.8rem;">${r.memo || ""}</td>
             <td class="text-right">
               <button class="fa-btn-action fa-btn-edit" onclick='startEdit(${JSON.stringify(r)})'>수정</button>
