@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.7"
+APP_VERSION = "v2.7.6"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -785,7 +785,7 @@ def _build_account_assets_html_table(summary_df: pd.DataFrame) -> str:
 
 
 def _build_total_holdings_html_table(holdings_df: pd.DataFrame) -> str:
-    """전체 보유 종목을 전체 탭 스타일의 단일 카드 표로 렌더링 (종목명 좌측 고정)"""
+    """전체 보유 종목 데이터프레임을 PC 테이블 & 모바일 카드로 변환되는 반응형 HTML로 렌더링"""
     filtered = holdings_df[holdings_df["계좌"] != "sema"].copy()
     if filtered.empty:
         return "<p class='fa-empty-text'>보유 종목 데이터가 없습니다.</p>"
@@ -794,11 +794,11 @@ def _build_total_holdings_html_table(holdings_df: pd.DataFrame) -> str:
     filtered = filtered.sort_values(["계좌", "평가금"], ascending=[True, False])
 
     lines = [
-        "<div class='fa-single-card-box'>",
         "<div class='fa-table-wrapper'>",
-        "<table class='fa-table fa-table-holdings-sticky'>",
+        "<table class='fa-table fa-table-responsive fa-table-holdings'>",
         "<thead>",
         "  <tr>",
+        "    <th>계좌</th>",
         "    <th>종목</th>",
         "    <th class='text-right'>수량</th>",
         "    <th class='text-right'>평단가</th>",
@@ -839,20 +839,20 @@ def _build_total_holdings_html_table(holdings_df: pd.DataFrame) -> str:
         fluct_str = f"{fluct_rate * 100:+.2f}%" if fluct_rate is not None else "-"
 
         lines.append("  <tr>")
-        lines.append(f"    <td class='fa-col-symbol'><strong>{html.escape(symbol)}</strong> <span class='fa-chip-account'>{html.escape(acct_label)}</span></td>")
-        lines.append(f"    <td class='text-right fa-num'>{qty_str}</td>")
-        lines.append(f"    <td class='text-right fa-num'>{avg_str}</td>")
-        lines.append(f"    <td class='text-right fa-num'>{buy_str}</td>")
-        lines.append(f"    <td class='text-right fa-num'>{cur_str}</td>")
-        lines.append(f"    <td class='text-right fa-num fa-font-bold'>{eval_str}</td>")
-        lines.append(f"    <td class='text-right fa-num {profit_cls}'>{profit_str}</td>")
-        lines.append(f"    <td class='text-right fa-num'><span class='fa-badge {profit_badge}'>{rate_str}</span></td>")
-        lines.append(f"    <td class='text-right fa-num {fluct_cls}'>{fluct_str}</td>")
+        lines.append(f"    <td data-label='계좌'><span class='fa-chip-account'>{html.escape(acct_label)}</span></td>")
+        lines.append(f"    <td data-label='종목' class='fa-col-symbol'><strong>{html.escape(symbol)}</strong></td>")
+        lines.append(f"    <td data-label='수량' class='text-right fa-num'>{qty_str}</td>")
+        lines.append(f"    <td data-label='평단가' class='text-right fa-num'>{avg_str}</td>")
+        lines.append(f"    <td data-label='매수금액' class='text-right fa-num'>{buy_str}</td>")
+        lines.append(f"    <td data-label='현재가' class='text-right fa-num'>{cur_str}</td>")
+        lines.append(f"    <td data-label='평가금액' class='text-right fa-num fa-font-bold'>{eval_str}</td>")
+        lines.append(f"    <td data-label='수익금' class='text-right fa-num {profit_cls}'>{profit_str}</td>")
+        lines.append(f"    <td data-label='수익률' class='text-right fa-num'><span class='fa-badge {profit_badge}'>{rate_str}</span></td>")
+        lines.append(f"    <td data-label='등락률' class='text-right fa-num {fluct_cls}'>{fluct_str}</td>")
         lines.append("  </tr>")
 
     lines.append("</tbody>")
     lines.append("</table>")
-    lines.append("</div>")
     lines.append("</div>")
     return "\n".join(lines)
 
@@ -1887,37 +1887,6 @@ html.dark .fa-dashboard,
 .fa-table-eok-summary tfoot td:first-child {
   background: var(--fa-kpi-bg);
   z-index: 2;
-}
-
-.fa-table-holdings-sticky {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.9rem;
-}
-.fa-table-holdings-sticky th {
-  background: var(--fa-table-header-bg);
-  color: var(--fa-text-muted);
-  font-weight: 600;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--fa-border);
-  white-space: nowrap;
-}
-.fa-table-holdings-sticky td {
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--fa-border);
-  white-space: nowrap;
-}
-.fa-table-holdings-sticky th:first-child,
-.fa-table-holdings-sticky td:first-child {
-  position: sticky;
-  left: 0;
-  background: var(--fa-kpi-bg);
-  z-index: 2;
-  box-shadow: 2px 0 6px rgba(0, 0, 0, 0.05);
-}
-.fa-table-holdings-sticky th:first-child {
-  background: var(--fa-table-header-bg);
-  z-index: 3;
 }
 
 /* =========================================================
