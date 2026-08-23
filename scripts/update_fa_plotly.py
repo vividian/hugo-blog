@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.8"
+APP_VERSION = "v2.7.9"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -153,7 +153,7 @@ def _as_float(value: object) -> Optional[float]:
 def _fmt_krw(value: Optional[float]) -> str:
     if value is None or pd.isna(value):
         return "-"
-    return f"{value:,.0f}원"
+    return f"{value:,.0f} 원"
 
 
 def _fmt_pct(value: Optional[float]) -> str:
@@ -257,7 +257,7 @@ def _build_kpi_row(data: ReportData) -> str:
         _kpi_card("총 수익금", f"<span class='fa-num-{profit_state}'>{profit_str}</span>", "실현+평가", profit_state),
         _kpi_card("총 수익률", f"<span class='fa-num-{return_state}'>{return_str}</span>", "투자금 대비", return_state),
         _kpi_card("월 배당금", _fmt_krw(monthly_div), f"{month_label} 합계"),
-        _kpi_card("USD/KRW", _fmt_number(fx, 2, "원"), fx_change_text, fx_state),
+        _kpi_card("USD/KRW", _fmt_number(fx, 2, " 원"), fx_change_text, fx_state),
     ]
     return "<div class=\"fa-kpi-grid\">" + "".join(cards) + "</div>"
 
@@ -299,7 +299,7 @@ def _build_assets_trend(account_df: pd.DataFrame) -> go.Figure:
                 mode="lines",
                 name=label,
                 line=dict(color=_palette_color(idx), width=2.5),
-                hovertemplate="%{x|%Y-%m}: %{y:,.0f}원<extra>%{fullData.name}</extra>",
+                hovertemplate="%{x|%Y-%m}: %{y:,.0f} 원<extra>%{fullData.name}</extra>",
             )
         )
     fig.update_layout(
@@ -338,7 +338,7 @@ def _build_assets_investment_trend(account_df: pd.DataFrame, invest_series: pd.S
             mode="lines",
             name="누적 투자금",
             line=dict(color="#4A5568", width=2.5),
-            hovertemplate="%{x|%Y-%m}: %{y:,.0f}원<extra>누적 투자금</extra>",
+            hovertemplate="%{x|%Y-%m}: %{y:,.0f} 원<extra>누적 투자금</extra>",
         )
     )
     fig.add_trace(
@@ -348,7 +348,7 @@ def _build_assets_investment_trend(account_df: pd.DataFrame, invest_series: pd.S
             mode="lines",
             name="누적 평가금",
             line=dict(color="#E53E3E", width=2.5),
-            hovertemplate="%{x|%Y-%m}: %{y:,.0f}원<extra>누적 평가금</extra>",
+            hovertemplate="%{x|%Y-%m}: %{y:,.0f} 원<extra>누적 평가금</extra>",
         )
     )
     fig.update_layout(
@@ -388,7 +388,7 @@ def _build_single_allocation_pie(df_in: pd.DataFrame, label_col: str, title_text
                 hole=0.46,
                 showlegend=True,
                 marker=dict(colors=[_palette_color(i) for i in range(len(df_in))]),
-                hovertemplate="<b>%{label}</b><br>평가금: %{value:,.0f}원<br>비중: %{percent}<extra></extra>",
+                hovertemplate="<b>%{label}</b><br>평가금: %{value:,.0f} 원<br>비중: %{percent}<extra></extra>",
             )
         ]
     )
@@ -526,7 +526,7 @@ def _build_dividends_chart(pivot: pd.DataFrame) -> go.Figure:
                 textposition="outside" if is_last else "none",
                 textfont=dict(size=13, color=THEME_TEXT, family=FONT_FAMILY),
                 cliponaxis=False,
-                hovertemplate=f"<b>{col}</b><br>%{{x|%Y-%m}}: %{{y:,.0f}}원<extra></extra>",
+                hovertemplate=f"<b>{col}</b><br>%{{x|%Y-%m}}: %{{y:,.0f}} 원<extra></extra>",
             )
         )
     fig.update_layout(
@@ -576,7 +576,7 @@ def _build_yearly_dividends_chart(pivot: pd.DataFrame) -> go.Figure:
                 textposition="outside" if is_last else "none",
                 textfont=dict(size=13, color=THEME_TEXT, family=FONT_FAMILY),
                 cliponaxis=False,
-                hovertemplate=f"<b>{col}</b><br>%{{x}}년: %{{y:,.0f}}원<extra></extra>",
+                hovertemplate=f"<b>{col}</b><br>%{{x}}년: %{{y:,.0f}} 원<extra></extra>",
             )
         )
     fig.update_layout(
@@ -721,12 +721,12 @@ def _build_single_account_card(row: pd.Series) -> str:
     profit_cls = "fa-num-positive" if (profit or 0) > 0 else "fa-num-negative" if (profit or 0) < 0 else ""
     profit_badge = "fa-badge-positive" if (profit or 0) > 0 else "fa-badge-negative" if (profit or 0) < 0 else "fa-badge-neutral"
 
-    invest_str = f"{_fmt_man(invest)} ({invest:,.0f}원)" if invest is not None else "-"
-    eval_str = f"{_fmt_man(valuation)} ({valuation:,.0f}원)" if valuation is not None else "-"
-    profit_str = f"{profit:+,.0f}원" if profit is not None and profit != 0 else (f"{profit:,.0f}원" if profit is not None else "-")
+    invest_str = f"{_fmt_man(invest)} ({invest:,.0f} 원)" if invest is not None else "-"
+    eval_str = f"{_fmt_man(valuation)} ({valuation:,.0f} 원)" if valuation is not None else "-"
+    profit_str = f"{profit:+,.0f} 원" if profit is not None and profit != 0 else (f"{profit:,.0f} 원" if profit is not None else "-")
     profit_man_str = f"{_fmt_profit_man(profit, return_rate)} ({profit_str})"
     weight_str = f"{weight * 100:.1f}%" if weight is not None else "-"
-    div_str = f"{_fmt_man(dividend)} ({dividend:,.0f}원)" if dividend is not None and dividend > 0 else None
+    div_str = f"{_fmt_man(dividend)} ({dividend:,.0f} 원)" if dividend is not None and dividend > 0 else None
 
     div_html = f"<div class='fa-stat-line'><span class='fa-stat-lbl'>누적 배당금</span><span class='fa-stat-val' style='color:var(--fa-purple);'>{div_str}</span></div>" if div_str else ""
 
@@ -830,11 +830,11 @@ def _build_total_holdings_html_table(holdings_df: pd.DataFrame) -> str:
         fluct_cls = "fa-num-positive" if (fluct_rate or 0) > 0 else "fa-num-negative" if (fluct_rate or 0) < 0 else ""
 
         qty_str = f"{qty:,.2f}".rstrip("0").rstrip(".") if qty is not None else "-"
-        avg_str = f"{avg_price:,.0f}원" if avg_price is not None else "-"
-        buy_str = f"{buy_amt:,.0f}원" if buy_amt is not None else "-"
-        cur_str = f"{cur_price:,.0f}원" if cur_price is not None else "-"
-        eval_str = f"{eval_amt:,.0f}원" if eval_amt is not None else "-"
-        profit_str = f"{profit:+,.0f}원" if profit is not None and profit != 0 else (f"{profit:,.0f}원" if profit is not None else "-")
+        avg_str = f"{avg_price:,.0f} 원" if avg_price is not None else "-"
+        buy_str = f"{buy_amt:,.0f} 원" if buy_amt is not None else "-"
+        cur_str = f"{cur_price:,.0f} 원" if cur_price is not None else "-"
+        eval_str = f"{eval_amt:,.0f} 원" if eval_amt is not None else "-"
+        profit_str = f"{profit:+,.0f} 원" if profit is not None and profit != 0 else (f"{profit:,.0f} 원" if profit is not None else "-")
         rate_str = f"{return_rate * 100:+.2f}%" if return_rate is not None else "-"
         fluct_str = f"{fluct_rate * 100:+.2f}%" if fluct_rate is not None else "-"
 
@@ -939,12 +939,12 @@ def _build_account_detail_section(
 
         # 계좌 요약 미니 KPI 그리드 (평가/배당 -> 투자/투자수익 -> 매수/매수수익)
         mini_kpis = [
-            f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>현재 평가금</div><div class='fa-mini-kpi-val fa-font-bold'>{eval_val:,.0f}원</div></div>" if eval_val is not None else "",
-            f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>누적 배당금</div><div class='fa-mini-kpi-val' style='color: var(--fa-purple);'>{dividend_val:,.0f}원</div></div>" if dividend_val is not None and dividend_val > 0 else "",
-            f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>투자금 (원금)</div><div class='fa-mini-kpi-val'>{invest_val:,.0f}원</div></div>" if invest_val is not None else "",
-            f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>투자 대비 수익</div><div class='fa-mini-kpi-val {inv_p_cls}'>{invest_profit:+,.0f}원 <span class='fa-badge {inv_p_bdg}'>{invest_rate:+.2f}%</span></div></div>" if invest_profit is not None else "",
-            f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>총 매수금</div><div class='fa-mini-kpi-val'>{buy_val:,.0f}원</div></div>" if buy_val > 0 else "",
-            f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>매수 대비 수익</div><div class='fa-mini-kpi-val {buy_p_cls}'>{buy_profit:+,.0f}원 <span class='fa-badge {buy_p_bdg}'>{buy_rate:+.2f}%</span></div></div>" if buy_val > 0 else "",
+            f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>현재 평가금</div><div class='fa-mini-kpi-val fa-font-bold'>{eval_val:,.0f} 원</div></div>" if eval_val is not None else "",
+            f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>누적 배당금</div><div class='fa-mini-kpi-val' style='color: var(--fa-purple);'>{dividend_val:,.0f} 원</div></div>" if dividend_val is not None and dividend_val > 0 else "",
+            f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>투자금 (원금)</div><div class='fa-mini-kpi-val'>{invest_val:,.0f} 원</div></div>" if invest_val is not None else "",
+            f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>투자 대비 수익</div><div class='fa-mini-kpi-val {inv_p_cls}'>{invest_profit:+,.0f} 원 <span class='fa-badge {inv_p_bdg}'>{invest_rate:+.2f}%</span></div></div>" if invest_profit is not None else "",
+            f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>총 매수금</div><div class='fa-mini-kpi-val'>{buy_val:,.0f} 원</div></div>" if buy_val > 0 else "",
+            f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>매수 대비 수익</div><div class='fa-mini-kpi-val {buy_p_cls}'>{buy_profit:+,.0f} 원 <span class='fa-badge {buy_p_bdg}'>{buy_rate:+.2f}%</span></div></div>" if buy_val > 0 else "",
         ]
         mini_kpi_html = f"<div class='fa-mini-kpi-grid'>{''.join(mini_kpis)}</div>"
 
@@ -963,7 +963,7 @@ def _build_account_detail_section(
                         hole=0.46,
                         showlegend=True,
                         marker=dict(colors=[_palette_color(i) for i in range(len(account_holdings))]),
-                        hovertemplate="<b>%{label}</b><br>평가금: %{value:,.0f}원<br>비중: %{percent}<extra></extra>",
+                        hovertemplate="<b>%{label}</b><br>평가금: %{value:,.0f} 원<br>비중: %{percent}<extra></extra>",
                     )
                 ]
             )
@@ -1007,7 +1007,7 @@ def _build_account_detail_section(
             cum_div = div_by_acct_sym.get((account, sym), 0.0)
             if cum_div == 0.0 and account == "sema" and dividend_val is not None:
                 cum_div = dividend_val
-            div_str = f"{cum_div:,.0f}원"
+            div_str = f"{cum_div:,.0f} 원"
 
             buy_p_cls = "fa-num-positive" if buy_p_amt > 0 else "fa-num-negative" if buy_p_amt < 0 else ""
             buy_p_bdg = "fa-badge-positive" if buy_p_amt > 0 else "fa-badge-negative" if buy_p_amt < 0 else "fa-badge-neutral"
@@ -1015,12 +1015,12 @@ def _build_account_detail_section(
             inv_p_cls = "fa-num-positive" if inv_p_amt > 0 else "fa-num-negative" if inv_p_amt < 0 else ""
             inv_p_bdg = "fa-badge-positive" if inv_p_amt > 0 else "fa-badge-negative" if inv_p_amt < 0 else "fa-badge-neutral"
 
-            b_str = f"{b_amt:,.0f}원"
-            e_str = f"{e_amt:,.0f}원"
-            inv_str = f"{alloc_inv_amt:,.0f}원"
-            buy_p_str = f"{buy_p_amt:+,.0f}원" if buy_p_amt != 0 else "0원"
+            b_str = f"{b_amt:,.0f} 원"
+            e_str = f"{e_amt:,.0f} 원"
+            inv_str = f"{alloc_inv_amt:,.0f} 원"
+            buy_p_str = f"{buy_p_amt:+,.0f} 원" if buy_p_amt != 0 else "0 원"
             buy_r_str = f"{buy_r_rate:+.2f}%"
-            inv_p_str = f"{inv_p_amt:+,.0f}원" if inv_p_amt != 0 else "0원"
+            inv_p_str = f"{inv_p_amt:+,.0f} 원" if inv_p_amt != 0 else "0 원"
             inv_r_str = f"{inv_r_rate:+.2f}%"
 
             stock_cards.append(
@@ -1076,7 +1076,7 @@ def _build_account_detail_section(
                         f"<div class='fa-rebal-item buy'>"
                         f"<div class='fa-rebal-tag buy'>매수 필요</div>"
                         f"<div class='fa-rebal-name'>{html.escape(asset_name)}</div>"
-                        f"<div class='fa-rebal-val'>+{diff:,.0f}원{qty_str}</div>"
+                        f"<div class='fa-rebal-val'>+{diff:,.0f} 원{qty_str}</div>"
                         f"</div>"
                     )
                 elif diff < -100:
@@ -1085,7 +1085,7 @@ def _build_account_detail_section(
                         f"<div class='fa-rebal-item sell'>"
                         f"<div class='fa-rebal-tag sell'>매도 필요</div>"
                         f"<div class='fa-rebal-name'>{html.escape(asset_name)}</div>"
-                        f"<div class='fa-rebal-val'>-{abs(diff):,.0f}원{qty_str}</div>"
+                        f"<div class='fa-rebal-val'>-{abs(diff):,.0f} 원{qty_str}</div>"
                         f"</div>"
                     )
                 else:
@@ -1093,7 +1093,7 @@ def _build_account_detail_section(
                         f"<div class='fa-rebal-item ok'>"
                         f"<div class='fa-rebal-tag ok'>비중 적정</div>"
                         f"<div class='fa-rebal-name'>{html.escape(asset_name)}</div>"
-                        f"<div class='fa-rebal-val'>0원 (목표 유지)</div>"
+                        f"<div class='fa-rebal-val'>0 원 (목표 유지)</div>"
                         f"</div>"
                     )
 
@@ -1209,7 +1209,7 @@ def _build_trading_history(
     items: List[Dict[str, str]] = []
 
     def fmt_currency(val: float) -> str:
-        return f"{val:,.0f}원"
+        return f"{val:,.0f} 원"
 
     month_records = month_records.sort_values("일자", ascending=False)
     if limit and limit > 0:
@@ -1308,22 +1308,22 @@ def _render_history_html(summary_data: Dict[str, object], items: List[Dict[str, 
         f"</div>",
         f"<div class='fa-kpi-card'>"
         f"  <div class='fa-kpi-label'>투자금 증액</div>"
-        f"  <div class='fa-kpi-value'>{invest_amt:,.0f}원</div>"
+        f"  <div class='fa-kpi-value'>{invest_amt:,.0f} 원</div>"
         f"  <div class='fa-kpi-sub'>원금 입금</div>"
         f"</div>",
         f"<div class='fa-kpi-card'>"
         f"  <div class='fa-kpi-label'>총 매수금</div>"
-        f"  <div class='fa-kpi-value fa-num-positive'>{buy_amt:,.0f}원</div>"
+        f"  <div class='fa-kpi-value fa-num-positive'>{buy_amt:,.0f} 원</div>"
         f"  <div class='fa-kpi-sub'>매수 체결</div>"
         f"</div>",
         f"<div class='fa-kpi-card'>"
         f"  <div class='fa-kpi-label'>총 매도금</div>"
-        f"  <div class='fa-kpi-value fa-num-negative'>{sell_amt:,.0f}원</div>"
+        f"  <div class='fa-kpi-value fa-num-negative'>{sell_amt:,.0f} 원</div>"
         f"  <div class='fa-kpi-sub'>매도 체결</div>"
         f"</div>",
         f"<div class='fa-kpi-card'>"
         f"  <div class='fa-kpi-label'>총 배당금</div>"
-        f"  <div class='fa-kpi-value' style='color: var(--fa-purple);'>{div_amt:,.0f}원</div>"
+        f"  <div class='fa-kpi-value' style='color: var(--fa-purple);'>{div_amt:,.0f} 원</div>"
         f"  <div class='fa-kpi-sub'>배당 수령</div>"
         f"</div>",
     ]
