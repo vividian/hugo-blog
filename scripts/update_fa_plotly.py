@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.22"
+APP_VERSION = "v2.7.23"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -483,10 +483,10 @@ def _build_portfolio_allocation_section(
     fig_class = _build_single_allocation_pie(class_df, "asset_class", "대표 자산 비중")
 
     html_parts = [
-        '<div class="fa-card fa-card-tabs fa-card-wide">',
+        '<div class="fa-card fa-card-tabs fa-card-wide fa-alloc-card">',
         '  <div class="fa-card-head">',
         '    <h2 style="margin-bottom:12px;">전체 포트폴리오 비중</h2>',
-        '    <div class="fa-tab-nav-wrapper" style="margin-bottom:4px;">',
+        '    <div class="fa-tab-nav-wrapper fa-alloc-tab-nav" style="margin-bottom:4px;">',
         '      <div class="fa-tab-nav">',
         '        <button type="button" class="fa-tab-btn active" data-target="alloc-tab-group">자산군 비중</button>',
         '        <button type="button" class="fa-tab-btn" data-target="alloc-tab-region">지역 비중</button>',
@@ -494,7 +494,7 @@ def _build_portfolio_allocation_section(
         '      </div>',
         '    </div>',
         '  </div>',
-        '  <div class="fa-card-body">',
+        '  <div class="fa-card-body fa-alloc-body">',
         f'    <div id="alloc-tab-group" class="fa-tab-pane active">{fig_renderer(fig_group)}</div>',
         f'    <div id="alloc-tab-region" class="fa-tab-pane">{fig_renderer(fig_region)}</div>',
         f'    <div id="alloc-tab-class" class="fa-tab-pane">{fig_renderer(fig_class)}</div>',
@@ -790,7 +790,7 @@ def _build_yearly_detail_bar_chart(year_detail_df: pd.DataFrame) -> go.Figure:
     max_val = max(vals) if len(vals) > 0 else 100
     fig.update_layout(
         height=max(260, len(symbols) * 44 + 60),
-        margin=dict(l=15, r=110, t=20, b=20),
+        margin=dict(l=20, r=120, t=20, b=20),
         showlegend=False,
         font=dict(family=FONT_FAMILY, size=13),
         paper_bgcolor=THEME_BG,
@@ -804,7 +804,11 @@ def _build_yearly_detail_bar_chart(year_detail_df: pd.DataFrame) -> go.Figure:
         zeroline=False,
         tickfont=dict(size=12, family=FONT_FAMILY),
     )
-    fig.update_yaxes(tickfont=dict(size=13, family=FONT_FAMILY), showgrid=False)
+    fig.update_yaxes(
+        ticksuffix="   ",
+        tickfont=dict(size=13, family=FONT_FAMILY),
+        showgrid=False,
+    )
     return fig
 
 
@@ -836,20 +840,6 @@ def _build_dividends_tabbed_section(
         ydf = yearly_detail_df[yearly_detail_df["연도"] == yr]
         yr_chart = _build_yearly_detail_bar_chart(ydf)
         yr_total = ydf["배당원화"].sum()
-        sorted_ydf = ydf.sort_values("배당원화", ascending=False)
-
-        table_rows = []
-        for _, r in sorted_ydf.iterrows():
-            sym = str(r["종목"])
-            amt = float(r["배당원화"])
-            pct = (amt / yr_total * 100.0) if yr_total > 0 else 0.0
-            table_rows.append(
-                f"<tr>"
-                f"  <td><strong>{html.escape(sym)}</strong></td>"
-                f"  <td class='text-right fa-num'>{amt:,.0f}</td>"
-                f"  <td class='text-right fa-num'><span class='fa-chip-weight'>{pct:.1f}</span></td>"
-                f"</tr>"
-            )
 
         detail_panels.append(
             f"<div id='fa-div-year-pane-{yr}' class='fa-div-year-pane{active_cls}'>"
@@ -858,12 +848,6 @@ def _build_dividends_tabbed_section(
             f"    <span class='fa-div-summary-val'>{yr_total:,.0f}</span>"
             f"  </div>"
             f"  <div class='fa-div-chart-box'>{fig_renderer(yr_chart)}</div>"
-            f"  <div class='fa-table-wrapper' style='margin-top:12px;'>"
-            f"    <table class='fa-table fa-table-striped'>"
-            f"      <thead><tr><th>종목</th><th class='text-right'>배당금</th><th class='text-right'>비중</th></tr></thead>"
-            f"      <tbody>{''.join(table_rows)}</tbody>"
-            f"    </table>"
-            f"  </div>"
             f"</div>"
         )
 
@@ -1083,11 +1067,11 @@ def _build_account_assets_html_table(summary_df: pd.DataFrame) -> str:
             f"<div id='{tab_id}' class='fa-tab-pane'>{_build_single_account_card(row)}</div>"
         )
 
-    nav_html = f"<div class='fa-tab-nav-wrapper' style='margin-bottom:8px;'><div class='fa-tab-nav' role='tablist'>{''.join(tab_btns)}</div></div>"
+    nav_html = f"<div class='fa-tab-nav-wrapper fa-acct-summary-tab-nav' style='margin-bottom:8px;'><div class='fa-tab-nav' role='tablist'>{''.join(tab_btns)}</div></div>"
     content_html = f"<div class='fa-tab-panes'>{''.join(tab_panes)}</div>"
 
     return (
-        "<section class='fa-card fa-card-wide fa-card-tabs'>"
+        "<section class='fa-card fa-card-wide fa-card-tabs fa-acct-summary-card'>"
         "<header class='fa-card-head'><h2 style='margin-bottom:12px;'>계좌별 자산 현황</h2></header>"
         f"<div class='fa-card-body'>{nav_html}{content_html}</div>"
         "</section>"
@@ -2724,6 +2708,56 @@ html.dark .fa-dashboard,
 .fa-div-chart-box .plotly-graph-div {
   width: 100% !important;
   margin: 0 auto;
+}
+
+/* =========================================================
+   Responsive Overrides for Desktop vs Mobile
+   ========================================================= */
+/* 1. 전체 포트폴리오 비중: PC 3열 나란히 표시 (탭 제거), 모바일 탭 분기 */
+@media (min-width: 769px) {
+  .fa-alloc-card .fa-alloc-tab-nav {
+    display: none !important;
+  }
+  .fa-alloc-card .fa-alloc-body {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 16px !important;
+  }
+  .fa-alloc-card .fa-tab-pane {
+    display: block !important;
+  }
+}
+@media (max-width: 768px) {
+  .fa-alloc-card .fa-tab-pane {
+    display: none;
+  }
+  .fa-alloc-card .fa-tab-pane.active {
+    display: block;
+  }
+}
+
+/* 2. 계좌별 자산 현황: PC 전체 요약 테이블 표시 (탭 제거), 모바일 탭 분기 */
+@media (min-width: 769px) {
+  .fa-acct-summary-card .fa-acct-summary-tab-nav {
+    display: none !important;
+  }
+  .fa-acct-summary-card #acct-sum-tab-all {
+    display: block !important;
+  }
+  .fa-acct-summary-card .fa-tab-pane:not(#acct-sum-tab-all) {
+    display: none !important;
+  }
+}
+@media (max-width: 768px) {
+  .fa-acct-summary-card .fa-acct-summary-tab-nav {
+    display: block !important;
+  }
+  .fa-acct-summary-card .fa-tab-pane {
+    display: none;
+  }
+  .fa-acct-summary-card .fa-tab-pane.active {
+    display: block;
+  }
 }
 
 .fa-empty-text { color: var(--fa-text-muted); font-size: 0.9rem; margin: 8px 0; }
