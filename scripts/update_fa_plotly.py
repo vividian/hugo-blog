@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.24"
+APP_VERSION = "v2.7.25"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -373,6 +373,114 @@ def _build_assets_investment_trend(account_df: pd.DataFrame, invest_series: pd.S
         gridcolor=THEME_GRID,
     )
     return fig
+
+
+def _collect_rebalancing_alerts(data: ReportData, threshold_pct: float = 3.0) -> List[Dict[str, Any]]:
+    """모든 계좌에서 목표 비중과 threshold_pct(기본 3.0%p) 이상 격차가 발생한 리밸런싱 필요 항목을 수집합니다."""
+    alerts = []
+    for account in update_fa.ACCOUNT_ORDER:
+        account_holdings = data.holdings_df[data.holdings_df["계좌"] == account].copy()
+        if account == "sema" and account_holdings.empty and not data.summary_df.empty:
+            status_row = data.summary_df[data.summary_df["계좌"] == account]
+            if not status_row.empty:
+                invest_val = _as_float(status_row.iloc[0].get("투자금"))
+                eval_val = _as_float(status_row.iloc[0].get("평가금"))
+                account_holdings = pd.DataFrame([{
+                    "계좌": "sema",
+                    "종목": "교직원공제회",
+                    "매수금": invest_val,
+                    "평가금": eval_val,
+                    "수익금": _as_float(status_row.iloc[0].get("수익금")),
+                    "수익률": 0.0,
+                }])
+
+        raw_account_name = update_fa.ACCOUNT_RAW_NAMES.get(account)
+        if not raw_account_name:
+            title_val = update_fa.ACCOUNT_TITLES.get(f"title_{account}_detail", "")
+            raw_account_name = title_val.replace("◉ 상세계좌: ", "").strip()
+
+        rebal_df = update_fa.calculate_rebalancing_df(raw_account_name, account_holdings, data.symbol_map)
+        if rebal_df is None or rebal_df.empty:
+            continue
+
+        acct_label = update_fa.account_label(account)
+
+        for _, row in rebal_df.iterrows():
+            curr_pct = float(row["현재비중"])
+            target_pct = float(row["목표비중"])
+            diff_pct = curr_pct - target_pct
+            diff_amt = float(row["조정금액"])
+            asset_name = str(row["자산군"])
+
+            if abs(diff_pct) >= threshold_pct:
+                is_buy = (diff_amt > 0)
+                alerts.append({
+                    "account": account,
+                    "account_label": acct_label,
+                    "asset_name": asset_name,
+                    "curr_pct": curr_pct,
+                    "target_pct": target_pct,
+                    "diff_pct": diff_pct,
+                    "diff_amt": diff_amt,
+                    "is_buy": is_buy,
+                })
+
+    # 비중 격차 절대값 큰 순으로 정렬
+    alerts.sort(key=lambda x: abs(x["diff_pct"]), reverse=True)
+    return alerts
+
+
+def _build_rebalancing_alert_banner(data: ReportData, threshold_pct: float = 3.0) -> Optional[str]:
+    """목표 비중 대비 3%p 이상 격차가 발생한 항목들을 상단 알림 배너로 렌더링"""
+    alerts = _collect_rebalancing_alerts(data, threshold_pct)
+    if not alerts:
+        return None
+
+    cards_html = []
+    for item in alerts:
+        is_buy = item["is_buy"]
+        badge_cls = "fa-badge-positive" if is_buy else "fa-badge-negative"
+        action_text = "매수 필요" if is_buy else "매도 필요"
+        color_cls = "fa-num-positive" if is_buy else "fa-num-negative"
+        sign_str = "+" if item["diff_amt"] > 0 else ""
+        diff_pct_str = f"{item['diff_pct']:+.1f}%p"
+
+        cards_html.append(
+            f"<div class='fa-rebal-alert-item {'buy' if is_buy else 'sell'}'>"
+            f"  <div class='fa-rebal-alert-head'>"
+            f"    <div class='fa-rebal-alert-sym-wrap'>"
+            f"      <span class='fa-chip-account'>{html.escape(item['account_label'])}</span>"
+            f"      <strong class='fa-rebal-alert-name'>{html.escape(item['asset_name'])}</strong>"
+            f"    </div>"
+            f"    <span class='fa-badge {badge_cls}'>{action_text}</span>"
+            f"  </div>"
+            f"  <div class='fa-rebal-alert-body'>"
+            f"    <div class='fa-rebal-alert-stat'>"
+            f"      <span class='fa-rebal-alert-lbl'>현재 ➡️ 목표 비중</span>"
+            f"      <span class='fa-rebal-alert-val'>{item['curr_pct']:.1f}% ➡️ {item['target_pct']:.1f}% <strong class='{color_cls}'>({diff_pct_str})</strong></span>"
+            f"    </div>"
+            f"    <div class='fa-rebal-alert-stat'>"
+            f"      <span class='fa-rebal-alert-lbl'>조정 필요금액</span>"
+            f"      <span class='fa-rebal-alert-val fa-font-bold {color_cls}'>{sign_str}{item['diff_amt']:,.0f}</span>"
+            f"    </div>"
+            f"  </div>"
+            f"</div>"
+        )
+
+    return (
+        "<section class='fa-card fa-card-wide fa-rebal-alert-card'>"
+        "  <div class='fa-rebal-alert-top-bar'>"
+        "    <div class='fa-rebal-alert-title-wrap'>"
+        "      <span class='fa-rebal-alert-icon'>⚖️</span>"
+        "      <div>"
+        f"        <div class='fa-rebal-alert-main-title'>포트폴리오 리밸런싱 알림 <span class='fa-badge fa-badge-negative' style='font-size:0.75rem; vertical-align:middle; margin-left:6px;'>{len(alerts)}건 조정 필요</span></div>"
+        "        <div class='fa-rebal-alert-sub-title'>계좌별 목표 비중 대비 ±3%p 이상 벗어난 자산군 현황입니다.</div>"
+        "      </div>"
+        "    </div>"
+        "  </div>"
+        f"  <div class='fa-rebal-alert-grid'>{''.join(cards_html)}</div>"
+        "</section>"
+    )
 
 
 def _build_single_allocation_pie(df_in: pd.DataFrame, label_col: str, title_text: str) -> go.Figure:
@@ -1750,6 +1858,7 @@ def _build_dashboard_fragment(data: ReportData) -> str:
     account_summary_html = _build_account_assets_html_table(data.summary_df)
     holdings_html = _build_total_holdings_html_table(data.holdings_df)
 
+    rebal_alert_html = _build_rebalancing_alert_banner(data, threshold_pct=3.0)
     dividends_section_html = _build_dividends_tabbed_section(data.records, data.fx_series_full, fig_html)
     trading_summary, trading_items = _build_trading_history(data.records, data.fx_series_month, data.month_end)
     account_detail_section_html = _build_account_detail_section(data, fig_html)
@@ -1766,6 +1875,12 @@ def _build_dashboard_fragment(data: ReportData) -> str:
         "  </a>"
         "</div>"
         "</section>",
+    ]
+
+    if rebal_alert_html:
+        blocks.append(rebal_alert_html)
+
+    blocks.extend([
         _build_kpi_row(data),
         _build_market_kpi_row(),
         _dashboard_card(update_fa.ACCOUNT_TITLES.get("title_assets_investment_trend", "누적 투자금 vs 평가금 추세"), fig_html(assets_investment_fig), extra_class="fa-card-wide"),
@@ -1773,7 +1888,7 @@ def _build_dashboard_fragment(data: ReportData) -> str:
         portfolio_alloc_html,
         account_summary_html,
         _dashboard_card(update_fa.ACCOUNT_TITLES.get("title_total_holdings", "전체 보유 종목"), holdings_html, extra_class="fa-card-wide"),
-    ]
+    ])
 
     if dividends_section_html:
         blocks.append(dividends_section_html)
@@ -2708,6 +2823,118 @@ html.dark .fa-dashboard,
 .fa-div-chart-box .plotly-graph-div {
   width: 100% !important;
   margin: 0 auto;
+}
+
+/* =========================================================
+   Rebalancing Alert Banner Styles
+   ========================================================= */
+.fa-rebal-alert-card {
+  background: linear-gradient(135deg, #ffffff 0%, #fffcf5 100%);
+  border: 1px solid #fed7aa !important;
+  box-shadow: 0 4px 14px rgba(249, 115, 22, 0.08) !important;
+  margin-bottom: 16px;
+}
+.fa-rebal-alert-top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.fa-rebal-alert-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.fa-rebal-alert-icon {
+  font-size: 1.5rem;
+  background: #ffedd5;
+  border-radius: 10px;
+  padding: 6px 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.fa-rebal-alert-main-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #9a3412;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.fa-rebal-alert-sub-title {
+  font-size: 0.82rem;
+  color: var(--fa-text-muted);
+  margin-top: 2px;
+}
+.fa-rebal-alert-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+}
+@media (max-width: 600px) {
+  .fa-rebal-alert-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
+.fa-rebal-alert-item {
+  background: #ffffff;
+  border: 1px solid var(--fa-card-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+}
+.fa-rebal-alert-item.buy {
+  border-left: 4px solid var(--fa-gain);
+}
+.fa-rebal-alert-item.sell {
+  border-left: 4px solid var(--fa-loss);
+}
+.fa-rebal-alert-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.fa-rebal-alert-sym-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.fa-rebal-alert-name {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--fa-text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fa-rebal-alert-body {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background: var(--fa-kpi-bg);
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+}
+.fa-rebal-alert-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.fa-rebal-alert-lbl {
+  color: var(--fa-text-muted);
+}
+.fa-rebal-alert-val {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
 }
 
 /* =========================================================
