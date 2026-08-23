@@ -38,6 +38,23 @@ def init_db(conn: sqlite3.Connection):
     conn.commit()
 
 
+def normalize_date_str(d_str: str) -> str:
+    """'2026.4.9', '2026-4-9' 등을 '2026.04.09'로 2자리 0패딩 정규화합니다."""
+    if not d_str:
+        return ""
+    clean = str(d_str).strip().replace("-", ".").replace("/", ".")
+    parts = clean.split(".")
+    if len(parts) == 3:
+        try:
+            y = int(parts[0])
+            m = int(parts[1])
+            d = int(parts[2])
+            return f"{y:04d}.{m:02d}.{d:02d}"
+        except ValueError:
+            pass
+    return clean
+
+
 def migrate():
     if not CSV_PATH.exists():
         print(f"(오류) CSV 파일을 찾을 수 없습니다: {CSV_PATH}")
@@ -56,7 +73,7 @@ def migrate():
     init_db(conn)
 
     for _, row in df.iterrows():
-        date_val = str(row.get("일자", "")).strip()
+        date_val = normalize_date_str(str(row.get("일자", "")).strip())
         account_val = str(row.get("계좌", "")).strip()
         symbol_val = str(row.get("종목", "")).strip() if pd.notna(row.get("종목")) else ""
         kind_val = str(row.get("구분", "")).strip() if pd.notna(row.get("구분")) else ""
