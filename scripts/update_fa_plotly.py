@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.11"
+APP_VERSION = "v2.7.12"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -800,13 +800,13 @@ def _build_total_holdings_html_table(holdings_df: pd.DataFrame) -> str:
         "  <tr>",
         "    <th>계좌</th>",
         "    <th>종목</th>",
-        "    <th class='text-right'>현재가</th>",
+        "    <th class='text-right'>수익률</th>",
         "    <th class='text-right'>수량</th>",
         "    <th class='text-right'>평단가</th>",
+        "    <th class='text-right'>현재가</th>",
         "    <th class='text-right'>매수금</th>",
         "    <th class='text-right'>평가금</th>",
         "    <th class='text-right'>수익금</th>",
-        "    <th class='text-right'>수익률</th>",
         "    <th class='text-right'>등락률</th>",
         "  </tr>",
         "</thead>",
@@ -841,13 +841,13 @@ def _build_total_holdings_html_table(holdings_df: pd.DataFrame) -> str:
         lines.append("  <tr>")
         lines.append(f"    <td data-label='계좌'><span class='fa-chip-account'>{html.escape(acct_label)}</span></td>")
         lines.append(f"    <td data-label='종목' class='fa-col-symbol'><span class='fa-chip-account fa-mobile-inline'>{html.escape(acct_label)}</span><strong>{html.escape(symbol)}</strong></td>")
-        lines.append(f"    <td data-label='현재가' class='text-right fa-num'>{cur_str}</td>")
+        lines.append(f"    <td data-label='수익률' class='text-right fa-num'><span class='fa-badge {profit_badge}'>{rate_str}</span></td>")
         lines.append(f"    <td data-label='수량' class='text-right fa-num'>{qty_str}</td>")
         lines.append(f"    <td data-label='평단가' class='text-right fa-num'>{avg_str}</td>")
+        lines.append(f"    <td data-label='현재가' class='text-right fa-num'>{cur_str}</td>")
         lines.append(f"    <td data-label='매수금' class='text-right fa-num'>{buy_str}</td>")
         lines.append(f"    <td data-label='평가금' class='text-right fa-num fa-font-bold'>{eval_str}</td>")
         lines.append(f"    <td data-label='수익금' class='text-right fa-num {profit_cls}'>{profit_str}</td>")
-        lines.append(f"    <td data-label='수익률' class='text-right fa-num'><span class='fa-badge {profit_badge}'>{rate_str}</span></td>")
         lines.append(f"    <td data-label='등락률' class='text-right fa-num fa-hide-mobile {fluct_cls}'>{fluct_str}</td>")
         lines.append("  </tr>")
 
@@ -1850,18 +1850,21 @@ html.dark .fa-dashboard,
     display: none !important;
   }
 
-  .fa-table-holdings td[data-label='현재가'] {
+  .fa-table-holdings td[data-label='수익률'] {
     grid-column: 2 / 3;
     grid-row: 1 / 2;
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-end;
     align-items: center;
     padding: 0 !important;
     border-bottom: 1px dashed var(--fa-border) !important;
     padding-bottom: 8px !important;
     margin-bottom: 2px !important;
-    font-size: 0.9rem;
+    font-size: 0.92rem;
     font-weight: 600;
+  }
+  .fa-table-holdings td[data-label='수익률']::before {
+    display: none !important;
   }
 
   .fa-table-holdings td[data-label='수량'] {
@@ -1886,7 +1889,7 @@ html.dark .fa-dashboard,
     font-size: 0.86rem;
   }
 
-  .fa-table-holdings td[data-label='매수금'] {
+  .fa-table-holdings td[data-label='현재가'] {
     grid-column: 1 / 2;
     grid-row: 3 / 4;
     display: flex;
@@ -1897,7 +1900,7 @@ html.dark .fa-dashboard,
     font-size: 0.86rem;
   }
 
-  .fa-table-holdings td[data-label='평가금'] {
+  .fa-table-holdings td[data-label='매수금'] {
     grid-column: 2 / 3;
     grid-row: 3 / 4;
     display: flex;
@@ -1908,7 +1911,7 @@ html.dark .fa-dashboard,
     font-size: 0.86rem;
   }
 
-  .fa-table-holdings td[data-label='수익금'] {
+  .fa-table-holdings td[data-label='평가금'] {
     grid-column: 1 / 2;
     grid-row: 4 / 5;
     display: flex;
@@ -1919,7 +1922,7 @@ html.dark .fa-dashboard,
     font-size: 0.86rem;
   }
 
-  .fa-table-holdings td[data-label='수익률'] {
+  .fa-table-holdings td[data-label='수익금'] {
     grid-column: 2 / 3;
     grid-row: 4 / 5;
     display: flex;
