@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.4"
+APP_VERSION = "v2.7.5"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -598,11 +598,11 @@ def _build_yearly_dividends_chart(pivot: pd.DataFrame) -> go.Figure:
 # =========================================================================
 
 def _fmt_man(val: Optional[float]) -> str:
-    """원화 금액을 만원 단위(예: 6,200만원, 12,500만원) 문자열로 변환합니다."""
+    """원화 금액을 만원 단위(예: 6,200 만원, 12,500 만원) 문자열로 변환합니다."""
     if val is None or pd.isna(val):
         return "-"
     man = val / 10_000.0
-    return f"{man:,.0f}만원"
+    return f"{man:,.0f} 만원"
 
 
 def _fmt_profit_man(profit: Optional[float], rate: Optional[float]) -> str:
@@ -611,7 +611,7 @@ def _fmt_profit_man(profit: Optional[float], rate: Optional[float]) -> str:
         return "-"
     man_val = profit / 10_000.0
     sign = "+" if man_val > 0 else ""
-    man_str = f"{sign}{man_val:,.0f}만원"
+    man_str = f"{sign}{man_val:,.0f} 만원"
     rate_str = f"{rate * 100:+.1f}%" if (rate is not None and not pd.isna(rate)) else ""
     return f"{man_str} ({rate_str})" if rate_str else man_str
 
