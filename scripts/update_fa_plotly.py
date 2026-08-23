@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.15"
+APP_VERSION = "v2.7.16"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -2116,15 +2116,27 @@ html.dark .fa-dashboard,
 }
 .fa-account-chart-col {
   background: transparent;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
 }
 .fa-account-chart-card {
   background: var(--fa-kpi-bg);
   border: 1px solid var(--fa-border);
   border-radius: 12px;
   padding: 10px;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.fa-account-chart-card .plotly-graph-div {
+  width: 100% !important;
+  margin: 0 auto;
 }
 .fa-account-table-col {
   background: transparent;
+  width: 100%;
+  max-width: 100%;
 }
 
 /* Stock Cards Grid (2-Column) */
