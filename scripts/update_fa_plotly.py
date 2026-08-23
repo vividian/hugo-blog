@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.20"
+APP_VERSION = "v2.7.21"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -559,7 +559,7 @@ def _build_yearly_dividend_line_chart(yearly_series: pd.Series) -> go.Figure:
 
     fig.add_trace(
         go.Scatter(
-            x=x_labels,
+            x=list(range(len(x_labels))),
             y=y_mil,
             mode="lines+markers",
             line=dict(color="#4F46E5", width=3),
@@ -584,7 +584,13 @@ def _build_yearly_dividend_line_chart(yearly_series: pd.Series) -> go.Figure:
         zeroline=False,
         tickfont=dict(size=13, family=FONT_FAMILY),
     )
-    fig.update_xaxes(tickfont=dict(size=13, family=FONT_FAMILY), showgrid=False)
+    fig.update_xaxes(
+        tickmode="array",
+        tickvals=list(range(len(x_labels))),
+        ticktext=x_labels,
+        tickfont=dict(size=13, family=FONT_FAMILY),
+        showgrid=False,
+    )
     return fig
 
 
@@ -617,7 +623,7 @@ def _build_quarterly_dividend_line_chart(quarterly_agg: pd.DataFrame) -> go.Figu
 
     fig.add_trace(
         go.Scatter(
-            x=x_labels,
+            x=list(range(len(x_labels))),
             y=y_mil,
             mode="lines+markers",
             line=dict(color="#06B6D4", width=3),
@@ -642,7 +648,13 @@ def _build_quarterly_dividend_line_chart(quarterly_agg: pd.DataFrame) -> go.Figu
         zeroline=False,
         tickfont=dict(size=13, family=FONT_FAMILY),
     )
-    fig.update_xaxes(tickfont=dict(size=12, family=FONT_FAMILY), showgrid=False)
+    fig.update_xaxes(
+        tickmode="array",
+        tickvals=list(range(len(x_labels))),
+        ticktext=x_labels,
+        tickfont=dict(size=12, family=FONT_FAMILY),
+        showgrid=False,
+    )
     return fig
 
 
