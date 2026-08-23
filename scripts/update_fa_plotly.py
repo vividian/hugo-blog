@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.18"
+APP_VERSION = "v2.7.19"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -504,35 +504,71 @@ def _build_portfolio_allocation_section(
     return "\n".join(html_parts)
 
 
-def _build_dividends_chart(pivot: pd.DataFrame) -> go.Figure:
-    pivot_sorted = pivot.sort_index()
-    if len(pivot_sorted) > 12:
-        pivot_sorted = pivot_sorted.tail(12)
+def _extract_dividend_data(records: pd.DataFrame, fx_series: pd.Series):
+    """배당 레코드(원화 환산)를 추출하여 연도별, 분기별, 월별 시리즈 및 연도별 종목별 상세 DataFrame을 반환합니다."""
+    df = records.copy()
+    if df.empty or "배당" not in df.columns:
+        return pd.Series(dtype=float), pd.DataFrame(), pd.Series(dtype=float), pd.DataFrame()
+
+    divs = df[(df["배당"].notna()) & (df["배당"] > 0)].copy()
+    if divs.empty:
+        return pd.Series(dtype=float), pd.DataFrame(), pd.Series(dtype=float), pd.DataFrame()
+
+    divs["일자"] = pd.to_datetime(divs["일자"])
+    divs["배당원화"] = divs.apply(
+        lambda r: update_fa.convert_to_krw(r["계좌"], float(r["배당"]), r["일자"], fx_series),
+        axis=1,
+    )
+
+    divs["연도"] = divs["일자"].dt.year
+    divs["분기key"] = divs["일자"].dt.to_period("Q")
+    divs["분기명"] = divs["일자"].apply(lambda d: f"{d.strftime('%y')}.{((d.month - 1) // 3) + 1}Q")
+    divs["월"] = divs["일자"].dt.to_period("M").dt.to_timestamp()
+
+    # 1. 연도별 시리즈
+    yearly_series = divs.groupby("연도")["배당원화"].sum().sort_index()
+
+    # 2. 분기별 집계 (분기key로 정렬 후 분기명 라벨 사용)
+    quarterly_agg = divs.groupby(["분기key", "분기명"])["배당원화"].sum().reset_index()
+    quarterly_agg = quarterly_agg.sort_values("분기key")
+
+    # 3. 월별 시리즈
+    monthly_series = divs.groupby("월")["배당원화"].sum().sort_index()
+    if len(monthly_series) > 24:
+        monthly_series = monthly_series.tail(24)
+
+    # 4. 연도별 종목별 상세
+    yearly_detail_df = divs.groupby(["연도", "종목"])["배당원화"].sum().reset_index()
+
+    return yearly_series, quarterly_agg, monthly_series, yearly_detail_df
+
+
+def _build_yearly_dividend_line_chart(yearly_series: pd.Series) -> go.Figure:
     fig = go.Figure()
+    if yearly_series.empty:
+        return fig
+    x_labels = [f"{y}년" for y in yearly_series.index]
+    y_vals = yearly_series.values
+    texts = [f"{v:,.0f}" for v in y_vals]
+    y_max = max(y_vals) if len(y_vals) > 0 else 100
+    y_range = [0, y_max * 1.18]
 
-    totals = pivot_sorted.sum(axis=1)
-
-    for idx, col in enumerate(pivot.columns):
-        is_last = idx == len(pivot.columns) - 1
-        texts = [f"{totals.iloc[i]:,.0f}" if is_last else "" for i in range(len(pivot_sorted))]
-
-        fig.add_trace(
-            go.Bar(
-                x=pivot_sorted.index,
-                y=pivot_sorted[col],
-                name=col,
-                marker=dict(color=_palette_color(idx)),
-                text=texts,
-                textposition="outside" if is_last else "none",
-                textfont=dict(size=13, color=THEME_TEXT, family=FONT_FAMILY),
-                cliponaxis=False,
-                hovertemplate=f"<b>{col}</b><br>%{{x|%Y-%m}}: %{{y:,.0f}}<extra></extra>",
-            )
+    fig.add_trace(
+        go.Scatter(
+            x=x_labels,
+            y=y_vals,
+            mode="lines+markers+text",
+            text=texts,
+            textposition="top center",
+            textfont=dict(size=13, color=THEME_TEXT, family=FONT_FAMILY),
+            line=dict(color="#4F46E5", width=3),
+            marker=dict(size=8, color="#4F46E5"),
+            hovertemplate="<b>%{x}</b><br>배당금: %{y:,.0f}<extra></extra>",
         )
+    )
     fig.update_layout(
-        barmode="stack",
         height=320,
-        margin=dict(l=15, r=15, t=30, b=25),
+        margin=dict(l=15, r=15, t=35, b=25),
         showlegend=False,
         font=dict(family=FONT_FAMILY, size=14),
         paper_bgcolor=THEME_BG,
@@ -540,57 +576,246 @@ def _build_dividends_chart(pivot: pd.DataFrame) -> go.Figure:
     )
     fig.update_yaxes(
         tickformat=",.0f",
-        dtick=500_000,
+        range=y_range,
         showgrid=True,
         gridcolor=THEME_GRID,
         zeroline=False,
         tickfont=dict(size=13, family=FONT_FAMILY),
     )
-    if not pivot_sorted.empty:
-        min_x = pd.to_datetime(pivot_sorted.index.min()) - pd.Timedelta(days=15)
-        max_x = pd.to_datetime(pivot_sorted.index.max()) + pd.Timedelta(days=15)
-        fig.update_xaxes(tickformat="%y%m", range=[min_x, max_x], tickfont=dict(size=13, family=FONT_FAMILY))
-    else:
-        fig.update_xaxes(tickformat="%y%m", tickfont=dict(size=13, family=FONT_FAMILY))
+    fig.update_xaxes(tickfont=dict(size=13, family=FONT_FAMILY), showgrid=False)
     return fig
 
 
-def _build_yearly_dividends_chart(pivot: pd.DataFrame) -> go.Figure:
+def _build_quarterly_dividend_line_chart(quarterly_agg: pd.DataFrame) -> go.Figure:
     fig = go.Figure()
-    pivot_sorted = pivot.sort_index()
-    years = pd.to_datetime(pivot_sorted.index).strftime("%Y").tolist()
+    if quarterly_agg.empty:
+        return fig
+    x_labels = quarterly_agg["분기명"].tolist()
+    y_vals = quarterly_agg["배당원화"].tolist()
+    texts = [f"{v:,.0f}" if v > 0 else "" for v in y_vals]
+    y_max = max(y_vals) if len(y_vals) > 0 else 100
+    y_range = [0, y_max * 1.18]
 
-    totals = pivot_sorted.sum(axis=1)
-
-    for idx, col in enumerate(pivot_sorted.columns):
-        is_last = idx == len(pivot_sorted.columns) - 1
-        texts = [f"{totals.iloc[i]:,.0f}" if is_last else "" for i in range(len(pivot_sorted))]
-
-        fig.add_trace(
-            go.Bar(
-                x=years,
-                y=pivot_sorted[col],
-                name=col,
-                marker=dict(color=_palette_color(idx)),
-                text=texts,
-                textposition="outside" if is_last else "none",
-                textfont=dict(size=13, color=THEME_TEXT, family=FONT_FAMILY),
-                cliponaxis=False,
-                hovertemplate=f"<b>{col}</b><br>%{{x}}년: %{{y:,.0f}}<extra></extra>",
-            )
+    fig.add_trace(
+        go.Scatter(
+            x=x_labels,
+            y=y_vals,
+            mode="lines+markers+text",
+            text=texts,
+            textposition="top center",
+            textfont=dict(size=12, color=THEME_TEXT, family=FONT_FAMILY),
+            line=dict(color="#06B6D4", width=3),
+            marker=dict(size=8, color="#06B6D4"),
+            hovertemplate="<b>%{x}</b><br>배당금: %{y:,.0f}<extra></extra>",
         )
+    )
     fig.update_layout(
-        barmode="stack",
         height=320,
-        margin=dict(l=15, r=15, t=30, b=25),
+        margin=dict(l=15, r=15, t=35, b=25),
         showlegend=False,
         font=dict(family=FONT_FAMILY, size=14),
         paper_bgcolor=THEME_BG,
         plot_bgcolor=THEME_BG,
     )
-    fig.update_yaxes(tickformat=",.0f", showgrid=True, gridcolor=THEME_GRID, zeroline=False, tickfont=dict(size=13, family=FONT_FAMILY))
-    fig.update_xaxes(tickfont=dict(size=13, family=FONT_FAMILY))
+    fig.update_yaxes(
+        tickformat=",.0f",
+        range=y_range,
+        showgrid=True,
+        gridcolor=THEME_GRID,
+        zeroline=False,
+        tickfont=dict(size=13, family=FONT_FAMILY),
+    )
+    fig.update_xaxes(tickfont=dict(size=12, family=FONT_FAMILY), showgrid=False)
     return fig
+
+
+def _build_monthly_dividend_line_chart(monthly_series: pd.Series) -> go.Figure:
+    fig = go.Figure()
+    if monthly_series.empty:
+        return fig
+    x_labels = [d.strftime("%y.%m") for d in monthly_series.index]
+    y_vals = monthly_series.values
+    texts = [f"{v:,.0f}" if v > 0 else "" for v in y_vals]
+    y_max = max(y_vals) if len(y_vals) > 0 else 100
+    y_range = [0, y_max * 1.18]
+
+    fig.add_trace(
+        go.Scatter(
+            x=x_labels,
+            y=y_vals,
+            mode="lines+markers+text",
+            text=texts,
+            textposition="top center",
+            textfont=dict(size=11, color=THEME_TEXT, family=FONT_FAMILY),
+            line=dict(color="#10B981", width=2.5),
+            marker=dict(size=7, color="#10B981"),
+            hovertemplate="<b>%{x}</b><br>배당금: %{y:,.0f}<extra></extra>",
+        )
+    )
+    fig.update_layout(
+        height=320,
+        margin=dict(l=15, r=15, t=35, b=25),
+        showlegend=False,
+        font=dict(family=FONT_FAMILY, size=14),
+        paper_bgcolor=THEME_BG,
+        plot_bgcolor=THEME_BG,
+    )
+    fig.update_yaxes(
+        tickformat=",.0f",
+        range=y_range,
+        showgrid=True,
+        gridcolor=THEME_GRID,
+        zeroline=False,
+        tickfont=dict(size=13, family=FONT_FAMILY),
+    )
+    fig.update_xaxes(tickfont=dict(size=11, family=FONT_FAMILY), showgrid=False)
+    return fig
+
+
+def _build_yearly_detail_bar_chart(year_detail_df: pd.DataFrame) -> go.Figure:
+    """선택된 연도의 종목별 배당금 및 비중을 나타내는 수평 막대 그래프"""
+    fig = go.Figure()
+    if year_detail_df.empty:
+        return fig
+
+    sorted_df = year_detail_df.sort_values("배당원화", ascending=True)
+    total_val = sorted_df["배당원화"].sum()
+
+    symbols = sorted_df["종목"].tolist()
+    vals = sorted_df["배당원화"].tolist()
+
+    texts = []
+    for v in vals:
+        pct = (v / total_val * 100.0) if total_val > 0 else 0.0
+        texts.append(f"{v:,.0f} ({pct:.1f})")
+
+    fig.add_trace(
+        go.Bar(
+            y=symbols,
+            x=vals,
+            orientation="h",
+            marker=dict(color=[_palette_color(i) for i in range(len(symbols))]),
+            text=texts,
+            textposition="outside",
+            textfont=dict(size=13, color=THEME_TEXT, family=FONT_FAMILY),
+            cliponaxis=False,
+            hovertemplate="<b>%{y}</b><br>배당금: %{x:,.0f}<extra></extra>",
+        )
+    )
+    max_val = max(vals) if len(vals) > 0 else 100
+    fig.update_layout(
+        height=max(260, len(symbols) * 44 + 60),
+        margin=dict(l=15, r=100, t=20, b=20),
+        showlegend=False,
+        font=dict(family=FONT_FAMILY, size=13),
+        paper_bgcolor=THEME_BG,
+        plot_bgcolor=THEME_BG,
+    )
+    fig.update_xaxes(
+        range=[0, max_val * 1.35],
+        tickformat=",.0f",
+        showgrid=True,
+        gridcolor=THEME_GRID,
+        zeroline=False,
+        tickfont=dict(size=12, family=FONT_FAMILY),
+    )
+    fig.update_yaxes(tickfont=dict(size=13, family=FONT_FAMILY), showgrid=False)
+    return fig
+
+
+def _build_dividends_tabbed_section(
+    records: pd.DataFrame,
+    fx_series: pd.Series,
+    fig_renderer: Callable[[go.Figure], str],
+) -> Optional[str]:
+    """배당금 현황을 4개 탭(연도별, 분기별, 월별, 상세)으로 렌더링하는 통합 컴포넌트"""
+    yearly_series, quarterly_agg, monthly_series, yearly_detail_df = _extract_dividend_data(records, fx_series)
+    if yearly_series.empty:
+        return None
+
+    fig_yearly = _build_yearly_dividend_line_chart(yearly_series)
+    fig_quarterly = _build_quarterly_dividend_line_chart(quarterly_agg)
+    fig_monthly = _build_monthly_dividend_line_chart(monthly_series)
+
+    # 상세 탭 연도별 목록 (내림차순)
+    available_years = sorted(yearly_detail_df["연도"].unique().tolist(), reverse=True) if not yearly_detail_df.empty else []
+
+    detail_panels = []
+    year_options = []
+
+    for idx, yr in enumerate(available_years):
+        is_first = (idx == 0)
+        active_cls = " active" if is_first else ""
+        year_options.append(f"<option value='{yr}'>{yr}년</option>")
+
+        ydf = yearly_detail_df[yearly_detail_df["연도"] == yr]
+        yr_chart = _build_yearly_detail_bar_chart(ydf)
+        yr_total = ydf["배당원화"].sum()
+        sorted_ydf = ydf.sort_values("배당원화", ascending=False)
+
+        table_rows = []
+        for _, r in sorted_ydf.iterrows():
+            sym = str(r["종목"])
+            amt = float(r["배당원화"])
+            pct = (amt / yr_total * 100.0) if yr_total > 0 else 0.0
+            table_rows.append(
+                f"<tr>"
+                f"  <td><strong>{html.escape(sym)}</strong></td>"
+                f"  <td class='text-right fa-num'>{amt:,.0f}</td>"
+                f"  <td class='text-right fa-num'><span class='fa-chip-weight'>{pct:.1f}</span></td>"
+                f"</tr>"
+            )
+
+        detail_panels.append(
+            f"<div id='fa-div-year-pane-{yr}' class='fa-div-year-pane{active_cls}'>"
+            f"  <div class='fa-div-year-summary'>"
+            f"    <span class='fa-div-summary-tag'>{yr}년 총 배당금</span>"
+            f"    <span class='fa-div-summary-val'>{yr_total:,.0f}</span>"
+            f"  </div>"
+            f"  <div class='fa-div-chart-box'>{fig_renderer(yr_chart)}</div>"
+            f"  <div class='fa-table-wrapper' style='margin-top:12px;'>"
+            f"    <table class='fa-table fa-table-striped'>"
+            f"      <thead><tr><th>종목</th><th class='text-right'>배당금</th><th class='text-right'>비중</th></tr></thead>"
+            f"      <tbody>{''.join(table_rows)}</tbody>"
+            f"    </table>"
+            f"  </div>"
+            f"</div>"
+        )
+
+    detail_html = (
+        f"<div class='fa-div-detail-wrap'>"
+        f"  <div class='fa-div-ctrl-bar'>"
+        f"    <label for='fa-div-year-select' class='fa-div-select-lbl'>연도 선택</label>"
+        f"    <select id='fa-div-year-select' class='fa-select'>{''.join(year_options)}</select>"
+        f"  </div>"
+        f"  <div class='fa-div-panes-wrap'>{''.join(detail_panels)}</div>"
+        f"</div>"
+    )
+
+    tabs_html = [
+        "<section class='fa-card fa-card-wide'>",
+        "  <header class='fa-card-head'>",
+        "    <h2>배당금 및 분배금 현황</h2>",
+        "  </header>",
+        "  <div class='fa-card-body'>",
+        "    <div class='fa-card-tabs'>",
+        "      <div class='fa-tab-nav fa-tab-nav-sub' style='margin-bottom:16px;'>",
+        "        <button class='fa-tab-btn active' data-target='fa-div-tab-yearly'>연도별</button>",
+        "        <button class='fa-tab-btn' data-target='fa-div-tab-quarterly'>분기별</button>",
+        "        <button class='fa-tab-btn' data-target='fa-div-tab-monthly'>월별</button>",
+        "        <button class='fa-tab-btn' data-target='fa-div-tab-detail'>상세</button>",
+        "      </div>",
+        "      <div class='fa-tab-content'>",
+        f"        <div id='fa-div-tab-yearly' class='fa-tab-pane active'>{fig_renderer(fig_yearly)}</div>",
+        f"        <div id='fa-div-tab-quarterly' class='fa-tab-pane'>{fig_renderer(fig_quarterly)}</div>",
+        f"        <div id='fa-div-tab-monthly' class='fa-tab-pane'>{fig_renderer(fig_monthly)}</div>",
+        f"        <div id='fa-div-tab-detail' class='fa-tab-pane'>{detail_html}</div>",
+        "      </div>",
+        "    </div>",
+        "  </div>",
+        "</section>",
+    ]
+    return "\n".join(tabs_html)
 
 
 # =========================================================================
@@ -1456,18 +1681,8 @@ def _build_dashboard_fragment(data: ReportData) -> str:
     account_summary_html = _build_account_assets_html_table(data.summary_df)
     holdings_html = _build_total_holdings_html_table(data.holdings_df)
 
-    monthly_div_fig = (
-        _build_dividends_chart(data.dividends_pivot)
-        if data.dividends_pivot is not None and not data.dividends_pivot.empty
-        else None
-    )
-    yearly_div_fig = (
-        _build_yearly_dividends_chart(data.yearly_dividends_pivot)
-        if data.yearly_dividends_pivot is not None and not data.yearly_dividends_pivot.empty
-        else None
-    )
+    dividends_section_html = _build_dividends_tabbed_section(data.records, data.fx_series_full, fig_html)
     trading_summary, trading_items = _build_trading_history(data.records, data.fx_series_month, data.month_end)
-
     account_detail_section_html = _build_account_detail_section(data, fig_html)
 
     blocks: List[str] = [
@@ -1491,22 +1706,8 @@ def _build_dashboard_fragment(data: ReportData) -> str:
         _dashboard_card(update_fa.ACCOUNT_TITLES.get("title_total_holdings", "전체 보유 종목"), holdings_html, extra_class="fa-card-wide"),
     ]
 
-    if monthly_div_fig is not None:
-        blocks.append(
-            _dashboard_card(
-                update_fa.ACCOUNT_TITLES.get("title_monthly_dividends", "월별 배당금 추이"),
-                fig_html(monthly_div_fig),
-                extra_class="fa-card-wide",
-            ),
-        )
-    if yearly_div_fig is not None:
-        blocks.append(
-            _dashboard_card(
-                update_fa.ACCOUNT_TITLES.get("title_yearly_dividends", "연별 배당금 현황"),
-                fig_html(yearly_div_fig),
-                extra_class="fa-card-wide",
-            ),
-        )
+    if dividends_section_html:
+        blocks.append(dividends_section_html)
 
     if account_detail_section_html:
         blocks.append(account_detail_section_html)
@@ -2370,13 +2571,83 @@ html.dark .fa-dashboard,
   white-space: nowrap;
 }
 
+/* Dividend Detail Tab Controls */
+.fa-div-detail-wrap {
+  width: 100%;
+}
+.fa-div-ctrl-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  background: var(--fa-kpi-bg);
+  border: 1px solid var(--fa-border);
+  border-radius: 10px;
+  padding: 8px 14px;
+}
+.fa-div-select-lbl {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--fa-text-muted);
+}
+.fa-select {
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--fa-border);
+  background: var(--fa-card-bg);
+  color: var(--fa-text-main);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+}
+.fa-div-year-pane {
+  display: none;
+  animation: faFadeIn 0.25s ease-in-out;
+}
+.fa-div-year-pane.active {
+  display: block;
+}
+.fa-div-year-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--fa-kpi-bg);
+  border: 1px solid var(--fa-border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+}
+.fa-div-summary-tag {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--fa-text-muted);
+}
+.fa-div-summary-val {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--fa-purple);
+  font-variant-numeric: tabular-nums;
+}
+.fa-div-chart-box {
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--fa-kpi-bg);
+  border: 1px solid var(--fa-border);
+  padding: 10px;
+}
+.fa-div-chart-box .plotly-graph-div {
+  width: 100% !important;
+  margin: 0 auto;
+}
+
 .fa-empty-text { color: var(--fa-text-muted); font-size: 0.9rem; margin: 8px 0; }
 </style>
 
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <script>
 document.addEventListener("DOMContentLoaded", function () {
-  // 계좌 탭 전환 이벤트 리스너
+  // 탭 전환 이벤트 리스너
   const tabBtns = document.querySelectorAll(".fa-tab-btn");
   tabBtns.forEach(btn => {
     btn.addEventListener("click", function () {
@@ -2398,6 +2669,14 @@ document.addEventListener("DOMContentLoaded", function () {
         if (chartDiv && window.Plotly) {
           window.Plotly.Plots.resize(chartDiv);
         }
+        // 만약 활성화된 패널이 상세 탭이면 내부의 활성 연도 차트도 리사이즈
+        const activeYearPane = targetPane.querySelector(".fa-div-year-pane.active");
+        if (activeYearPane) {
+          const yearChartDiv = activeYearPane.querySelector(".plotly-graph-div");
+          if (yearChartDiv && window.Plotly) {
+            window.Plotly.Plots.resize(yearChartDiv);
+          }
+        }
       }
 
       setTimeout(() => {
@@ -2405,6 +2684,25 @@ document.addEventListener("DOMContentLoaded", function () {
       }, 50);
     });
   });
+
+  // 배당금 상세 탭 연도 드롭다운 변경 리스너
+  const yearSelect = document.getElementById("fa-div-year-select");
+  if (yearSelect) {
+    yearSelect.addEventListener("change", function () {
+      const selectedYear = this.value;
+      const wrap = this.closest(".fa-div-detail-wrap");
+      if (!wrap) return;
+      wrap.querySelectorAll(".fa-div-year-pane").forEach(p => p.classList.remove("active"));
+      const targetPane = document.getElementById("fa-div-year-pane-" + selectedYear);
+      if (targetPane) {
+        targetPane.classList.add("active");
+        const chartDiv = targetPane.querySelector(".plotly-graph-div");
+        if (chartDiv && window.Plotly) {
+          window.Plotly.Plots.resize(chartDiv);
+        }
+      }
+    });
+  }
 });
 </script>
 """
