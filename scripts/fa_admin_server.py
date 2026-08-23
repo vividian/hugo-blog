@@ -25,6 +25,38 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 DB_PATH = ROOT_DIR / "db" / "fa_records.db"
 CSV_PATH = ROOT_DIR / "config" / "trading_records.csv"
 FA_YAML_PATH = ROOT_DIR / "config" / "fa.yaml"
+FA_MD_PATH = ROOT_DIR / "content" / "fa" / "fa.md"
+
+
+def sync_fa_yaml_to_md():
+    """config/fa.yaml의 accounts 설정을 content/fa/fa.md 원본 파일로 자동 역동기화하여 빌드 시 설정 유실을 방지합니다."""
+    try:
+        if not FA_YAML_PATH.exists() or not FA_MD_PATH.exists():
+            return
+        with open(FA_YAML_PATH, "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+
+        md_text = FA_MD_PATH.read_text(encoding="utf-8")
+        front_matter = ""
+        fm_match = re.match(r"^---[\s\S]*?---\n*", md_text)
+        if fm_match:
+            front_matter = fm_match.group(0).strip() + "\n\n"
+
+        lines = []
+        for acct in cfg.get("accounts", []):
+            name = acct.get("name", "")
+            lines.append(f"계좌: {name}")
+            for item in acct.get("items", []):
+                # item: [name, abbrev, ticker, region, asset_class]
+                item_str = ", ".join([str(x) if x is not None else "" for x in item])
+                lines.append(f"- {item_str}")
+            lines.append("")
+
+        final_content = front_matter + "\n".join(lines).strip() + "\n"
+        FA_MD_PATH.write_text(final_content, encoding="utf-8")
+        print("✅ [fa.md] config/fa.yaml 변경사항이 content/fa/fa.md에 자동 영구 반영되었습니다.")
+    except Exception as e:
+        print(f"⚠️ [fa.md] 자동 동기화 실패: {e}")
 
 ACCOUNT_CHOICES = [
     {"code": "usa", "name": "미국 주식"},
@@ -155,6 +187,7 @@ def update_account_allocation(account_code: str, new_formula: str) -> bool:
             with open(FA_YAML_PATH, "w", encoding="utf-8") as f:
                 yaml.dump(cfg, f, allow_unicode=True, sort_keys=False)
             print(f"✅ [fa.yaml] 계좌 목표 비중 수정 완료: [{account_code}] {new_full_title}")
+            sync_fa_yaml_to_md()
             run_dashboard_update()
             return True
         return False
@@ -248,6 +281,7 @@ def update_symbol_in_fa_yaml(
             with open(FA_YAML_PATH, "w", encoding="utf-8") as f:
                 yaml.dump(cfg, f, allow_unicode=True, sort_keys=False)
             print(f"✅ [fa.yaml] 종목 수정 완료: [{account_code}] {old_abbrev} ➡️ {new_abbrev}")
+            sync_fa_yaml_to_md()
 
             # 거래내역 DB 동기화
             if sync_records and (old_abbrev != new_abbrev or old_name != new_abbrev):
@@ -301,6 +335,7 @@ def delete_symbol_from_fa_yaml(account_code: str, name: str, abbrev: str) -> boo
             with open(FA_YAML_PATH, "w", encoding="utf-8") as f:
                 yaml.dump(cfg, f, allow_unicode=True, sort_keys=False)
             print(f"✅ [fa.yaml] 종목 삭제 완료: [{account_code}] {name} ({abbrev})")
+            sync_fa_yaml_to_md()
             run_dashboard_update()
             return True
         return False
@@ -330,6 +365,7 @@ def add_symbol_to_fa_yaml(account_code: str, full_name: str, abbrev: str, ticker
                     with open(FA_YAML_PATH, "w", encoding="utf-8") as f:
                         yaml.dump(cfg, f, allow_unicode=True, sort_keys=False)
                     print(f"✅ [fa.yaml] 신규 종목 등록 성공: [{acct_name}] {full_name} ({abbrev})")
+                    sync_fa_yaml_to_md()
                 return True
         return False
     except Exception as e:
@@ -819,7 +855,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="fa-header">
       <div class="fa-header-title">
         <span>📈 FA 자산 거래내역 관리자</span>
-        <span class="fa-header-badge">v2.7.27</span>
+        <span class="fa-header-badge">v2.7.28</span>
         <span class="fa-header-badge" style="background:var(--fa-border); color:var(--fa-text-muted);">SQLite DB</span>
       </div>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
