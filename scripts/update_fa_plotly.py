@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.19"
+APP_VERSION = "v2.7.20"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -547,35 +547,37 @@ def _build_yearly_dividend_line_chart(yearly_series: pd.Series) -> go.Figure:
     fig = go.Figure()
     if yearly_series.empty:
         return fig
-    x_labels = [f"{y}년" for y in yearly_series.index]
-    y_vals = yearly_series.values
-    texts = [f"{v:,.0f}" for v in y_vals]
-    y_max = max(y_vals) if len(y_vals) > 0 else 100
-    y_range = [0, y_max * 1.18]
+
+    x_labels = [f"'{str(y)[-2:]}" for y in yearly_series.index]
+    hover_labels = [f"{y}년" for y in yearly_series.index]
+    y_raw = yearly_series.values
+    y_mil = y_raw / 1_000_000.0
+    y_max = max(y_mil) if len(y_mil) > 0 else 1.0
+    y_range = [0, y_max * 1.15]
+
+    customdata = np.stack((hover_labels, y_raw), axis=-1)
 
     fig.add_trace(
         go.Scatter(
             x=x_labels,
-            y=y_vals,
-            mode="lines+markers+text",
-            text=texts,
-            textposition="top center",
-            textfont=dict(size=13, color=THEME_TEXT, family=FONT_FAMILY),
+            y=y_mil,
+            mode="lines+markers",
             line=dict(color="#4F46E5", width=3),
             marker=dict(size=8, color="#4F46E5"),
-            hovertemplate="<b>%{x}</b><br>배당금: %{y:,.0f}<extra></extra>",
+            customdata=customdata,
+            hovertemplate="<b>%{customdata[0]}</b><br>배당금: %{y:,.2f} 백만원 (%{customdata[1]:,.0f})<extra></extra>",
         )
     )
     fig.update_layout(
         height=320,
-        margin=dict(l=15, r=15, t=35, b=25),
+        margin=dict(l=15, r=15, t=30, b=25),
         showlegend=False,
         font=dict(family=FONT_FAMILY, size=14),
         paper_bgcolor=THEME_BG,
         plot_bgcolor=THEME_BG,
     )
     fig.update_yaxes(
-        tickformat=",.0f",
+        tickformat=",.1f",
         range=y_range,
         showgrid=True,
         gridcolor=THEME_GRID,
@@ -590,35 +592,50 @@ def _build_quarterly_dividend_line_chart(quarterly_agg: pd.DataFrame) -> go.Figu
     fig = go.Figure()
     if quarterly_agg.empty:
         return fig
-    x_labels = quarterly_agg["분기명"].tolist()
-    y_vals = quarterly_agg["배당원화"].tolist()
-    texts = [f"{v:,.0f}" if v > 0 else "" for v in y_vals]
-    y_max = max(y_vals) if len(y_vals) > 0 else 100
-    y_range = [0, y_max * 1.18]
+
+    x_labels = []
+    hover_labels = []
+    seen_years = set()
+    for _, r in quarterly_agg.iterrows():
+        q_per = r["분기key"]
+        yr = q_per.year
+        q_num = q_per.quarter
+        yr_short = str(yr)[-2:]
+        if q_num == 1 or yr not in seen_years:
+            seen_years.add(yr)
+            x_labels.append(f"'{yr_short}.{q_num}Q")
+        else:
+            x_labels.append(f"{q_num}Q")
+        hover_labels.append(f"'{yr_short}년 {q_num}분기")
+
+    y_raw = quarterly_agg["배당원화"].values
+    y_mil = y_raw / 1_000_000.0
+    y_max = max(y_mil) if len(y_mil) > 0 else 1.0
+    y_range = [0, y_max * 1.15]
+
+    customdata = np.stack((hover_labels, y_raw), axis=-1)
 
     fig.add_trace(
         go.Scatter(
             x=x_labels,
-            y=y_vals,
-            mode="lines+markers+text",
-            text=texts,
-            textposition="top center",
-            textfont=dict(size=12, color=THEME_TEXT, family=FONT_FAMILY),
+            y=y_mil,
+            mode="lines+markers",
             line=dict(color="#06B6D4", width=3),
             marker=dict(size=8, color="#06B6D4"),
-            hovertemplate="<b>%{x}</b><br>배당금: %{y:,.0f}<extra></extra>",
+            customdata=customdata,
+            hovertemplate="<b>%{customdata[0]}</b><br>배당금: %{y:,.2f} 백만원 (%{customdata[1]:,.0f})<extra></extra>",
         )
     )
     fig.update_layout(
         height=320,
-        margin=dict(l=15, r=15, t=35, b=25),
+        margin=dict(l=15, r=15, t=30, b=25),
         showlegend=False,
         font=dict(family=FONT_FAMILY, size=14),
         paper_bgcolor=THEME_BG,
         plot_bgcolor=THEME_BG,
     )
     fig.update_yaxes(
-        tickformat=",.0f",
+        tickformat=",.1f",
         range=y_range,
         showgrid=True,
         gridcolor=THEME_GRID,
@@ -633,42 +650,61 @@ def _build_monthly_dividend_line_chart(monthly_series: pd.Series) -> go.Figure:
     fig = go.Figure()
     if monthly_series.empty:
         return fig
-    x_labels = [d.strftime("%y.%m") for d in monthly_series.index]
-    y_vals = monthly_series.values
-    texts = [f"{v:,.0f}" if v > 0 else "" for v in y_vals]
-    y_max = max(y_vals) if len(y_vals) > 0 else 100
-    y_range = [0, y_max * 1.18]
+
+    x_labels = []
+    hover_labels = []
+    for d in monthly_series.index:
+        yr_short = d.strftime("%y")
+        m = d.month
+        if m == 1:
+            x_labels.append(f"'{yr_short}.1")
+        elif m == 7:
+            x_labels.append("7")
+        else:
+            x_labels.append("")
+        hover_labels.append(d.strftime("'%y년 %m월"))
+
+    y_raw = monthly_series.values
+    y_mil = y_raw / 1_000_000.0
+    y_max = max(y_mil) if len(y_mil) > 0 else 1.0
+    y_range = [0, y_max * 1.15]
+
+    customdata = np.stack((hover_labels, y_raw), axis=-1)
 
     fig.add_trace(
         go.Scatter(
-            x=x_labels,
-            y=y_vals,
-            mode="lines+markers+text",
-            text=texts,
-            textposition="top center",
-            textfont=dict(size=11, color=THEME_TEXT, family=FONT_FAMILY),
+            x=list(range(len(x_labels))),
+            y=y_mil,
+            mode="lines+markers",
             line=dict(color="#10B981", width=2.5),
-            marker=dict(size=7, color="#10B981"),
-            hovertemplate="<b>%{x}</b><br>배당금: %{y:,.0f}<extra></extra>",
+            marker=dict(size=6, color="#10B981"),
+            customdata=customdata,
+            hovertemplate="<b>%{customdata[0]}</b><br>배당금: %{y:,.2f} 백만원 (%{customdata[1]:,.0f})<extra></extra>",
         )
     )
     fig.update_layout(
         height=320,
-        margin=dict(l=15, r=15, t=35, b=25),
+        margin=dict(l=15, r=15, t=30, b=25),
         showlegend=False,
         font=dict(family=FONT_FAMILY, size=14),
         paper_bgcolor=THEME_BG,
         plot_bgcolor=THEME_BG,
     )
     fig.update_yaxes(
-        tickformat=",.0f",
+        tickformat=",.1f",
         range=y_range,
         showgrid=True,
         gridcolor=THEME_GRID,
         zeroline=False,
         tickfont=dict(size=13, family=FONT_FAMILY),
     )
-    fig.update_xaxes(tickfont=dict(size=11, family=FONT_FAMILY), showgrid=False)
+    fig.update_xaxes(
+        tickmode="array",
+        tickvals=list(range(len(x_labels))),
+        ticktext=x_labels,
+        tickfont=dict(size=12, family=FONT_FAMILY),
+        showgrid=False,
+    )
     return fig
 
 
@@ -705,7 +741,7 @@ def _build_yearly_detail_bar_chart(year_detail_df: pd.DataFrame) -> go.Figure:
     max_val = max(vals) if len(vals) > 0 else 100
     fig.update_layout(
         height=max(260, len(symbols) * 44 + 60),
-        margin=dict(l=15, r=100, t=20, b=20),
+        margin=dict(l=15, r=110, t=20, b=20),
         showlegend=False,
         font=dict(family=FONT_FAMILY, size=13),
         paper_bgcolor=THEME_BG,
@@ -795,7 +831,7 @@ def _build_dividends_tabbed_section(
     tabs_html = [
         "<section class='fa-card fa-card-wide'>",
         "  <header class='fa-card-head'>",
-        "    <h2>배당금 및 분배금 현황</h2>",
+        "    <h2>배당금 및 분배금 현황 <span class='fa-unit-badge' style='font-size:0.78rem; color:var(--fa-text-muted); font-weight:normal; margin-left:6px;'>(단위: 백만원)</span></h2>",
         "  </header>",
         "  <div class='fa-card-body'>",
         "    <div class='fa-card-tabs'>",
