@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.5"
+APP_VERSION = "v2.7.6"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -1871,6 +1871,22 @@ html.dark .fa-dashboard,
 .fa-table-eok-summary tfoot tr {
   background: var(--fa-kpi-bg);
   font-weight: 700;
+}
+.fa-table-eok-summary th:first-child,
+.fa-table-eok-summary td:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--fa-kpi-bg);
+  z-index: 2;
+  box-shadow: 2px 0 6px rgba(0, 0, 0, 0.05);
+}
+.fa-table-eok-summary th:first-child {
+  background: var(--fa-table-header-bg);
+  z-index: 3;
+}
+.fa-table-eok-summary tfoot td:first-child {
+  background: var(--fa-kpi-bg);
+  z-index: 2;
 }
 
 /* =========================================================
