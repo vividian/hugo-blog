@@ -82,6 +82,17 @@ def migrate():
         ))
 
     conn.commit()
+
+    # 구분이 비어있는 과거 데이터를 배당/입금/출금/평가금/매도/매수로 자동 보정
+    cursor.execute("UPDATE trading_records SET kind = '배당' WHERE (kind IS NULL OR kind = '') AND dividend > 0;")
+    cursor.execute("UPDATE trading_records SET kind = '입금' WHERE (kind IS NULL OR kind = '') AND deposit > 0;")
+    cursor.execute("UPDATE trading_records SET kind = '출금' WHERE (kind IS NULL OR kind = '') AND deposit < 0;")
+    cursor.execute("UPDATE trading_records SET kind = '평가금' WHERE (kind IS NULL OR kind = '') AND evaluation > 0;")
+    cursor.execute("UPDATE trading_records SET kind = '매도' WHERE (kind IS NULL OR kind = '') AND quantity < 0;")
+    cursor.execute("UPDATE trading_records SET kind = '매수' WHERE (kind IS NULL OR kind = '') AND (quantity > 0 OR unit_price > 0);")
+    cursor.execute("UPDATE trading_records SET date = REPLACE(date, '-', '.') WHERE date LIKE '%-%';")
+    conn.commit()
+
     cursor.execute("SELECT COUNT(*) FROM trading_records;")
     count = cursor.fetchone()[0]
     conn.close()

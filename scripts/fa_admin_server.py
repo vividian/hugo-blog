@@ -119,13 +119,14 @@ def run_dashboard_update():
 
             if res.returncode == 0:
                 print("✅ [대시보드 갱신] HTML 생성 완료!")
-                # 3. nas_scheduler.py --skip-permissions 실행하여 웹 서비스 경로로 자동 동기화
-                cmd_sync = [sys.executable, str(ROOT_DIR / "scripts" / "nas_scheduler.py"), "--skip-permissions"]
-                res_sync = subprocess.run(cmd_sync, cwd=ROOT_DIR, capture_output=True, text=True)
-                if res_sync.returncode == 0:
-                    print("🚀 [실시간 배포] 웹 서버 동기화 성공!")
-                else:
-                    print(f"⚠️ [실시간 배포] nas_scheduler 경고: {res_sync.stderr}")
+                # 3. NAS 환경일 경우 nas_scheduler.py --skip-permissions 실행하여 웹 서비스 경로로 자동 동기화
+                if Path("/var/services/web").exists() or Path("/volume1").exists() or Path("/volume3").exists():
+                    cmd_sync = [sys.executable, str(ROOT_DIR / "scripts" / "nas_scheduler.py"), "--skip-permissions"]
+                    res_sync = subprocess.run(cmd_sync, cwd=ROOT_DIR, capture_output=True, text=True)
+                    if res_sync.returncode == 0:
+                        print("🚀 [실시간 배포] NAS 웹 서버 동기화 성공!")
+                    else:
+                        print(f"⚠️ [실시간 배포] nas_scheduler 경고: {res_sync.stderr}")
             else:
                 print(f"⚠️ 대시보드 갱신 에러: {res.stderr}")
         except Exception as e:
@@ -497,7 +498,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="fa-header">
       <div class="fa-header-title">
         <span>📈 FA 자산 거래내역 관리자</span>
-        <span class="fa-header-badge">v2.6.3</span>
+        <span class="fa-header-badge">v2.6.4</span>
         <span class="fa-header-badge" style="background:var(--fa-border); color:var(--fa-text-muted);">SQLite DB</span>
       </div>
       <div style="display:flex; gap:8px;">
@@ -1422,12 +1423,32 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
         self.send_error(HTTPStatus.NOT_FOUND)
 
 
+def ensure_db_normalized():
+    """DB 시작 시 구분이 비어있는 과거 데이터를 배당/입금/출금/매도/매수로 자동 보정하고 날짜를 정규화합니다."""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("UPDATE trading_records SET kind = '배당' WHERE (kind IS NULL OR kind = '') AND dividend > 0;")
+        cur.execute("UPDATE trading_records SET kind = '입금' WHERE (kind IS NULL OR kind = '') AND deposit > 0;")
+        cur.execute("UPDATE trading_records SET kind = '출금' WHERE (kind IS NULL OR kind = '') AND deposit < 0;")
+        cur.execute("UPDATE trading_records SET kind = '평가금' WHERE (kind IS NULL OR kind = '') AND evaluation > 0;")
+        cur.execute("UPDATE trading_records SET kind = '매도' WHERE (kind IS NULL OR kind = '') AND quantity < 0;")
+        cur.execute("UPDATE trading_records SET kind = '매수' WHERE (kind IS NULL OR kind = '') AND (quantity > 0 OR unit_price > 0);")
+        cur.execute("UPDATE trading_records SET date = REPLACE(date, '-', '.') WHERE date LIKE '%-%';")
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"(경고) DB 데이터 정규화 실패: {e}")
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="FA Trading Records Admin Web Server")
     parser.add_argument("--port", type=int, default=8095, help="Port to listen on (default: 8095)")
     parser.add_argument("--host", type=str, default="0.0.0.0", help="Host address (default: 0.0.0.0)")
     args = parser.parse_args()
+
+    ensure_db_normalized()
 
     server_address = (args.host, args.port)
     httpd = HTTPServer(server_address, FAAdminRequestHandler)
