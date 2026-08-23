@@ -597,7 +597,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     .fa-modal-overlay {
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(15, 23, 42, 0.6);
+      background: rgba(15, 23, 42, 0.65);
       backdrop-filter: blur(4px);
       display: none;
       align-items: center;
@@ -606,29 +606,52 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       padding: 16px;
     }
     .fa-modal-overlay.open { display: flex; animation: faFadeIn 0.2s ease-out; }
-    .fa-modal-box {
-      background: var(--fa-card-bg);
+    .fa-modal, .fa-modal-box {
+      background: #ffffff !important;
+      color: #1e293b !important;
       border: 1px solid var(--fa-card-border);
-      border-radius: 12px;
+      border-radius: 14px;
       width: 100%;
       max-width: 480px;
-      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
       overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      max-height: 90vh;
+      animation: faFadeIn 0.2s ease-out;
     }
     .fa-modal-header {
+      background: #ffffff !important;
+      color: var(--fa-text-main) !important;
       padding: 16px 20px;
       border-bottom: 1px solid var(--fa-border);
       display: flex;
       justify-content: space-between;
       align-items: center;
       font-weight: 700;
-      font-size: 1rem;
+      font-size: 1.05rem;
+    }
+    .fa-modal-close {
+      background: transparent;
+      border: none;
+      font-size: 1.5rem;
+      cursor: pointer;
+      color: var(--fa-text-muted);
+      line-height: 1;
+      padding: 2px 6px;
+      border-radius: 6px;
+    }
+    .fa-modal-close:hover {
+      background: #f1f5f9;
+      color: var(--fa-text-main);
     }
     .fa-modal-body {
+      background: #ffffff !important;
       padding: 20px;
       display: flex;
       flex-direction: column;
       gap: 12px;
+      overflow-y: auto;
     }
     .fa-modal-footer {
       padding: 14px 20px;
@@ -636,7 +659,39 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       display: flex;
       justify-content: flex-end;
       gap: 8px;
-      background: var(--fa-kpi-bg);
+      background: var(--fa-kpi-bg) !important;
+    }
+    .fa-modal-title {
+      font-weight: 800;
+      font-size: 1.05rem;
+      color: #0f172a;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .fa-modal .fa-input, .fa-modal .fa-select {
+      background: #ffffff !important;
+      color: #1e293b !important;
+      border: 1px solid #cbd5e1 !important;
+    }
+    .fa-modal .fa-table-wrap {
+      background: #ffffff !important;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      overflow-x: auto;
+    }
+    .fa-modal .fa-table th {
+      background: #f1f5f9 !important;
+      color: #334155 !important;
+      font-weight: 700;
+    }
+    .fa-modal .fa-table td {
+      background: #ffffff !important;
+      color: #1e293b !important;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .fa-modal .fa-table tr:hover td {
+      background: #f8fafc !important;
     }
   </style>
 </head>
@@ -646,7 +701,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="fa-header">
       <div class="fa-header-title">
         <span>📈 FA 자산 거래내역 관리자</span>
-        <span class="fa-header-badge">v2.7.25</span>
+        <span class="fa-header-badge">v2.7.26</span>
         <span class="fa-header-badge" style="background:var(--fa-border); color:var(--fa-text-muted);">SQLite DB</span>
       </div>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
