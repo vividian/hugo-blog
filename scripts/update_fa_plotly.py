@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.16"
+APP_VERSION = "v2.7.17"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -1028,9 +1028,9 @@ def _build_account_detail_section(
                 f"  <div class='fa-stock-card-head'>"
                 f"    <div class='fa-stock-card-title'>{html.escape(sym)}</div>"
                 f"    <div class='fa-stock-card-badges'>"
-                f"      <span class='fa-chip-weight'>비중 {weight_pct:.1f}</span>"
-                f"      <span class='fa-badge {inv_p_bdg}'>투자 {inv_r_str}</span>"
-                f"      <span class='fa-badge {buy_p_bdg}'>매수 {buy_r_str}</span>"
+                f"      <span class='fa-badge {inv_p_bdg}'>{inv_r_str}</span>"
+                f"      <span class='fa-rate-divider'>/</span>"
+                f"      <span class='fa-badge {buy_p_bdg}'>{buy_r_str}</span>"
                 f"    </div>"
                 f"  </div>"
                 f"  <div class='fa-stock-card-body'>"
@@ -2184,8 +2184,14 @@ html.dark .fa-dashboard,
 .fa-stock-card-badges {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   flex-shrink: 0;
+}
+.fa-rate-divider {
+  font-size: 0.76rem;
+  color: var(--fa-text-muted);
+  font-weight: 600;
+  margin: 0 1px;
 }
 .fa-chip-weight {
   font-size: 0.72rem;
