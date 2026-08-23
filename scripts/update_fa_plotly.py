@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.0"
+APP_VERSION = "v2.7.1"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -597,6 +597,30 @@ def _build_yearly_dividends_chart(pivot: pd.DataFrame) -> go.Figure:
 
 def _build_account_assets_html_table(summary_df: pd.DataFrame) -> str:
     """계좌 요약 데이터프레임을 PC 테이블 & 모바일 카드로 변환되는 반응형 HTML로 렌더링"""
+def _fmt_eok(val: Optional[float]) -> str:
+    """원화 금액을 억 단위(예: 0.62억, 1.25억) 문자열로 변환합니다."""
+    if val is None or pd.isna(val):
+        return "-"
+    eok = val / 100_000_000.0
+    if abs(eok) >= 10:
+        return f"{eok:,.1f}억"
+    else:
+        return f"{eok:,.2f}억"
+
+
+def _fmt_profit_eok(profit: Optional[float], rate: Optional[float]) -> str:
+    """수익금(억 단위) 및 수익률을 조합한 문자열을 반환합니다."""
+    if profit is None or pd.isna(profit):
+        return "-"
+    eok_str = _fmt_eok(profit)
+    if profit > 0 and not eok_str.startswith("+"):
+        eok_str = f"+{eok_str}"
+    rate_str = f"{rate * 100:+.1f}%" if (rate is not None and not pd.isna(rate)) else ""
+    return f"{eok_str} ({rate_str})" if rate_str else eok_str
+
+
+def _build_summary_eok_table(summary_df: pd.DataFrame) -> str:
+    """전체 계좌 요약 현황을 억 단위로 깔끔하게 렌더링하는 요약 뷰"""
     if summary_df.empty:
         return "<p class='fa-empty-text'>계좌 데이터가 없습니다.</p>"
 
@@ -608,10 +632,8 @@ def _build_account_assets_html_table(summary_df: pd.DataFrame) -> str:
         "    <th>계좌</th>",
         "    <th class='text-right'>투자금</th>",
         "    <th class='text-right'>평가금</th>",
-        "    <th class='text-right'>수익금</th>",
-        "    <th class='text-right'>수익률</th>",
+        "    <th class='text-right'>수익금 (수익률)</th>",
         "    <th class='text-right'>비중</th>",
-        "    <th class='text-right'>배당금</th>",
         "  </tr>",
         "</thead>",
         "<tbody>",
@@ -630,27 +652,21 @@ def _build_account_assets_html_table(summary_df: pd.DataFrame) -> str:
         profit = _as_float(row.get("수익금"))
         return_rate = _as_float(row.get("수익률"))
         weight = _as_float(row.get("비중"))
-        dividend = _as_float(row.get("배당금"))
 
         profit_cls = "fa-num-positive" if (profit or 0) > 0 else "fa-num-negative" if (profit or 0) < 0 else ""
         profit_badge = "fa-badge-positive" if (profit or 0) > 0 else "fa-badge-negative" if (profit or 0) < 0 else "fa-badge-neutral"
-        rate_cls = "fa-num-positive" if (return_rate or 0) > 0 else "fa-num-negative" if (return_rate or 0) < 0 else ""
 
-        invest_str = f"{invest:,.0f}원" if invest is not None else "-"
-        eval_str = f"{valuation:,.0f}원" if valuation is not None else "-"
-        profit_str = f"{profit:+,.0f}원" if profit is not None and profit != 0 else (f"{profit:,.0f}원" if profit is not None else "-")
-        rate_str = f"{return_rate * 100:+.2f}%" if return_rate is not None else "-"
+        invest_str = _fmt_eok(invest)
+        eval_str = _fmt_eok(valuation)
+        profit_str = _fmt_profit_eok(profit, return_rate)
         weight_str = f"{weight * 100:.1f}%" if weight is not None else "-"
-        div_str = f"{dividend:,.0f}원" if dividend is not None and dividend > 0 else "-"
 
         lines.append("  <tr>")
         lines.append(f"    <td data-label='계좌' class='fa-col-account'><strong>{html.escape(label)}</strong></td>")
         lines.append(f"    <td data-label='투자금' class='text-right fa-num'>{invest_str}</td>")
         lines.append(f"    <td data-label='평가금' class='text-right fa-num fa-font-bold'>{eval_str}</td>")
-        lines.append(f"    <td data-label='수익금' class='text-right fa-num {profit_cls}'>{profit_str}</td>")
-        lines.append(f"    <td data-label='수익률' class='text-right fa-num'><span class='fa-badge {profit_badge}'>{rate_str}</span></td>")
+        lines.append(f"    <td data-label='수익금(수익률)' class='text-right fa-num {profit_cls}'><span class='fa-badge {profit_badge}'>{profit_str}</span></td>")
         lines.append(f"    <td data-label='비중' class='text-right fa-num'>{weight_str}</td>")
-        lines.append(f"    <td data-label='배당금' class='text-right fa-num'>{div_str}</td>")
         lines.append("  </tr>")
 
     lines.append("</tbody>")
@@ -660,32 +676,87 @@ def _build_account_assets_html_table(summary_df: pd.DataFrame) -> str:
         valuation = _as_float(total_row.get("평가금"))
         profit = _as_float(total_row.get("수익금"))
         return_rate = _as_float(total_row.get("수익률"))
-        dividend = _as_float(total_row.get("배당금"))
 
         profit_cls = "fa-num-positive" if (profit or 0) > 0 else "fa-num-negative" if (profit or 0) < 0 else ""
         profit_badge = "fa-badge-positive" if (profit or 0) > 0 else "fa-badge-negative" if (profit or 0) < 0 else "fa-badge-neutral"
 
-        invest_str = f"{invest:,.0f}원" if invest is not None else "-"
-        eval_str = f"{valuation:,.0f}원" if valuation is not None else "-"
-        profit_str = f"{profit:+,.0f}원" if profit is not None and profit != 0 else (f"{profit:,.0f}원" if profit is not None else "-")
-        rate_str = f"{return_rate * 100:+.2f}%" if return_rate is not None else "-"
-        div_str = f"{dividend:,.0f}원" if dividend is not None and dividend > 0 else "-"
+        invest_str = _fmt_eok(invest)
+        eval_str = _fmt_eok(valuation)
+        profit_str = _fmt_profit_eok(profit, return_rate)
 
         lines.append("<tfoot>")
         lines.append("  <tr class='fa-tr-total'>")
         lines.append("    <td data-label='계좌'><strong>합계</strong></td>")
         lines.append(f"    <td data-label='투자금' class='text-right fa-num'>{invest_str}</td>")
         lines.append(f"    <td data-label='평가금' class='text-right fa-num fa-font-bold'>{eval_str}</td>")
-        lines.append(f"    <td data-label='수익금' class='text-right fa-num {profit_cls}'>{profit_str}</td>")
-        lines.append(f"    <td data-label='수익률' class='text-right fa-num'><span class='fa-badge {profit_badge}'>{rate_str}</span></td>")
+        lines.append(f"    <td data-label='수익금(수익률)' class='text-right fa-num {profit_cls}'><span class='fa-badge {profit_badge}'>{profit_str}</span></td>")
         lines.append("    <td data-label='비중' class='text-right fa-num'>100.0%</td>")
-        lines.append(f"    <td data-label='배당금' class='text-right fa-num'>{div_str}</td>")
         lines.append("  </tr>")
         lines.append("</tfoot>")
 
     lines.append("</table>")
     lines.append("</div>")
     return "\n".join(lines)
+
+
+def _build_total_account_pane(summary_df: pd.DataFrame, fig_renderer: Callable[[go.Figure], str]) -> str:
+    """전체 합산 카드 1개 (총 평가금/투자금/수익금 미니 KPI + 계좌별 비중 도넛 차트)"""
+    total_row = summary_df[summary_df["계좌"] == "합계"]
+    total_data = total_row.iloc[0] if not total_row.empty else {}
+
+    invest_val = _as_float(total_data.get("투자금"))
+    eval_val = _as_float(total_data.get("평가금"))
+    dividend_val = _as_float(total_data.get("배당금"))
+    profit_val = _as_float(total_data.get("수익금"))
+    rate_val = _as_float(total_data.get("수익률"))
+
+    inv_p_cls = "fa-num-positive" if (profit_val or 0) > 0 else "fa-num-negative" if (profit_val or 0) < 0 else ""
+    inv_p_bdg = "fa-badge-positive" if (profit_val or 0) > 0 else "fa-badge-negative" if (profit_val or 0) < 0 else "fa-badge-neutral"
+    rate_str = f"{rate_val * 100:+.2f}%" if rate_val is not None else "-"
+
+    mini_kpis = [
+        f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>총 평가금</div><div class='fa-mini-kpi-val fa-font-bold'>{eval_val:,.0f}원 ({_fmt_eok(eval_val)})</div></div>" if eval_val is not None else "",
+        f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>총 누적 배당금</div><div class='fa-mini-kpi-val' style='color: var(--fa-purple);'>{dividend_val:,.0f}원 ({_fmt_eok(dividend_val)})</div></div>" if dividend_val is not None and dividend_val > 0 else "",
+        f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>총 투자금 (원금)</div><div class='fa-mini-kpi-val'>{invest_val:,.0f}원 ({_fmt_eok(invest_val)})</div></div>" if invest_val is not None else "",
+        f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>전체 누적 수익</div><div class='fa-mini-kpi-val {inv_p_cls}'>{profit_val:+,.0f}원 <span class='fa-badge {inv_p_bdg}'>{rate_str}</span></div></div>" if profit_val is not None else "",
+    ]
+    mini_kpi_html = f"<div class='fa-mini-kpi-grid' style='grid-template-columns: repeat(4, minmax(0, 1fr));'>{''.join(mini_kpis)}</div>"
+
+    acct_df = summary_df[(summary_df["계좌"] != "합계") & (summary_df["평가금"] > 0)].copy()
+    acct_df["계좌명"] = acct_df["계좌"].apply(update_fa.account_label)
+    pie_fig = go.Figure(
+        data=[
+            go.Pie(
+                labels=acct_df["계좌명"],
+                values=acct_df["평가금"],
+                textinfo="percent",
+                textposition="inside",
+                insidetextfont=dict(size=14, color="#ffffff", family=FONT_FAMILY),
+                hole=0.46,
+                showlegend=True,
+                marker=dict(colors=[_palette_color(i) for i in range(len(acct_df))]),
+                hovertemplate="<b>%{label}</b><br>평가금: %{value:,.0f}원<br>비중: %{percent}<extra></extra>",
+            )
+        ]
+    )
+    pie_fig.update_layout(
+        height=320,
+        margin=dict(l=10, r=10, t=10, b=45),
+        paper_bgcolor=THEME_BG,
+        plot_bgcolor=THEME_BG,
+        font=dict(family=FONT_FAMILY, size=13),
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.08,
+            xanchor="center",
+            x=0.5,
+            font=dict(size=13, family=FONT_FAMILY),
+        ),
+    )
+    chart_html = fig_renderer(pie_fig)
+
+    return f"{mini_kpi_html}<div style='margin-top:16px;'>{chart_html}</div>"
 
 
 def _build_total_holdings_html_table(holdings_df: pd.DataFrame) -> str:
@@ -765,9 +836,16 @@ def _build_account_detail_section(
     data: update_fa.MonthlyData,
     fig_renderer: Callable[[go.Figure], str],
 ) -> str:
-    """계좌별 상세 현황(비중 차트 + 종목별 카드 + 리밸런싱 가이드)을 탭 UI로 통합 렌더링"""
-    tab_btns = []
-    tab_panes = []
+    """계좌별 자산 현황을 [요약(억단위)] / [전체] / [계좌별] 탭 UI로 통합 렌더링"""
+    # 1. 상단 탭 버튼 초기화 (맨 앞에 요약, 전체 탭 배치)
+    tab_btns = [
+        "<button type='button' class='fa-tab-btn active' data-target='fa-tab-content-summary'>요약</button>",
+        "<button type='button' class='fa-tab-btn' data-target='fa-tab-content-total'>전체</button>",
+    ]
+    tab_panes = [
+        f"<div id='fa-tab-content-summary' class='fa-tab-pane active'>{_build_summary_eok_table(data.summary_df)}</div>",
+        f"<div id='fa-tab-content-total' class='fa-tab-pane'>{_build_total_account_pane(data.summary_df, fig_renderer)}</div>",
+    ]
 
     # 계좌별/종목별 누적 배당금 사전 계산
     div_records = data.records[(data.records["배당"].notna()) & (pd.to_numeric(data.records["배당"], errors="coerce") > 0)].copy()
@@ -784,7 +862,7 @@ def _build_account_detail_section(
     for idx, account in enumerate(accounts):
         label = update_fa.account_label(account)
         tab_id = f"fa-tab-content-{account}"
-        active_cls = " active" if idx == 0 else ""
+        active_cls = ""
 
         # 상단 가로 탭 버튼
         tab_btns.append(
@@ -1072,12 +1150,12 @@ def _build_account_detail_section(
         tab_panes.append(pane_html)
 
     # 탭 네비게이션 + 컨텐츠 전체를 카드에 패키징
-    nav_html = f"<div class='fa-tab-nav-wrapper'><div class='fa-tab-nav' role='tablist'>{''.join(tab_btns)}</div></div>"
-    content_html = f"<div class='fa-tab-panes'>{''.join(tab_panes)}</div>"
+    nav_html = f"<div class='fa-tab-nav-wrapper' style='margin-bottom:8px;'><div class='fa-tab-nav' role='tablist'>{''.join(tab_btns)}</div></div>"
+    content_html = f"<div class='fa-tab-panes'>{ ''.join(tab_panes)}</div>"
 
     return (
         "<section class='fa-card fa-card-wide fa-card-tabs'>"
-        "<header class='fa-card-head'><h2>상세 계좌 현황 & 리밸런싱</h2></header>"
+        "<header class='fa-card-head'><h2 style='margin-bottom:12px;'>계좌별 자산 현황</h2></header>"
         f"<div class='fa-card-body'>{nav_html}{content_html}</div>"
         "</section>"
     )
@@ -1390,7 +1468,7 @@ def _build_dashboard_fragment(data: ReportData) -> str:
         _dashboard_card(update_fa.ACCOUNT_TITLES.get("title_assets_investment_trend", "누적 투자금 vs 평가금 추세"), fig_html(assets_investment_fig), extra_class="fa-card-wide"),
         _dashboard_card(update_fa.ACCOUNT_TITLES.get("title_assets_trend", "전체 금융자산 추이"), fig_html(assets_fig), extra_class="fa-card-wide"),
         portfolio_alloc_html,
-        _dashboard_card(update_fa.ACCOUNT_TITLES.get("title_account_assets", "계좌 요약"), account_summary_html, extra_class="fa-card-wide"),
+        account_detail_section_html,
         _dashboard_card(update_fa.ACCOUNT_TITLES.get("title_total_holdings", "전체 보유 종목"), holdings_html, extra_class="fa-card-wide"),
     ]
 
@@ -1410,9 +1488,6 @@ def _build_dashboard_fragment(data: ReportData) -> str:
                 extra_class="fa-card-wide",
             ),
         )
-
-    if account_detail_section_html:
-        blocks.append(account_detail_section_html)
 
     if trading_summary or trading_items:
         blocks.append(
