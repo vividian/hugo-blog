@@ -414,7 +414,7 @@ def read_trading_records() -> pd.DataFrame:
             df = pd.read_sql_query(query, conn)
             conn.close()
             if not df.empty:
-                df["일자"] = pd.to_datetime(df["일자"], errors="coerce")
+                df["일자"] = pd.to_datetime(df["일자"].astype(str).str.replace(".", "-", regex=False), format="mixed", errors="coerce")
                 numeric_cols = ["단가", "수량", "배당", "투자금", "평가금", "환율", "금액"]
                 for col in numeric_cols:
                     if col in df.columns:
@@ -1565,7 +1565,7 @@ def read_trading_records() -> pd.DataFrame:
             df = pd.read_sql_query(query, conn)
             conn.close()
             if not df.empty:
-                df["일자"] = pd.to_datetime(df["일자"], errors="coerce")
+                df["일자"] = pd.to_datetime(df["일자"].astype(str).str.replace(".", "-", regex=False), format="mixed", errors="coerce")
                 numeric_cols = ["단가", "수량", "배당", "투자금", "평가금", "환율", "금액"]
                 for col in numeric_cols:
                     if col in df.columns:
