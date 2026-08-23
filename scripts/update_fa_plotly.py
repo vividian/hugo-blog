@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.12"
+APP_VERSION = "v2.7.13"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -840,8 +840,8 @@ def _build_total_holdings_html_table(holdings_df: pd.DataFrame) -> str:
 
         lines.append("  <tr>")
         lines.append(f"    <td data-label='계좌'><span class='fa-chip-account'>{html.escape(acct_label)}</span></td>")
-        lines.append(f"    <td data-label='종목' class='fa-col-symbol'><span class='fa-chip-account fa-mobile-inline'>{html.escape(acct_label)}</span><strong>{html.escape(symbol)}</strong></td>")
-        lines.append(f"    <td data-label='수익률' class='text-right fa-num'><span class='fa-badge {profit_badge}'>{rate_str}</span></td>")
+        lines.append(f"    <td data-label='종목' class='fa-col-symbol'><div class='fa-stock-title-wrap'><span class='fa-chip-account fa-mobile-inline'>{html.escape(acct_label)}</span><strong>{html.escape(symbol)}</strong></div><span class='fa-badge {profit_badge} fa-mobile-inline fa-stock-rate-badge'>{rate_str}</span></td>")
+        lines.append(f"    <td data-label='수익률' class='text-right fa-num fa-hide-mobile'><span class='fa-badge {profit_badge}'>{rate_str}</span></td>")
         lines.append(f"    <td data-label='수량' class='text-right fa-num'>{qty_str}</td>")
         lines.append(f"    <td data-label='평단가' class='text-right fa-num'>{avg_str}</td>")
         lines.append(f"    <td data-label='현재가' class='text-right fa-num'>{cur_str}</td>")
@@ -1834,36 +1834,35 @@ html.dark .fa-dashboard,
     display: none !important;
   }
   .fa-table-holdings td[data-label='종목'] {
-    grid-column: 1 / 2;
+    grid-column: 1 / -1 !important;
     grid-row: 1 / 2;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    width: 100% !important;
+    padding: 0 !important;
+    border-bottom: 1px dashed var(--fa-border) !important;
+    padding-bottom: 8px !important;
+    margin-bottom: 2px !important;
+  }
+  .fa-table-holdings td[data-label='종목'] .fa-stock-title-wrap {
     display: flex;
     align-items: center;
     gap: 6px;
     font-size: 0.98rem;
     font-weight: 700;
-    padding: 0 !important;
-    border-bottom: 1px dashed var(--fa-border) !important;
-    padding-bottom: 8px !important;
-    margin-bottom: 2px !important;
+  }
+  .fa-table-holdings td[data-label='종목'] .fa-stock-rate-badge {
+    font-size: 0.88rem;
+    padding: 2px 8px;
+    font-weight: 600;
+    white-space: nowrap;
   }
   .fa-table-holdings td[data-label='종목']::before {
     display: none !important;
   }
 
   .fa-table-holdings td[data-label='수익률'] {
-    grid-column: 2 / 3;
-    grid-row: 1 / 2;
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    padding: 0 !important;
-    border-bottom: 1px dashed var(--fa-border) !important;
-    padding-bottom: 8px !important;
-    margin-bottom: 2px !important;
-    font-size: 0.92rem;
-    font-weight: 600;
-  }
-  .fa-table-holdings td[data-label='수익률']::before {
     display: none !important;
   }
 
