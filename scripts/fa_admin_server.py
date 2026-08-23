@@ -497,7 +497,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="fa-header">
       <div class="fa-header-title">
         <span>📈 FA 자산 거래내역 관리자</span>
-        <span class="fa-header-badge">v2.6.1</span>
+        <span class="fa-header-badge">v2.6.2</span>
         <span class="fa-header-badge" style="background:var(--fa-border); color:var(--fa-text-muted);">SQLite DB</span>
       </div>
       <div style="display:flex; gap:8px;">
@@ -572,7 +572,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           </div>
 
           <!-- 종목명 선택 -->
-          <div class="fa-field">
+          <div class="fa-field" id="wrap-symbol">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
               <label class="fa-label" style="margin-bottom:0;">종목명 선택</label>
               <button type="button" class="fa-btn-action" style="font-size:0.75rem; padding:2px 7px; color:var(--fa-accent); border-color:var(--fa-accent-bg);" onclick="openNewSymbolModal()">➕ 새 종목 등록</button>
@@ -792,6 +792,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       const isDep = (kind === '입금');
       const isEval = (kind === '평가금');
 
+      document.getElementById("wrap-symbol").style.display = (isDep || isEval) ? 'none' : 'flex';
       document.getElementById("wrap-unit-price").style.display = (isDep || isEval) ? 'none' : 'flex';
       document.getElementById("wrap-quantity").style.display = (isDep || isEval) ? 'none' : 'flex';
       document.getElementById("wrap-amount").style.display = (isDiv || isDep || isEval) ? 'none' : 'flex';
@@ -1037,13 +1038,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         account: document.getElementById("f-account").value,
         kind: kind,
         symbol: document.getElementById("f-symbol").value.trim(),
-        unit_price: parseFloat(document.getElementById("f-unit-price").value) || 0.0,
-        quantity: parseFloat(document.getElementById("f-quantity").value) || 0.0,
-        amount: parseFloat(document.getElementById("f-amount").value) || 0.0,
-        dividend: parseFloat(document.getElementById("f-dividend").value) || 0.0,
-        deposit: parseFloat(document.getElementById("f-deposit").value) || 0.0,
-        evaluation: parseFloat(document.getElementById("f-evaluation").value) || 0.0,
-        exchange_rate: parseFloat(document.getElementById("f-exchange").value) || 1.0,
+        unit_price: parseFloat(String(document.getElementById("f-unit-price").value || "0").replace(/,/g, "")) || 0.0,
+        quantity: parseFloat(String(document.getElementById("f-quantity").value || "0").replace(/,/g, "")) || 0.0,
+        amount: parseFloat(String(document.getElementById("f-amount").value || "0").replace(/,/g, "")) || 0.0,
+        dividend: parseFloat(String(document.getElementById("f-dividend").value || "0").replace(/,/g, "")) || 0.0,
+        deposit: parseFloat(String(document.getElementById("f-deposit").value || "0").replace(/,/g, "")) || 0.0,
+        evaluation: parseFloat(String(document.getElementById("f-evaluation").value || "0").replace(/,/g, "")) || 0.0,
+        exchange_rate: parseFloat(String(document.getElementById("f-exchange").value || "1.0").replace(/,/g, "")) || 1.0,
         memo: document.getElementById("f-memo").value.trim()
       };
 
@@ -1245,35 +1246,6 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
                 """)
             rows = [dict(r) for r in cur.fetchall()]
             conn.close()
-
-            # fa.yaml에 등록된 종목들도 합치기 (중복 제거)
-            existing_symbols = {r["symbol"] for r in rows}
-            if FA_YAML_PATH.exists():
-                try:
-                    with open(FA_YAML_PATH, "r", encoding="utf-8") as f:
-                        cfg = yaml.safe_load(f) or {}
-                    account_name_map = {
-                        "usa": "미국", "kor1": "국내1", "kor2": "국내2",
-                        "sema": "공제회", "irp": "IRP", "psf1": "연금저축1",
-                        "isa1": "ISA1", "psf2": "연금저축2", "isa2": "ISA2"
-                    }
-                    target_kw = account_name_map.get(acct, acct) if acct else ""
-                    for acct_entry in cfg.get("accounts", []):
-                        if not target_kw or target_kw in acct_entry.get("name", ""):
-                            for item in acct_entry.get("items", []):
-                                if len(item) >= 2:
-                                    sym_name = item[1] or item[0]
-                                    if sym_name not in existing_symbols:
-                                        rows.append({
-                                            "symbol": sym_name,
-                                            "latest_price": None,
-                                            "latest_date": "-",
-                                            "net_qty": 0.0
-                                        })
-                                        existing_symbols.add(sym_name)
-                except Exception:
-                    pass
-
             self._send_json(rows)
             return
 
