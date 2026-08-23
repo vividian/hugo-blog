@@ -855,7 +855,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="fa-header">
       <div class="fa-header-title">
         <span>📈 FA 자산 거래내역 관리자</span>
-        <span class="fa-header-badge">v2.7.28</span>
+        <span class="fa-header-badge">v2.7.29</span>
         <span class="fa-header-badge" style="background:var(--fa-border); color:var(--fa-text-muted);">SQLite DB</span>
       </div>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
@@ -2253,7 +2253,7 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length).decode("utf-8")
             data = json.loads(body)
-            clean_date = str(data.get("date") or "").replace("-", ".").strip()
+            clean_date = normalize_date_str(data.get("date") or "")
 
             conn = get_db_connection()
             cur = conn.cursor()
@@ -2288,7 +2288,7 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length).decode("utf-8")
             data = json.loads(body)
-            clean_date = str(data.get("date") or "").replace("-", ".").strip()
+            clean_date = normalize_date_str(data.get("date") or "")
 
             conn = get_db_connection()
             cur = conn.cursor()
@@ -2334,8 +2334,25 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
         self.send_error(HTTPStatus.NOT_FOUND)
 
 
+def normalize_date_str(d_str: str) -> str:
+    """'2026.4.9', '2026-4-9', '2026.04.09' 등을 '2026.04.09' 형태(4자리 연도, 2자리 월/일)로 정규화합니다."""
+    if not d_str:
+        return ""
+    clean = str(d_str).strip().replace("-", ".").replace("/", ".")
+    parts = clean.split(".")
+    if len(parts) == 3:
+        try:
+            y = int(parts[0])
+            m = int(parts[1])
+            d = int(parts[2])
+            return f"{y:04d}.{m:02d}.{d:02d}"
+        except ValueError:
+            pass
+    return clean
+
+
 def ensure_db_normalized():
-    """DB 시작 시 구분이 비어있는 과거 데이터를 배당/입금/출금/매도/매수로 자동 보정하고 날짜를 정규화합니다."""
+    """DB 시작 시 구분이 비어있는 과거 데이터를 자동 보정하고, 모든 날짜를 YYYY.MM.DD 형식으로 정밀 정규화합니다."""
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -2345,9 +2362,24 @@ def ensure_db_normalized():
         cur.execute("UPDATE trading_records SET kind = '평가금' WHERE (kind IS NULL OR kind = '') AND evaluation > 0;")
         cur.execute("UPDATE trading_records SET kind = '매도' WHERE (kind IS NULL OR kind = '') AND quantity < 0;")
         cur.execute("UPDATE trading_records SET kind = '매수' WHERE (kind IS NULL OR kind = '') AND (quantity > 0 OR unit_price > 0);")
-        cur.execute("UPDATE trading_records SET date = REPLACE(date, '-', '.') WHERE date LIKE '%-%';")
+
+        # 모든 거래 날짜를 YYYY.MM.DD 형식으로 일괄 정규화 마이그레이션
+        cur.execute("SELECT id, date FROM trading_records;")
+        records = cur.fetchall()
+        updated_count = 0
+        for rec in records:
+            orig_date = str(rec["date"] or "")
+            norm_date = normalize_date_str(orig_date)
+            if orig_date != norm_date and norm_date:
+                cur.execute("UPDATE trading_records SET date = ? WHERE id = ?;", (norm_date, rec["id"]))
+                updated_count += 1
+
         conn.commit()
         conn.close()
+
+        if updated_count > 0:
+            print(f"✅ [DB] 날짜 형식 정규화 완료: {updated_count}건을 'YYYY.MM.DD' 형식으로 일괄 변환했습니다.")
+            export_db_to_csv()
     except Exception as e:
         print(f"(경고) DB 데이터 정규화 실패: {e}")
 
