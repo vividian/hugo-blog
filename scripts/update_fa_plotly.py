@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.2"
+APP_VERSION = "v2.7.3"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -620,19 +620,20 @@ def _fmt_profit_eok(profit: Optional[float], rate: Optional[float]) -> str:
 
 
 def _build_summary_eok_table(summary_df: pd.DataFrame) -> str:
-    """전체 계좌 요약 현황을 억 단위로 깔끔하게 렌더링하는 요약 뷰"""
+    """전체 계좌 요약 현황을 1개의 카드 안에서 계좌명 | 투자금 | 평가금 | 수익금 | 비중 순으로 깔끔하게 렌더링"""
     if summary_df.empty:
         return "<p class='fa-empty-text'>계좌 데이터가 없습니다.</p>"
 
     lines = [
+        "<div class='fa-single-card-box'>",
         "<div class='fa-table-wrapper'>",
-        "<table class='fa-table fa-table-responsive fa-table-account-summary'>",
+        "<table class='fa-table fa-table-eok-summary'>",
         "<thead>",
         "  <tr>",
-        "    <th>계좌</th>",
+        "    <th>계좌명</th>",
         "    <th class='text-right'>투자금</th>",
         "    <th class='text-right'>평가금</th>",
-        "    <th class='text-right'>수익금 (수익률)</th>",
+        "    <th class='text-right'>수익금</th>",
         "    <th class='text-right'>비중</th>",
         "  </tr>",
         "</thead>",
@@ -662,11 +663,11 @@ def _build_summary_eok_table(summary_df: pd.DataFrame) -> str:
         weight_str = f"{weight * 100:.1f}%" if weight is not None else "-"
 
         lines.append("  <tr>")
-        lines.append(f"    <td data-label='계좌' class='fa-col-account'><strong>{html.escape(label)}</strong></td>")
-        lines.append(f"    <td data-label='투자금' class='text-right fa-num'>{invest_str}</td>")
-        lines.append(f"    <td data-label='평가금' class='text-right fa-num fa-font-bold'>{eval_str}</td>")
-        lines.append(f"    <td data-label='수익금(수익률)' class='text-right fa-num {profit_cls}'><span class='fa-badge {profit_badge}'>{profit_str}</span></td>")
-        lines.append(f"    <td data-label='비중' class='text-right fa-num'>{weight_str}</td>")
+        lines.append(f"    <td class='fa-col-account'><strong>{html.escape(label)}</strong></td>")
+        lines.append(f"    <td class='text-right fa-num'>{invest_str}</td>")
+        lines.append(f"    <td class='text-right fa-num fa-font-bold'>{eval_str}</td>")
+        lines.append(f"    <td class='text-right fa-num {profit_cls}'><span class='fa-badge {profit_badge}'>{profit_str}</span></td>")
+        lines.append(f"    <td class='text-right fa-num'>{weight_str}</td>")
         lines.append("  </tr>")
 
     lines.append("</tbody>")
@@ -686,23 +687,26 @@ def _build_summary_eok_table(summary_df: pd.DataFrame) -> str:
 
         lines.append("<tfoot>")
         lines.append("  <tr class='fa-tr-total'>")
-        lines.append("    <td data-label='계좌'><strong>합계</strong></td>")
-        lines.append(f"    <td data-label='투자금' class='text-right fa-num'>{invest_str}</td>")
-        lines.append(f"    <td data-label='평가금' class='text-right fa-num fa-font-bold'>{eval_str}</td>")
-        lines.append(f"    <td data-label='수익금(수익률)' class='text-right fa-num {profit_cls}'><span class='fa-badge {profit_badge}'>{profit_str}</span></td>")
-        lines.append("    <td data-label='비중' class='text-right fa-num'>100.0%</td>")
+        lines.append("    <td><strong>합계</strong></td>")
+        lines.append(f"    <td class='text-right fa-num'>{invest_str}</td>")
+        lines.append(f"    <td class='text-right fa-num fa-font-bold'>{eval_str}</td>")
+        lines.append(f"    <td class='text-right fa-num {profit_cls}'><span class='fa-badge {profit_badge}'>{profit_str}</span></td>")
+        lines.append("    <td class='text-right fa-num'>100.0%</td>")
         lines.append("  </tr>")
         lines.append("</tfoot>")
 
     lines.append("</table>")
     lines.append("</div>")
+    lines.append("</div>")
     return "\n".join(lines)
 
 
 def _build_single_account_card(row: pd.Series) -> str:
-    """개별 계좌 1개의 지표 카드 뷰"""
+    """개별 계좌 1개의 지표를 1개의 통합 카드로 깔끔하게 렌더링 (투자금 -> 평가금 -> 수익금 -> 비중)"""
+    if row is None:
+        return ""
     acct_name = str(row["계좌"])
-    label = update_fa.account_label(acct_name) if acct_name != "합계" else "전체 계좌 합계"
+    label = update_fa.account_label(acct_name) if acct_name != "합계" else "전체 계좌 합산"
     invest = _as_float(row.get("투자금"))
     valuation = _as_float(row.get("평가금"))
     profit = _as_float(row.get("수익금"))
@@ -712,16 +716,31 @@ def _build_single_account_card(row: pd.Series) -> str:
 
     profit_cls = "fa-num-positive" if (profit or 0) > 0 else "fa-num-negative" if (profit or 0) < 0 else ""
     profit_badge = "fa-badge-positive" if (profit or 0) > 0 else "fa-badge-negative" if (profit or 0) < 0 else "fa-badge-neutral"
-    rate_str = f"{return_rate * 100:+.2f}%" if return_rate is not None else "-"
 
-    mini_kpis = [
-        f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>평가금</div><div class='fa-mini-kpi-val fa-font-bold'>{valuation:,.0f}원 <span style='font-size:0.8rem; font-weight:normal; color:var(--fa-text-muted);'>({_fmt_eok(valuation)})</span></div></div>" if valuation is not None else "",
-        f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>투자금 (원금)</div><div class='fa-mini-kpi-val'>{invest:,.0f}원 <span style='font-size:0.8rem; font-weight:normal; color:var(--fa-text-muted);'>({_fmt_eok(invest)})</span></div></div>" if invest is not None else "",
-        f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>누적 수익</div><div class='fa-mini-kpi-val {profit_cls}'>{profit:+,.0f}원 <span class='fa-badge {profit_badge}'>{rate_str}</span></div></div>" if profit is not None else "",
-        f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>포트폴리오 비중</div><div class='fa-mini-kpi-val'>{weight * 100:.1f}%</div></div>" if weight is not None else "",
-        f"<div class='fa-mini-kpi'><div class='fa-mini-kpi-lbl'>누적 배당금</div><div class='fa-mini-kpi-val' style='color: var(--fa-purple);'>{dividend:,.0f}원</div></div>" if dividend is not None and dividend > 0 else "",
-    ]
-    return f"<div class='fa-mini-kpi-grid' style='grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));'>{''.join(mini_kpis)}</div>"
+    invest_str = f"{_fmt_eok(invest)} ({invest:,.0f}원)" if invest is not None else "-"
+    eval_str = f"{_fmt_eok(valuation)} ({valuation:,.0f}원)" if valuation is not None else "-"
+    profit_str = f"{profit:+,.0f}원" if profit is not None and profit != 0 else (f"{profit:,.0f}원" if profit is not None else "-")
+    profit_eok_str = f"{_fmt_profit_eok(profit, return_rate)} ({profit_str})"
+    weight_str = f"{weight * 100:.1f}%" if weight is not None else "-"
+    div_str = f"{dividend:,.0f}원" if dividend is not None and dividend > 0 else None
+
+    div_html = f"<div class='fa-stat-line'><span class='fa-stat-lbl'>누적 배당금</span><span class='fa-stat-val' style='color:var(--fa-purple);'>{div_str}</span></div>" if div_str else ""
+
+    return f"""
+    <div class="fa-single-card-box">
+      <div class="fa-single-card-header">
+        <span class="fa-single-card-title">{html.escape(label)}</span>
+        <span class="fa-chip-weight">비중 {weight_str}</span>
+      </div>
+      <div class="fa-stat-line-group">
+        <div class="fa-stat-line"><span class="fa-stat-lbl">투자금</span><span class="fa-stat-val">{invest_str}</span></div>
+        <div class="fa-stat-line"><span class="fa-stat-lbl">평가금</span><span class="fa-stat-val fa-font-bold">{eval_str}</span></div>
+        <div class="fa-stat-line"><span class="fa-stat-lbl">수익금</span><span class="fa-stat-val {profit_cls}"><span class="fa-badge {profit_badge}">{profit_eok_str}</span></span></div>
+        <div class="fa-stat-line"><span class="fa-stat-lbl">비중</span><span class="fa-stat-val">{weight_str}</span></div>
+        {div_html}
+      </div>
+    </div>
+    """
 
 
 def _build_account_assets_html_table(summary_df: pd.DataFrame) -> str:
@@ -1788,6 +1807,71 @@ html.dark .fa-dashboard,
     margin-bottom: 4px;
     border-bottom: 1px solid var(--fa-border);
   }
+}
+
+/* Single Card Box (계좌별 1개 통합 카드 및 요약 카드 박스) */
+.fa-single-card-box {
+  background: var(--fa-kpi-bg);
+  border: 1px solid var(--fa-card-border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+.fa-single-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--fa-border);
+}
+.fa-single-card-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--fa-text-main);
+}
+.fa-stat-line-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.fa-stat-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.92rem;
+}
+.fa-stat-lbl {
+  color: var(--fa-text-muted);
+  font-weight: 500;
+}
+.fa-stat-val {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--fa-text-main);
+}
+
+.fa-table-eok-summary {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.fa-table-eok-summary th {
+  background: var(--fa-table-header-bg);
+  color: var(--fa-text-muted);
+  font-weight: 600;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--fa-border);
+  white-space: nowrap;
+}
+.fa-table-eok-summary td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--fa-border);
+  white-space: nowrap;
+}
+.fa-table-eok-summary tfoot tr {
+  background: var(--fa-kpi-bg);
+  font-weight: 700;
 }
 
 /* =========================================================
