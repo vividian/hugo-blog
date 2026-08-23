@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.6.5"
+APP_VERSION = "v2.7.0"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -375,7 +375,46 @@ def _build_assets_investment_trend(account_df: pd.DataFrame, invest_series: pd.S
     return fig
 
 
-def _build_portfolio_allocation_charts(holdings_df: pd.DataFrame, symbol_map: Dict[str, update_fa.AssetConfig]) -> go.Figure:
+def _build_single_allocation_pie(df_in: pd.DataFrame, label_col: str, title_text: str) -> go.Figure:
+    fig = go.Figure(
+        data=[
+            go.Pie(
+                labels=df_in[label_col],
+                values=df_in["평가금"],
+                textinfo="percent",
+                textposition="inside",
+                insidetextfont=dict(size=14, color="#ffffff", family=FONT_FAMILY),
+                insidetextorientation="horizontal",
+                hole=0.46,
+                showlegend=True,
+                marker=dict(colors=[_palette_color(i) for i in range(len(df_in))]),
+                hovertemplate="<b>%{label}</b><br>평가금: %{value:,.0f}원<br>비중: %{percent}<extra></extra>",
+            )
+        ]
+    )
+    fig.update_layout(
+        height=340,
+        margin=dict(l=10, r=10, t=10, b=45),
+        paper_bgcolor=THEME_BG,
+        plot_bgcolor=THEME_BG,
+        font=dict(family=FONT_FAMILY, size=13),
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.08,
+            xanchor="center",
+            x=0.5,
+            font=dict(size=13, family=FONT_FAMILY),
+        ),
+    )
+    return fig
+
+
+def _build_portfolio_allocation_section(
+    holdings_df: pd.DataFrame,
+    symbol_map: Dict[str, update_fa.AssetConfig],
+    fig_renderer: Callable[[go.Figure], str],
+) -> str:
     df = holdings_df.copy()
     regions = []
     asset_classes = []
@@ -439,78 +478,28 @@ def _build_portfolio_allocation_charts(holdings_df: pd.DataFrame, symbol_map: Di
     region_df = group_minor_df(region_df, "region")
     class_df = group_minor_df(class_df, "asset_class")
 
-    fig = make_subplots(
-        rows=1,
-        cols=3,
-        specs=[[{"type": "domain"}, {"type": "domain"}, {"type": "domain"}]],
-        subplot_titles=["<b>자산군 비중</b>", "<b>지역 비중</b>", "<b>대표 자산 비중</b>"],
-    )
+    fig_group = _build_single_allocation_pie(group_df, "asset_group", "자산군 비중")
+    fig_region = _build_single_allocation_pie(region_df, "region", "지역 비중")
+    fig_class = _build_single_allocation_pie(class_df, "asset_class", "대표 자산 비중")
 
-    fig.add_trace(
-        go.Pie(
-            labels=group_df["asset_group"],
-            values=group_df["평가금"],
-            textinfo="percent+label",
-            textposition="inside",
-            insidetextorientation="horizontal",
-            hole=0.5,
-            name="자산군",
-            showlegend=False,
-            marker=dict(colors=CHART_COLORWAY),
-            hovertemplate="<b>%{label}</b><br>평가금: %{value:,.0f}원<br>비중: %{percent}<extra></extra>",
-        ),
-        row=1,
-        col=1,
-    )
-
-    fig.add_trace(
-        go.Pie(
-            labels=region_df["region"],
-            values=region_df["평가금"],
-            textinfo="percent+label",
-            textposition="inside",
-            insidetextorientation="horizontal",
-            hole=0.5,
-            name="지역",
-            showlegend=False,
-            marker=dict(colors=CHART_COLORWAY),
-            hovertemplate="<b>%{label}</b><br>평가금: %{value:,.0f}원<br>비중: %{percent}<extra></extra>",
-        ),
-        row=1,
-        col=2,
-    )
-
-    fig.add_trace(
-        go.Pie(
-            labels=class_df["asset_class"],
-            values=class_df["평가금"],
-            textinfo="percent+label",
-            textposition="inside",
-            insidetextorientation="horizontal",
-            hole=0.5,
-            name="대표 자산",
-            showlegend=False,
-            marker=dict(colors=CHART_COLORWAY),
-            hovertemplate="<b>%{label}</b><br>평가금: %{value:,.0f}원<br>비중: %{percent}<extra></extra>",
-        ),
-        row=1,
-        col=3,
-    )
-
-    fig.update_layout(
-        height=380,
-        margin=dict(l=10, r=10, t=45, b=10),
-        font=dict(family=FONT_FAMILY, size=14),
-        paper_bgcolor=THEME_BG,
-        plot_bgcolor=THEME_BG,
-        uniformtext_mode="hide",
-        uniformtext_minsize=12,
-    )
-
-    for annotation in fig["layout"]["annotations"]:
-        annotation["font"] = dict(size=14.5, color=THEME_TEXT, family=FONT_FAMILY)
-
-    return fig
+    html_parts = [
+        '<div class="fa-card fa-card-tabs fa-card-wide">',
+        '  <div class="fa-card-head">',
+        '    <h2>전체 포트폴리오 비중</h2>',
+        '    <div class="fa-tabs-nav">',
+        '      <button type="button" class="fa-tab-btn active" data-target="alloc-tab-group">자산군 비중</button>',
+        '      <button type="button" class="fa-tab-btn" data-target="alloc-tab-region">지역 비중</button>',
+        '      <button type="button" class="fa-tab-btn" data-target="alloc-tab-class">대표 자산 비중</button>',
+        '    </div>',
+        '  </div>',
+        '  <div class="fa-card-body">',
+        f'    <div id="alloc-tab-group" class="fa-tab-pane active">{fig_renderer(fig_group)}</div>',
+        f'    <div id="alloc-tab-region" class="fa-tab-pane">{fig_renderer(fig_region)}</div>',
+        f'    <div id="alloc-tab-class" class="fa-tab-pane">{fig_renderer(fig_class)}</div>',
+        '  </div>',
+        '</div>',
+    ]
+    return "\n".join(html_parts)
 
 
 def _build_dividends_chart(pivot: pd.DataFrame) -> go.Figure:
@@ -1366,7 +1355,7 @@ def _build_dashboard_fragment(data: ReportData) -> str:
 
     assets_investment_fig = _build_assets_investment_trend(data.account_df, data.invest_series)
     assets_fig = _build_assets_trend(data.account_df)
-    portfolio_alloc_fig = _build_portfolio_allocation_charts(data.holdings_df, data.symbol_map)
+    portfolio_alloc_html = _build_portfolio_allocation_section(data.holdings_df, data.symbol_map, fig_html)
     account_summary_html = _build_account_assets_html_table(data.summary_df)
     holdings_html = _build_total_holdings_html_table(data.holdings_df)
 
@@ -1400,7 +1389,7 @@ def _build_dashboard_fragment(data: ReportData) -> str:
         _build_market_kpi_row(),
         _dashboard_card(update_fa.ACCOUNT_TITLES.get("title_assets_investment_trend", "누적 투자금 vs 평가금 추세"), fig_html(assets_investment_fig), extra_class="fa-card-wide"),
         _dashboard_card(update_fa.ACCOUNT_TITLES.get("title_assets_trend", "전체 금융자산 추이"), fig_html(assets_fig), extra_class="fa-card-wide"),
-        _dashboard_card("전체 포트폴리오 비중", fig_html(portfolio_alloc_fig), extra_class="fa-card-wide"),
+        portfolio_alloc_html,
         _dashboard_card(update_fa.ACCOUNT_TITLES.get("title_account_assets", "계좌 요약"), account_summary_html, extra_class="fa-card-wide"),
         _dashboard_card(update_fa.ACCOUNT_TITLES.get("title_total_holdings", "전체 보유 종목"), holdings_html, extra_class="fa-card-wide"),
     ]
