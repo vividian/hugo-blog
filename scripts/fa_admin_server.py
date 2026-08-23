@@ -38,6 +38,159 @@ ACCOUNT_CHOICES = [
 ]
 
 
+ACCOUNT_CODE_TO_KEYWORD = {
+    "usa": "미국", "kor1": "국내1", "kor2": "국내2",
+    "sema": "공제회", "irp": "IRP", "psf1": "연금저축1",
+    "isa1": "ISA1", "psf2": "연금저축2", "isa2": "ISA2"
+}
+
+
+def get_all_symbols_from_fa_yaml() -> List[Dict[str, str]]:
+    """config/fa.yaml에 정의된 모든 계좌별 종목 목록을 반환합니다."""
+    symbols = []
+    if not FA_YAML_PATH.exists():
+        return symbols
+
+    try:
+        with open(FA_YAML_PATH, "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+
+        for acct_entry in cfg.get("accounts", []):
+            acct_title = acct_entry.get("name", "")
+            # 매칭되는 계좌 코드 찾기
+            matched_code = "기타"
+            for code, kw in ACCOUNT_CODE_TO_KEYWORD.items():
+                if kw in acct_title:
+                    matched_code = code
+                    break
+
+            for it in acct_entry.get("items", []):
+                if len(it) < 2:
+                    continue
+                name = it[0]
+                abbrev = it[1]
+                ticker = it[2] if len(it) > 2 else abbrev
+                region = it[3] if len(it) > 3 else "기타"
+                asset_class = it[4] if len(it) > 4 else "기타"
+
+                symbols.append({
+                    "account": matched_code,
+                    "account_name": acct_title,
+                    "name": name,
+                    "abbrev": abbrev,
+                    "ticker": ticker,
+                    "region": region,
+                    "asset_class": asset_class,
+                })
+    except Exception as e:
+        print(f"⚠️ [fa.yaml] 종목 목록 로드 실패: {e}")
+    return symbols
+
+
+def update_symbol_in_fa_yaml(
+    account_code: str,
+    old_name: str,
+    old_abbrev: str,
+    new_name: str,
+    new_abbrev: str,
+    new_ticker: str,
+    new_region: str,
+    new_asset_class: str,
+    sync_records: bool = True
+) -> bool:
+    """config/fa.yaml 내의 특정 종목 메타데이터(단축명 등)를 수정하고 필요한 경우 거래내역 DB도 동기화합니다."""
+    try:
+        if not FA_YAML_PATH.exists():
+            return False
+        with open(FA_YAML_PATH, "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+
+        target_kw = ACCOUNT_CODE_TO_KEYWORD.get(account_code, account_code)
+        updated = False
+
+        for acct_entry in cfg.get("accounts", []):
+            acct_title = acct_entry.get("name", "")
+            if target_kw in acct_title or account_code == "all":
+                items = acct_entry.get("items", [])
+                for idx, it in enumerate(items):
+                    if len(it) >= 2 and (it[0] == old_name or it[1] == old_abbrev):
+                        items[idx] = [
+                            new_name,
+                            new_abbrev,
+                            new_ticker or new_abbrev,
+                            new_region or "기타",
+                            new_asset_class or "기타"
+                        ]
+                        updated = True
+                        break
+                if updated:
+                    break
+
+        if updated:
+            with open(FA_YAML_PATH, "w", encoding="utf-8") as f:
+                yaml.dump(cfg, f, allow_unicode=True, sort_keys=False)
+            print(f"✅ [fa.yaml] 종목 수정 완료: [{account_code}] {old_abbrev} ➡️ {new_abbrev}")
+
+            # 거래내역 DB 동기화
+            if sync_records and (old_abbrev != new_abbrev or old_name != new_abbrev):
+                try:
+                    conn = get_db_connection()
+                    cur = conn.cursor()
+                    cur.execute("""
+                        UPDATE trading_records
+                        SET symbol = ?
+                        WHERE account = ? AND (symbol = ? OR symbol = ?);
+                    """, (new_abbrev, account_code, old_abbrev, old_name))
+                    affected = cur.rowcount
+                    conn.commit()
+                    conn.close()
+                    if affected > 0:
+                        print(f"✅ [DB] 거래내역 {affected}건 종목명 동기화 완료: '{old_abbrev}' ➡️ '{new_abbrev}'")
+                        export_db_to_csv()
+                except Exception as db_err:
+                    print(f"⚠️ [DB] 거래내역 동기화 실패: {db_err}")
+
+            run_dashboard_update()
+            return True
+        return False
+    except Exception as e:
+        print(f"⚠️ [fa.yaml] 종목 수정 실패: {e}")
+        return False
+
+
+def delete_symbol_from_fa_yaml(account_code: str, name: str, abbrev: str) -> bool:
+    """config/fa.yaml에서 특정 종목을 삭제합니다."""
+    try:
+        if not FA_YAML_PATH.exists():
+            return False
+        with open(FA_YAML_PATH, "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+
+        target_kw = ACCOUNT_CODE_TO_KEYWORD.get(account_code, account_code)
+        deleted = False
+
+        for acct_entry in cfg.get("accounts", []):
+            acct_title = acct_entry.get("name", "")
+            if target_kw in acct_title:
+                items = acct_entry.get("items", [])
+                new_items = [it for it in items if not (len(it) >= 2 and (it[0] == name or it[1] == abbrev))]
+                if len(new_items) != len(items):
+                    acct_entry["items"] = new_items
+                    deleted = True
+                    break
+
+        if deleted:
+            with open(FA_YAML_PATH, "w", encoding="utf-8") as f:
+                yaml.dump(cfg, f, allow_unicode=True, sort_keys=False)
+            print(f"✅ [fa.yaml] 종목 삭제 완료: [{account_code}] {name} ({abbrev})")
+            run_dashboard_update()
+            return True
+        return False
+    except Exception as e:
+        print(f"⚠️ [fa.yaml] 종목 삭제 실패: {e}")
+        return False
+
+
 def add_symbol_to_fa_yaml(account_code: str, full_name: str, abbrev: str, ticker: str, region: str, asset_class: str) -> bool:
     """config/fa.yaml 파일의 해당 계좌 항목에 신규 종목 메타데이터를 추가합니다."""
     try:
@@ -46,12 +199,7 @@ def add_symbol_to_fa_yaml(account_code: str, full_name: str, abbrev: str, ticker
         with open(FA_YAML_PATH, "r", encoding="utf-8") as f:
             cfg = yaml.safe_load(f) or {}
 
-        account_name_map = {
-            "usa": "미국", "kor1": "국내1", "kor2": "국내2",
-            "sema": "공제회", "irp": "IRP", "psf1": "연금저축1",
-            "isa1": "ISA1", "psf2": "연금저축2", "isa2": "ISA2"
-        }
-        target_keyword = account_name_map.get(account_code, account_code)
+        target_keyword = ACCOUNT_CODE_TO_KEYWORD.get(account_code, account_code)
 
         for acct_entry in cfg.get("accounts", []):
             acct_name = acct_entry.get("name", "")
@@ -498,10 +646,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="fa-header">
       <div class="fa-header-title">
         <span>📈 FA 자산 거래내역 관리자</span>
-        <span class="fa-header-badge">v2.7.23</span>
+        <span class="fa-header-badge">v2.7.24</span>
         <span class="fa-header-badge" style="background:var(--fa-border); color:var(--fa-text-muted);">SQLite DB</span>
       </div>
-      <div style="display:flex; gap:8px;">
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="fa-btn-refresh" style="background:#0284c7; border-color:#0284c7; color:#fff;" onclick="openManageSymbolsModal()">
+          <span>🏷️ 종목 및 단축명 관리</span>
+        </button>
         <button class="fa-btn-refresh" onclick="triggerDashboardBuild()">
           <span>📊 대시보드 갱신</span>
         </button>
@@ -754,6 +905,128 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <div class="fa-modal-footer">
           <button type="button" class="fa-btn-action" onclick="closeNewSymbolModal()">취소</button>
           <button type="submit" class="fa-btn-primary" style="padding:7px 18px;">설정 저장하기</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 종목 메타데이터 & 단축명 관리 모달 -->
+  <div id="modal-manage-symbols" class="fa-modal-overlay">
+    <div class="fa-modal" style="max-width:900px; width:95%;">
+      <div class="fa-modal-header">
+        <div class="fa-modal-title">🏷️ 종목 메타데이터 & 단축명 관리</div>
+        <button type="button" class="fa-modal-close" onclick="closeManageSymbolsModal()">&times;</button>
+      </div>
+      <div class="fa-modal-body" style="padding:16px;">
+        <div style="display:flex; flex-wrap:wrap; gap:10px; justify-content:space-between; align-items:center; margin-bottom:14px;">
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <select id="sm-filter-account" class="fa-select" style="min-width:140px;" onchange="renderSymbolList()">
+              <option value="all">전체 계좌</option>
+              <option value="usa">미국 주식</option>
+              <option value="kor1">국내 주식1</option>
+              <option value="kor2">국내 주식2</option>
+              <option value="sema">공제회 (SEMA)</option>
+              <option value="irp">IRP</option>
+              <option value="psf1">연금저축1</option>
+              <option value="isa1">ISA1</option>
+              <option value="psf2">연금저축2</option>
+              <option value="isa2">ISA2</option>
+            </select>
+            <input type="text" id="sm-search" class="fa-input" placeholder="종목명/단축명/티커 검색..." style="width:220px; padding:6px 10px;" oninput="renderSymbolList()">
+          </div>
+          <button type="button" class="fa-btn-primary" style="padding:6px 14px; font-size:0.85rem;" onclick="openNewSymbolModalFromManage()">➕ 신규 종목 추가</button>
+        </div>
+
+        <div class="fa-table-wrap" style="max-height:480px; overflow-y:auto;">
+          <table class="fa-table">
+            <thead>
+              <tr>
+                <th>계좌</th>
+                <th>종목명 (원문)</th>
+                <th>단축명 (대시보드 표시명)</th>
+                <th>티커</th>
+                <th>지역</th>
+                <th>자산군</th>
+                <th class="text-right">관리</th>
+              </tr>
+            </thead>
+            <tbody id="sm-table-body">
+              <!-- JS에서 동적 렌더링 -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="fa-modal-footer">
+        <button type="button" class="fa-btn-action" onclick="closeManageSymbolsModal()">닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 종목 정보 & 단축명 수정 모달 -->
+  <div id="modal-edit-symbol" class="fa-modal-overlay" style="z-index: 2100;">
+    <div class="fa-modal" style="max-width:520px; width:92%;">
+      <div class="fa-modal-header">
+        <div class="fa-modal-title">✏️ 종목 정보 & 단축명 수정</div>
+        <button type="button" class="fa-modal-close" onclick="closeEditSymbolModal()">&times;</button>
+      </div>
+      <form id="form-edit-symbol" onsubmit="handleEditSymbolSubmit(event)">
+        <input type="hidden" id="em-old-name" value="">
+        <input type="hidden" id="em-old-abbrev" value="">
+        <div class="fa-modal-body">
+          <div class="fa-form-grid" style="grid-template-columns: 1fr;">
+            <div class="fa-field">
+              <label class="fa-label">해당 계좌</label>
+              <select id="em-account" class="fa-select" required>
+                <option value="usa">미국 주식</option>
+                <option value="kor1">국내 주식1</option>
+                <option value="kor2">국내 주식2</option>
+                <option value="sema">공제회 (SEMA)</option>
+                <option value="irp">IRP</option>
+                <option value="psf1">연금저축1</option>
+                <option value="isa1">ISA1</option>
+                <option value="psf2">연금저축2</option>
+                <option value="isa2">ISA2</option>
+              </select>
+            </div>
+            <div class="fa-field">
+              <label class="fa-label">종목 정식 명칭 (원문)</label>
+              <input type="text" id="em-name" class="fa-input" required placeholder="예: ACE 미국배당다우존스">
+            </div>
+            <div class="fa-field">
+              <label class="fa-label">단축명 (대시보드 표시명) ⭐</label>
+              <input type="text" id="em-abbrev" class="fa-input" required placeholder="예: ACE SCHD" style="font-weight:700; color:var(--fa-accent);">
+              <span style="font-size:0.75rem; color:var(--fa-text-muted); margin-top:3px;">* 대시보드 그래프 및 보유종목에 표시될 간결한 명칭</span>
+            </div>
+            <div class="fa-field">
+              <label class="fa-label">티커 / 종목코드</label>
+              <input type="text" id="em-ticker" class="fa-input" placeholder="예: KRX:402970 또는 SCHD">
+            </div>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+              <div class="fa-field">
+                <label class="fa-label">지역 분류</label>
+                <select id="em-region" class="fa-select">
+                  <option value="국내상장미국">국내상장미국</option>
+                  <option value="미국">미국</option>
+                  <option value="국내">국내</option>
+                  <option value="기타">기타</option>
+                </select>
+              </div>
+              <div class="fa-field">
+                <label class="fa-label">대표 자산군</label>
+                <input type="text" id="em-asset-class" class="fa-input" placeholder="예: SCHD, QQQ, S&P500, 국채">
+              </div>
+            </div>
+            <div class="fa-field" style="margin-top:4px;">
+              <label style="display:flex; align-items:center; gap:6px; font-size:0.84rem; cursor:pointer; color:var(--fa-text-main);">
+                <input type="checkbox" id="em-sync-records" checked>
+                <span>기존 거래내역의 종목명도 새 단축명으로 자동 일괄 변경</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="fa-modal-footer">
+          <button type="button" class="fa-btn-action" onclick="closeEditSymbolModal()">취소</button>
+          <button type="submit" class="fa-btn-primary" style="padding:7px 18px;">수정 저장하기</button>
         </div>
       </form>
     </div>
@@ -1207,6 +1480,158 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         await fetch("/api/build-dashboard", { method: "POST" });
       } catch(e) {}
     }
+
+    let allSymbolsList = [];
+
+    async function openManageSymbolsModal() {
+      document.getElementById("modal-manage-symbols").classList.add("open");
+      await fetchAllSymbols();
+    }
+
+    function closeManageSymbolsModal() {
+      document.getElementById("modal-manage-symbols").classList.remove("open");
+    }
+
+    async function fetchAllSymbols() {
+      try {
+        const res = await fetch("/api/symbols/all");
+        allSymbolsList = await res.json();
+        renderSymbolList();
+      } catch(e) {
+        alert("종목 목록 불러오기 실패");
+      }
+    }
+
+    function renderSymbolList() {
+      const acctFilter = document.getElementById("sm-filter-account").value;
+      const search = document.getElementById("sm-search").value.toLowerCase().trim();
+      const tbody = document.getElementById("sm-table-body");
+
+      let filtered = allSymbolsList;
+      if (acctFilter && acctFilter !== "all") {
+        filtered = filtered.filter(s => s.account === acctFilter);
+      }
+      if (search) {
+        filtered = filtered.filter(s => 
+          (s.name && s.name.toLowerCase().includes(search)) ||
+          (s.abbrev && s.abbrev.toLowerCase().includes(search)) ||
+          (s.ticker && s.ticker.toLowerCase().includes(search)) ||
+          (s.asset_class && s.asset_class.toLowerCase().includes(search))
+        );
+      }
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--fa-text-muted); padding:20px;">등록된 종목이 없습니다.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(s => {
+        const acctLabel = ACCOUNT_MAP[s.account] || s.account_name || s.account;
+        const sJson = JSON.stringify(s).replace(/"/g, '&quot;');
+        return `
+          <tr>
+            <td><span class="badge badge-account">${escapeHtml(acctLabel)}</span></td>
+            <td style="font-weight:600; color:var(--fa-text-main);">${escapeHtml(s.name)}</td>
+            <td style="font-weight:700; color:var(--fa-accent);"><span style="background:var(--fa-accent-bg); padding:2px 8px; border-radius:4px;">${escapeHtml(s.abbrev)}</span></td>
+            <td style="font-family:monospace; color:var(--fa-text-muted); font-size:0.8rem;">${escapeHtml(s.ticker || "-")}</td>
+            <td><span class="badge" style="background:#f1f5f9; color:#475569;">${escapeHtml(s.region || "-")}</span></td>
+            <td><span class="badge" style="background:var(--fa-purple-bg); color:var(--fa-purple);">${escapeHtml(s.asset_class || "-")}</span></td>
+            <td class="text-right">
+              <button type="button" class="fa-btn-action fa-btn-edit" onclick="openEditSymbolModal(${sJson})">수정</button>
+              <button type="button" class="fa-btn-action fa-btn-del" onclick="deleteSymbol('${s.account}', '${escapeHtml(s.name)}', '${escapeHtml(s.abbrev)}')">삭제</button>
+            </td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    function escapeHtml(text) {
+      if (!text) return "";
+      return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
+
+    function openNewSymbolModalFromManage() {
+      const filterAcct = document.getElementById("sm-filter-account").value;
+      document.getElementById("form-new-symbol").reset();
+      if (filterAcct && filterAcct !== "all") {
+        document.getElementById("m-account").value = filterAcct;
+      }
+      document.getElementById("modal-new-symbol").classList.add("open");
+    }
+
+    function openEditSymbolModal(s) {
+      document.getElementById("em-account").value = s.account;
+      document.getElementById("em-old-name").value = s.name;
+      document.getElementById("em-old-abbrev").value = s.abbrev;
+      document.getElementById("em-name").value = s.name;
+      document.getElementById("em-abbrev").value = s.abbrev;
+      document.getElementById("em-ticker").value = s.ticker || "";
+      document.getElementById("em-region").value = s.region || "국내상장미국";
+      document.getElementById("em-asset-class").value = s.asset_class || "주식";
+      document.getElementById("em-sync-records").checked = true;
+
+      document.getElementById("modal-edit-symbol").classList.add("open");
+    }
+
+    function closeEditSymbolModal() {
+      document.getElementById("modal-edit-symbol").classList.remove("open");
+    }
+
+    async function handleEditSymbolSubmit(e) {
+      e.preventDefault();
+      const payload = {
+        account: document.getElementById("em-account").value,
+        old_name: document.getElementById("em-old-name").value,
+        old_abbrev: document.getElementById("em-old-abbrev").value,
+        name: document.getElementById("em-name").value.trim(),
+        abbrev: document.getElementById("em-abbrev").value.trim(),
+        ticker: document.getElementById("em-ticker").value.trim(),
+        region: document.getElementById("em-region").value,
+        asset_class: document.getElementById("em-asset-class").value.trim(),
+        sync_records: document.getElementById("em-sync-records").checked
+      };
+
+      try {
+        const res = await fetch("/api/symbols/update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast(`종목 정보 및 단축명 [${payload.abbrev}] 수정 완료! ✨`);
+          closeEditSymbolModal();
+          await fetchAllSymbols();
+          loadSymbols(document.getElementById("f-account").value);
+          loadRecords();
+        } else {
+          alert("수정 실패: " + (data.error || "오류가 발생했습니다."));
+        }
+      } catch(err) {
+        alert("통신 오류가 발생했습니다.");
+      }
+    }
+
+    async function deleteSymbol(acct, name, abbrev) {
+      if (!confirm(`[${abbrev}] 종목 설정을 정말 삭제하시겠습니까?`)) return;
+      try {
+        const res = await fetch("/api/symbols/delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ account: acct, name: name, abbrev: abbrev })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast(`[${abbrev}] 종목이 삭제되었습니다.`);
+          await fetchAllSymbols();
+          loadSymbols(document.getElementById("f-account").value);
+        } else {
+          alert("삭제 실패");
+        }
+      } catch(err) {
+        alert("통신 오류");
+      }
+    }
   </script>
 </body>
 </html>
@@ -1230,6 +1655,11 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
             self.wfile.write(HTML_TEMPLATE.encode("utf-8"))
+            return
+
+        if path == "/api/symbols/all":
+            symbols = get_all_symbols_from_fa_yaml()
+            self._send_json(symbols)
             return
 
         if path == "/api/symbols":
@@ -1356,6 +1786,36 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
             asset_class = data.get("asset_class", "주식")
 
             ok = add_symbol_to_fa_yaml(acct, full_name, abbrev, ticker, region, asset_class)
+            self._send_json({"ok": ok})
+            return
+
+        if path == "/api/symbols/update":
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length).decode("utf-8")
+            data = json.loads(body)
+            acct = data.get("account", "")
+            old_name = data.get("old_name", "").strip()
+            old_abbrev = data.get("old_abbrev", "").strip()
+            new_name = data.get("name", "").strip() or old_name
+            new_abbrev = data.get("abbrev", "").strip() or new_name
+            new_ticker = data.get("ticker", "").strip() or new_abbrev
+            new_region = data.get("region", "기타")
+            new_asset_class = data.get("asset_class", "기타")
+            sync_records = bool(data.get("sync_records", True))
+
+            ok = update_symbol_in_fa_yaml(acct, old_name, old_abbrev, new_name, new_abbrev, new_ticker, new_region, new_asset_class, sync_records)
+            self._send_json({"ok": ok})
+            return
+
+        if path == "/api/symbols/delete":
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length).decode("utf-8")
+            data = json.loads(body)
+            acct = data.get("account", "")
+            name = data.get("name", "").strip()
+            abbrev = data.get("abbrev", "").strip()
+
+            ok = delete_symbol_from_fa_yaml(acct, name, abbrev)
             self._send_json({"ok": ok})
             return
 
