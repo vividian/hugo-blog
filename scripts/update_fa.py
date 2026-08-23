@@ -480,7 +480,13 @@ def load_symbol_map() -> Dict[str, AssetConfig]:
 
 def build_fx_series(records: pd.DataFrame, end: Optional[pd.Timestamp] = None) -> pd.Series:
     """거래 데이터 범위를 기준으로 환율(USD/KRW) 시계열 데이터를 생성한다."""
-    fx_cache_file = ROOT_DIR / "data" / "fx_cache.csv"
+    fx_cache_file = ROOT_DIR / "db" / "fx_cache.csv"
+    legacy_fx_cache = ROOT_DIR / "data" / "fx_cache.csv"
+    if legacy_fx_cache.exists():
+        try:
+            legacy_fx_cache.unlink()
+        except Exception:
+            pass
 
     if records.empty:
         start = pd.Timestamp.today() - pd.Timedelta(days=60)
