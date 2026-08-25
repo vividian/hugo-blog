@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.38"
+APP_VERSION = "v2.7.39"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -213,11 +213,12 @@ def _fetch_market_snapshots() -> Dict[str, Tuple[Optional[float], Optional[float
 
 def _kpi_card(label: str, value: str, sub: str = "", state: str = "") -> str:
     state_class = f" {state}" if state else ""
+    sub_cls = f" fa-num-{state}" if state in ("positive", "negative") else ""
     return (
         f"<div class=\"fa-kpi-card{state_class}\">"
         f"<div class=\"fa-kpi-label\">{html.escape(label)}</div>"
         f"<div class=\"fa-kpi-value\">{value}</div>"
-        f"<div class=\"fa-kpi-sub\">{html.escape(sub)}</div>"
+        f"<div class=\"fa-kpi-sub{sub_cls}\">{html.escape(sub)}</div>"
         "</div>"
     )
 
