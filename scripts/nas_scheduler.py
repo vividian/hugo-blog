@@ -160,38 +160,48 @@ def sync_fa_artifacts(web_public: Path) -> None:
     fa_dst = web_public / "fa"
     fa_dst.mkdir(parents=True, exist_ok=True)
 
-    # 최신 시세 반영에 필요한 산출물(webp/csv/json/html)만 복사합니다.
-    run(
-        [
-            "rsync",
-            "-rlptD",
-            "--no-owner",
-            "--no-group",
-            "--chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r",
-            "--delete",
-            "--include",
-            "*/",
-            "--include",
-            "*.html",
-            "--include",
-            "*.webp",
-            "--include",
-            "*.csv",
-            "--include",
-            "*.json",
-            "--exclude",
-            "*",
-            f"{fa_src}/",
-            f"{fa_dst}/",
-        ],
-        cwd=ROOT,
-    )
-    rendered_index = get_path("public") / "fa" / "index.html"
-    if rendered_index.is_file():
-        run(["rsync", "-rlptD", "--no-owner", "--no-group", str(rendered_index), str(fa_dst / "index.html")], cwd=ROOT)
-    rendered_latest = get_path("public") / "fa" / "latest_fa.html"
-    if rendered_latest.is_file():
-        run(["rsync", "-rlptD", "--no-owner", "--no-group", str(rendered_latest), str(fa_dst / "latest_fa.html")], cwd=ROOT)
+    # 1. 핵심 대시보드 파일(HTML/JSON)을 직접 복사하여 권한 충돌 없이 즉시 반영
+    for src_file, dst_name in [
+        (ROOT / "content" / "fa" / "latest_fa.html", "latest_fa.html"),
+        (ROOT / "generated" / "fa" / "latest_fa_fragment.html", "latest_fa_fragment.html"),
+        (ROOT / "public" / "fa" / "index.html", "index.html"),
+        (ROOT / "public" / "fa" / "latest_fa.html", "latest_fa.html"),
+        (ROOT / "data" / "fa.json", "fa.json"),
+    ]:
+        if src_file.is_file():
+            try:
+                shutil.copy2(src_file, fa_dst / dst_name)
+            except Exception as e:
+                print(f"(참고) {dst_name} 직접 복사 건너뜀: {e}")
+
+    # 2. 기타 산출물(webp/csv) 동기화 (권한 에러 시에도 프로세스 중단 방지)
+    try:
+        run(
+            [
+                "rsync",
+                "-rlptD",
+                "--no-owner",
+                "--no-group",
+                "--chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r",
+                "--include",
+                "*/",
+                "--include",
+                "*.html",
+                "--include",
+                "*.webp",
+                "--include",
+                "*.csv",
+                "--include",
+                "*.json",
+                "--exclude",
+                "*",
+                f"{fa_src}/",
+                f"{fa_dst}/",
+            ],
+            cwd=ROOT,
+        )
+    except Exception as exc:
+        print(f"(참고) 일부 과거 이미지 webp rsync 건너뜀 (대시보드 HTML은 정상 반영됨): {exc}")
 
 
 def apply_permissions(web_public: Path, owner: str) -> None:

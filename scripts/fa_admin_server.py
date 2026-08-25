@@ -431,7 +431,21 @@ def run_dashboard_update():
 
             if res.returncode == 0:
                 print("✅ [대시보드 갱신] HTML 생성 완료!")
-                # 2. NAS 환경일 경우 nas_scheduler.py --skip-permissions 실행하여 웹 서비스 경로로 자동 동기화
+                # 2. 웹 서비스 경로로 핵심 HTML 파일 직접 복사 (rsync 권한 에러 완전 우회)
+                web_fa = Path("/var/services/web/hugo/fa")
+                if web_fa.exists():
+                    for src_path, dst_name in [
+                        (ROOT_DIR / "content" / "fa" / "latest_fa.html", "latest_fa.html"),
+                        (ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html", "latest_fa_fragment.html"),
+                    ]:
+                        if src_path.exists():
+                            try:
+                                shutil.copy2(src_path, web_fa / dst_name)
+                                print(f"🚀 [직접 배포] {dst_name} -> {web_fa} 복사 완료!")
+                            except Exception as ce:
+                                print(f"⚠️ [직접 배포] {dst_name} 복사 실패: {ce}")
+
+                # 3. NAS 환경일 경우 nas_scheduler.py --skip-permissions 실행
                 if Path("/var/services/web").exists() or Path("/volume1").exists() or Path("/volume3").exists():
                     cmd_sync = [sys.executable, str(ROOT_DIR / "scripts" / "nas_scheduler.py"), "--skip-permissions"]
                     res_sync = subprocess.run(cmd_sync, cwd=ROOT_DIR, capture_output=True, text=True)
