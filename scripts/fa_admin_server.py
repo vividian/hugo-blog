@@ -855,7 +855,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="fa-header">
       <div class="fa-header-title">
         <span>📈 FA 자산 거래내역 관리자</span>
-        <span class="fa-header-badge">v2.7.29</span>
+        <span class="fa-header-badge">v2.7.30</span>
         <span class="fa-header-badge" style="background:var(--fa-border); color:var(--fa-text-muted);">SQLite DB</span>
       </div>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
@@ -930,7 +930,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
               <button type="button" class="fa-kind-btn active buy" onclick="selectKind('매수', this)">매수</button>
               <button type="button" class="fa-kind-btn sell" onclick="selectKind('매도', this)">매도</button>
               <button type="button" class="fa-kind-btn div" onclick="selectKind('배당', this)">배당</button>
-              <button type="button" class="fa-kind-btn deposit" onclick="selectKind('입금', this)">입금</button>
               <button type="button" class="fa-kind-btn eval" onclick="selectKind('평가금', this)">평가금</button>
             </div>
           </div>
@@ -966,16 +965,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <input type="number" step="any" id="f-amount" class="fa-input" placeholder="0">
           </div>
 
+          <!-- 투자금 (구분이 매수일 때 원금 투입액 기록) -->
+          <div class="fa-field" id="wrap-deposit">
+            <label class="fa-label">투자금 (원금 입금액)</label>
+            <input type="number" step="any" id="f-deposit" class="fa-input" placeholder="매수 시 신규 투입된 투자금(원)이 있을 경우 입력">
+          </div>
+
           <!-- 배당금 (구분이 배당일 때) -->
           <div class="fa-field" id="wrap-dividend" style="display:none;">
             <label class="fa-label">배당금 (원/$)</label>
             <input type="number" step="any" id="f-dividend" class="fa-input" placeholder="0">
-          </div>
-
-          <!-- 투자금 (구분이 입출금일 때) -->
-          <div class="fa-field" id="wrap-deposit" style="display:none;">
-            <label class="fa-label">입금액 / 투자금 (원)</label>
-            <input type="number" step="any" id="f-deposit" class="fa-input" placeholder="0">
           </div>
 
           <!-- 평가금 (구분이 평가금일 때) -->
@@ -1297,16 +1296,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       document.getElementById("f-kind").value = kind;
 
       // 필드 가시성 토글
+      const isBuy = (kind === '매수');
       const isDiv = (kind === '배당');
-      const isDep = (kind === '입금');
       const isEval = (kind === '평가금');
 
-      document.getElementById("wrap-symbol").style.display = (isDep || isEval) ? 'none' : 'flex';
-      document.getElementById("wrap-unit-price").style.display = (isDep || isEval) ? 'none' : 'flex';
-      document.getElementById("wrap-quantity").style.display = (isDep || isEval) ? 'none' : 'flex';
-      document.getElementById("wrap-amount").style.display = (isDiv || isDep || isEval) ? 'none' : 'flex';
+      document.getElementById("wrap-symbol").style.display = (isEval) ? 'none' : 'flex';
+      document.getElementById("wrap-unit-price").style.display = (isDiv || isEval) ? 'none' : 'flex';
+      document.getElementById("wrap-quantity").style.display = (isDiv || isEval) ? 'none' : 'flex';
+      document.getElementById("wrap-amount").style.display = (isDiv || isEval) ? 'none' : 'flex';
+      document.getElementById("wrap-deposit").style.display = (isBuy) ? 'flex' : 'none';
       document.getElementById("wrap-dividend").style.display = isDiv ? 'flex' : 'none';
-      document.getElementById("wrap-deposit").style.display = isDep ? 'flex' : 'none';
       document.getElementById("wrap-evaluation").style.display = isEval ? 'flex' : 'none';
     }
 
@@ -1577,14 +1576,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         memo: document.getElementById("f-memo").value.trim()
       };
 
-      if (kind === "입금") {
-        if (payload.deposit <= 0) {
-          alert("입금액 / 투자금을 올바르게 입력해주세요.");
-          document.getElementById("f-deposit").focus();
-          return;
-        }
-        if (!payload.symbol) payload.symbol = "계좌 입금";
-      } else if (kind === "평가금") {
+      if (kind === "평가금") {
         if (payload.evaluation <= 0) {
           alert("평가금을 올바르게 입력해주세요.");
           document.getElementById("f-evaluation").focus();
@@ -1595,6 +1587,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         if (payload.dividend <= 0) {
           alert("배당금을 올바르게 입력해주세요.");
           document.getElementById("f-dividend").focus();
+          return;
+        }
+      } else if (kind === "매수" || kind === "매도") {
+        if (!payload.symbol) {
+          alert("종목명을 선택하거나 입력해주세요.");
           return;
         }
       }
@@ -2393,7 +2390,6 @@ def main():
 
     ensure_db_normalized()
 
-    HTTPServer.allow_reuse_address = True
     server_address = (args.host, args.port)
     httpd = HTTPServer(server_address, FAAdminRequestHandler)
     print(f"🚀 FA 거래내역 관리자 서버 시작: http://{args.host}:{args.port}")
