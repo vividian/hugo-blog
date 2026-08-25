@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.36"
+APP_VERSION = "v2.7.37"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -1939,12 +1939,13 @@ def _build_dashboard_fragment(data: ReportData) -> str:
         f"    <div class=\"fa-hero-meta\">최종 업데이트: {html.escape(data.month_end.strftime('%Y-%m-%d'))} · Engine {APP_VERSION}</div>"
         "  </div>"
         "  <div class=\"fa-hero-actions\">"
-        "    <button type=\"button\" class=\"fa-btn-refresh-dashboard\" onclick=\"triggerDashboardRefresh(this)\">"
+        "    <button type=\"button\" class=\"fa-btn-hero fa-btn-hero-secondary\" onclick=\"triggerDashboardRefresh(this)\">"
         "      <span class=\"fa-refresh-icon\">🔄</span>"
         "      <span class=\"fa-refresh-text\">대시보드 갱신</span>"
         "    </button>"
-        "    <a href=\"https://fa-admin.vividian.net\" class=\"fa-btn-admin\" target=\"_blank\" rel=\"noopener noreferrer\">"
+        "    <a href=\"https://fa-admin.vividian.net\" class=\"fa-btn-hero fa-btn-hero-primary\" target=\"_blank\" rel=\"noopener noreferrer\">"
         "      <span>⚙️ 거래내역 관리</span>"
+        "      <span class=\"fa-btn-arrow\">↗</span>"
         "    </a>"
         "  </div>"
         "</div>"
@@ -2109,26 +2110,64 @@ html.dark .fa-dashboard,
 }
 .fa-hero-title { font-size: 1.55rem; font-weight: 800; letter-spacing: -0.02em; }
 .fa-hero-meta { margin-top: 4px; color: var(--fa-text-muted); font-size: 0.88rem; }
-.fa-btn-admin {
-  display: inline-flex;
+.fa-hero-actions {
+  display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.fa-btn-hero {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  height: 38px !important;
+  padding: 0 16px !important;
+  border-radius: 8px !important;
+  font-size: 0.85rem !important;
+  font-weight: 700 !important;
+  line-height: 1 !important;
+  text-decoration: none !important;
+  transition: all 0.2s ease !important;
+  cursor: pointer !important;
+  box-sizing: border-box !important;
+  font-family: inherit !important;
+  outline: none !important;
+}
+.fa-btn-hero-primary {
   background: #4f46e5 !important;
   color: #ffffff !important;
   border: 1px solid #4338ca !important;
-  padding: 8px 16px;
-  border-radius: 8px;
-  font-size: 0.85rem;
-  font-weight: 700;
-  text-decoration: none;
   box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3) !important;
-  transition: all 0.2s ease;
 }
-.fa-btn-admin:hover {
+.fa-btn-hero-primary:hover {
   background: #4338ca !important;
   color: #ffffff !important;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4) !important;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.45) !important;
+}
+.fa-btn-hero-secondary {
+  background: #ffffff !important;
+  color: #4f46e5 !important;
+  border: 1px solid #c7d2fe !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05) !important;
+}
+.fa-btn-hero-secondary:hover {
+  background: #eef2ff !important;
+  border-color: #a5b4fc !important;
+  color: #4338ca !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(79, 70, 229, 0.15) !important;
+}
+.fa-btn-hero.loading {
+  opacity: 0.8 !important;
+  cursor: wait !important;
+  transform: none !important;
+}
+.fa-btn-arrow {
+  font-size: 0.85rem;
+  font-weight: 800;
+  margin-left: 1px;
 }
 
 /* KPI Grid */
@@ -3192,39 +3231,6 @@ html.dark .fa-dashboard,
   margin-left: 2px;
 }
 
-.fa-hero-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.fa-btn-refresh-dashboard {
-  background: var(--fa-accent);
-  color: #ffffff !important;
-  border: 1px solid var(--fa-accent);
-  padding: 8px 14px;
-  border-radius: 8px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  transition: all 0.2s ease;
-  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.25);
-  text-decoration: none;
-}
-.fa-btn-refresh-dashboard:hover {
-  background: #4338ca;
-  border-color: #4338ca;
-  color: #ffffff !important;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 10px rgba(79, 70, 229, 0.35);
-}
-.fa-btn-refresh-dashboard.loading {
-  opacity: 0.85;
-  cursor: wait;
-}
 .fa-spin {
   display: inline-block;
   animation: faRotate 0.8s linear infinite;
