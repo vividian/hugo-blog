@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.31"
+APP_VERSION = "v2.7.32"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -1186,34 +1186,22 @@ def _build_account_assets_html_table(summary_df: pd.DataFrame) -> str:
     )
 
 
-def _build_total_holdings_html_table(holdings_df: pd.DataFrame) -> str:
-    """전체 보유 종목 데이터프레임을 PC 테이블 & 모바일 카드로 변환되는 반응형 HTML로 렌더링"""
+def _build_total_holdings_section(holdings_df: pd.DataFrame) -> str:
+    """전체 보유 종목 섹션: [요약] (계좌명, 종목명, 수익금, 등락률 1개 컴팩트 카드) / [상세] (기존 반응형 상세 테이블) 탭 UI 제공"""
     filtered = holdings_df[holdings_df["계좌"] != "sema"].copy()
     if filtered.empty:
-        return "<p class='fa-empty-text'>보유 종목 데이터가 없습니다.</p>"
+        return (
+            "<section class='fa-card fa-card-wide'>"
+            "<header class='fa-card-head'><h2>전체 보유 종목</h2></header>"
+            "<div class='fa-card-body'><p class='fa-empty-text'>보유 종목 데이터가 없습니다.</p></div>"
+            "</section>"
+        )
 
     filtered["계좌라벨"] = filtered["계좌"].apply(update_fa.account_label)
     filtered = filtered.sort_values(["계좌", "평가금"], ascending=[True, False])
 
-    lines = [
-        "<div class='fa-table-wrapper'>",
-        "<table class='fa-table fa-table-responsive fa-table-holdings'>",
-        "<thead>",
-        "  <tr>",
-        "    <th>계좌</th>",
-        "    <th>종목</th>",
-        "    <th class='text-right'>수익률</th>",
-        "    <th class='text-right'>수량</th>",
-        "    <th class='text-right'>평단가</th>",
-        "    <th class='text-right'>현재가</th>",
-        "    <th class='text-right'>매수금</th>",
-        "    <th class='text-right'>평가금</th>",
-        "    <th class='text-right'>수익금</th>",
-        "    <th class='text-right'>등락률</th>",
-        "  </tr>",
-        "</thead>",
-        "<tbody>",
-    ]
+    summary_cards = []
+    table_rows = []
 
     for _, row in filtered.iterrows():
         acct_label = str(row["계좌라벨"])
@@ -1244,9 +1232,40 @@ def _build_total_holdings_html_table(holdings_df: pd.DataFrame) -> str:
         rate_disp = f"수익 {rate_str}%" if rate_str != "-" else "수익 -"
         fluct_disp = f"등락 {fluct_str}%" if fluct_str != "-" else "등락 -"
 
-        lines.append("  <tr>")
-        lines.append(f"    <td data-label='계좌'><span class='fa-chip-account'>{html.escape(acct_label)}</span></td>")
-        lines.append(
+        # 1. 요약 카드 (계좌명, 종목명, 수익금, 등락률 직관적 표시)
+        summary_cards.append(
+            f"<div class='fa-holding-card'>"
+            f"  <div class='fa-holding-card-header'>"
+            f"    <div class='fa-holding-card-title'>"
+            f"      <span class='fa-chip-account'>{html.escape(acct_label)}</span>"
+            f"      <strong class='fa-holding-title-text'>{html.escape(symbol)}</strong>"
+            f"    </div>"
+            f"    <div class='fa-holding-card-badges'>"
+            f"      <span class='fa-badge {profit_badge}'>{rate_disp}</span>"
+            f"      <span class='fa-badge {fluct_badge}'>{fluct_disp}</span>"
+            f"    </div>"
+            f"  </div>"
+            f"  <div class='fa-holding-card-metrics'>"
+            f"    <div class='fa-holding-metric'>"
+            f"      <span class='fa-holding-metric-lbl'>평가금</span>"
+            f"      <span class='fa-holding-metric-val fa-font-bold'>{eval_str}원</span>"
+            f"    </div>"
+            f"    <div class='fa-holding-metric'>"
+            f"      <span class='fa-holding-metric-lbl'>수익금</span>"
+            f"      <span class='fa-holding-metric-val {profit_cls}'>{profit_str}원</span>"
+            f"    </div>"
+            f"    <div class='fa-holding-metric'>"
+            f"      <span class='fa-holding-metric-lbl'>현재가 (수량)</span>"
+            f"      <span class='fa-holding-metric-val'>{cur_str}원 ({qty_str}주)</span>"
+            f"    </div>"
+            f"  </div>"
+            f"</div>"
+        )
+
+        # 2. 상세 테이블 행
+        table_rows.append("  <tr>")
+        table_rows.append(f"    <td data-label='계좌'><span class='fa-chip-account'>{html.escape(acct_label)}</span></td>")
+        table_rows.append(
             f"    <td data-label='종목' class='fa-col-symbol'>"
             f"<div class='fa-stock-title-wrap'><span class='fa-chip-account fa-mobile-inline'>{html.escape(acct_label)}</span><strong>{html.escape(symbol)}</strong></div>"
             f"<div class='fa-stock-badges-wrap fa-mobile-inline'>"
@@ -1255,20 +1274,61 @@ def _build_total_holdings_html_table(holdings_df: pd.DataFrame) -> str:
             f"</div>"
             f"</td>"
         )
-        lines.append(f"    <td data-label='수익률' class='text-right fa-num fa-hide-mobile'><span class='fa-badge {profit_badge}'>{rate_str}</span></td>")
-        lines.append(f"    <td data-label='수량' class='text-right fa-num'>{qty_str}</td>")
-        lines.append(f"    <td data-label='평단가' class='text-right fa-num'>{avg_str}</td>")
-        lines.append(f"    <td data-label='현재가' class='text-right fa-num'>{cur_str}</td>")
-        lines.append(f"    <td data-label='매수금' class='text-right fa-num'>{buy_str}</td>")
-        lines.append(f"    <td data-label='평가금' class='text-right fa-num fa-font-bold'>{eval_str}</td>")
-        lines.append(f"    <td data-label='수익금' class='text-right fa-num {profit_cls}'>{profit_str}</td>")
-        lines.append(f"    <td data-label='등락률' class='text-right fa-num fa-hide-mobile {fluct_cls}'>{fluct_str}</td>")
-        lines.append("  </tr>")
+        table_rows.append(f"    <td data-label='수익률' class='text-right fa-num fa-hide-mobile'><span class='fa-badge {profit_badge}'>{rate_str}</span></td>")
+        table_rows.append(f"    <td data-label='수량' class='text-right fa-num'>{qty_str}</td>")
+        table_rows.append(f"    <td data-label='평단가' class='text-right fa-num'>{avg_str}</td>")
+        table_rows.append(f"    <td data-label='현재가' class='text-right fa-num'>{cur_str}</td>")
+        table_rows.append(f"    <td data-label='매수금' class='text-right fa-num'>{buy_str}</td>")
+        table_rows.append(f"    <td data-label='평가금' class='text-right fa-num fa-font-bold'>{eval_str}</td>")
+        table_rows.append(f"    <td data-label='수익금' class='text-right fa-num {profit_cls}'>{profit_str}</td>")
+        table_rows.append(f"    <td data-label='등락률' class='text-right fa-num fa-hide-mobile {fluct_cls}'>{fluct_str}</td>")
+        table_rows.append("  </tr>")
 
-    lines.append("</tbody>")
-    lines.append("</table>")
-    lines.append("</div>")
-    return "\n".join(lines)
+    summary_cards_html = f"<div class='fa-holdings-summary-grid'>{''.join(summary_cards)}</div>"
+
+    table_html = "\n".join([
+        "<div class='fa-table-wrapper'>",
+        "<table class='fa-table fa-table-responsive fa-table-holdings'>",
+        "<thead>",
+        "  <tr>",
+        "    <th>계좌</th>",
+        "    <th>종목</th>",
+        "    <th class='text-right'>수익률</th>",
+        "    <th class='text-right'>수량</th>",
+        "    <th class='text-right'>평단가</th>",
+        "    <th class='text-right'>현재가</th>",
+        "    <th class='text-right'>매수금</th>",
+        "    <th class='text-right'>평가금</th>",
+        "    <th class='text-right'>수익금</th>",
+        "    <th class='text-right'>등락률</th>",
+        "  </tr>",
+        "</thead>",
+        "<tbody>",
+        *table_rows,
+        "</tbody>",
+        "</table>",
+        "</div>"
+    ])
+
+    title = update_fa.ACCOUNT_TITLES.get("title_total_holdings", "실시간 보유종목 현황")
+
+    return (
+        f"<section class='fa-card fa-card-wide fa-card-tabs fa-holdings-card'>"
+        f"  <header class='fa-card-head'>"
+        f"    <div style='display:flex; justify-content:space-between; align-items:center; width:100%; flex-wrap:wrap; gap:8px;'>"
+        f"      <h2 style='margin-bottom:0;'>{html.escape(title)}</h2>"
+        f"      <div class='fa-tab-nav fa-holdings-tab-nav'>"
+        f"        <button type='button' class='fa-tab-btn active' data-target='fa-holdings-tab-summary'>요약</button>"
+        f"        <button type='button' class='fa-tab-btn' data-target='fa-holdings-tab-detail'>상세</button>"
+        f"      </div>"
+        f"    </div>"
+        f"  </header>"
+        f"  <div class='fa-card-body'>"
+        f"    <div id='fa-holdings-tab-summary' class='fa-tab-pane active'>{summary_cards_html}</div>"
+        f"    <div id='fa-holdings-tab-detail' class='fa-tab-pane'>{table_html}</div>"
+        f"  </div>"
+        f"</section>"
+    )
 
 
 def _build_account_detail_section(
@@ -1868,7 +1928,7 @@ def _build_dashboard_fragment(data: ReportData) -> str:
     assets_fig = _build_assets_trend(data.account_df)
     portfolio_alloc_html = _build_portfolio_allocation_section(data.holdings_df, data.symbol_map, fig_html)
     account_summary_html = _build_account_assets_html_table(data.summary_df)
-    holdings_html = _build_total_holdings_html_table(data.holdings_df)
+    holdings_section_html = _build_total_holdings_section(data.holdings_df)
 
     rebal_alert_html = _build_rebalancing_alert_banner(data, threshold_pct=3.0)
     dividends_section_html = _build_dividends_tabbed_section(data.records, data.fx_series_full, fig_html)
@@ -1899,7 +1959,7 @@ def _build_dashboard_fragment(data: ReportData) -> str:
         _dashboard_card(update_fa.ACCOUNT_TITLES.get("title_assets_trend", "전체 금융자산 추이"), fig_html(assets_fig), extra_class="fa-card-wide"),
         portfolio_alloc_html,
         account_summary_html,
-        _dashboard_card(update_fa.ACCOUNT_TITLES.get("title_total_holdings", "전체 보유 종목"), holdings_html, extra_class="fa-card-wide"),
+        holdings_section_html,
     ])
 
     if dividends_section_html:
@@ -2418,6 +2478,93 @@ html.dark .fa-dashboard,
 .fa-table-eok-summary tfoot td:first-child {
   background: var(--fa-kpi-bg);
   z-index: 2;
+}
+
+/* =========================================================
+   Holdings Summary Card Grid (요약 탭 카드 뷰)
+   ========================================================= */
+.fa-holdings-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 12px;
+}
+@media (max-width: 640px) {
+  .fa-holdings-summary-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+}
+.fa-holding-card {
+  background: var(--fa-kpi-bg);
+  border: 1px solid var(--fa-border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.fa-holding-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--fa-card-shadow);
+}
+.fa-holding-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px dashed var(--fa-border);
+  padding-bottom: 8px;
+}
+.fa-holding-card-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.fa-holding-title-text {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--fa-text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fa-holding-card-badges {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.fa-holding-card-badges .fa-badge {
+  font-size: 0.74rem;
+  padding: 2px 6px;
+  font-weight: 600;
+  white-space: nowrap;
+  border-radius: 6px;
+}
+.fa-holding-card-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.fa-holding-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.fa-holding-metric-lbl {
+  font-size: 0.72rem;
+  color: var(--fa-text-muted);
+  font-weight: 500;
+}
+.fa-holding-metric-val {
+  font-size: 0.88rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* =========================================================
