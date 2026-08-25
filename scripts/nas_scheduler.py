@@ -148,7 +148,7 @@ def render_fa_index(run_as: str) -> Path:
 
 def sync_full_site(web_public: Path) -> None:
     public_dir = get_path("public")
-    run(["rsync", "-a", "--delete", f"{public_dir}/", f"{web_public}/"], cwd=ROOT)
+    run(["rsync", "-rlptD", "--no-owner", "--no-group", "--chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r", "--delete", f"{public_dir}/", f"{web_public}/"], cwd=ROOT)
 
 
 def sync_fa_artifacts(web_public: Path) -> None:
@@ -160,11 +160,14 @@ def sync_fa_artifacts(web_public: Path) -> None:
     fa_dst = web_public / "fa"
     fa_dst.mkdir(parents=True, exist_ok=True)
 
-    # 최신 시세 반영에 필요한 산출물(webp/csv/json)만 복사합니다.
+    # 최신 시세 반영에 필요한 산출물(webp/csv/json/html)만 복사합니다.
     run(
         [
             "rsync",
-            "-a",
+            "-rlptD",
+            "--no-owner",
+            "--no-group",
+            "--chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r",
             "--delete",
             "--include",
             "*/",
@@ -185,10 +188,10 @@ def sync_fa_artifacts(web_public: Path) -> None:
     )
     rendered_index = get_path("public") / "fa" / "index.html"
     if rendered_index.is_file():
-        run(["rsync", "-a", str(rendered_index), str(fa_dst / "index.html")], cwd=ROOT)
+        run(["rsync", "-rlptD", "--no-owner", "--no-group", str(rendered_index), str(fa_dst / "index.html")], cwd=ROOT)
     rendered_latest = get_path("public") / "fa" / "latest_fa.html"
     if rendered_latest.is_file():
-        run(["rsync", "-a", str(rendered_latest), str(fa_dst / "latest_fa.html")], cwd=ROOT)
+        run(["rsync", "-rlptD", "--no-owner", "--no-group", str(rendered_latest), str(fa_dst / "latest_fa.html")], cwd=ROOT)
 
 
 def apply_permissions(web_public: Path, owner: str) -> None:
