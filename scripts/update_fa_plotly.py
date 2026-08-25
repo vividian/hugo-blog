@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.42"
+APP_VERSION = "v2.7.43"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -1235,9 +1235,9 @@ def _build_total_holdings_section(holdings_df: pd.DataFrame) -> str:
 
         # 1. 요약 테이블 행 (계좌, 종목, 수익금, 등락률)
         summary_rows.append("  <tr>")
-        summary_rows.append(f"    <td><span class='fa-chip-account'>{html.escape(acct_label)}</span></td>")
-        summary_rows.append(f"    <td><strong>{html.escape(symbol)}</strong></td>")
-        summary_rows.append(f"    <td class='text-right fa-num {profit_cls}'>{profit_str} <span class='fa-sub-rate' style='font-size:0.75rem; color:var(--fa-text-muted);'>({rate_str}%)</span></td>")
+        summary_rows.append(f"    <td class='fa-col-account'><span class='fa-chip-account'>{html.escape(acct_label)}</span></td>")
+        summary_rows.append(f"    <td class='fa-col-sticky-symbol'><strong>{html.escape(symbol)}</strong></td>")
+        summary_rows.append(f"    <td class='text-right fa-num {profit_cls}'>{profit_str}</td>")
         summary_rows.append(f"    <td class='text-right fa-num'><span class='fa-badge {fluct_badge}'>{fluct_str}%</span></td>")
         summary_rows.append("  </tr>")
 
@@ -1265,12 +1265,12 @@ def _build_total_holdings_section(holdings_df: pd.DataFrame) -> str:
 
     # 요약 테이블 HTML
     summary_table_html = "\n".join([
-        "<div class='fa-table-wrapper'>",
+        "<div class='fa-table-wrapper fa-table-wrapper-sticky'>",
         "<table class='fa-table fa-table-holdings-summary'>",
         "<thead>",
         "  <tr>",
-        "    <th>계좌</th>",
-        "    <th>종목</th>",
+        "    <th class='fa-th-account'>계좌</th>",
+        "    <th class='fa-th-symbol'>종목</th>",
         "    <th class='text-right'>수익금</th>",
         "    <th class='text-right'>등락률</th>",
         "  </tr>",
@@ -3226,15 +3226,48 @@ html.dark .fa-dashboard,
   }
 }
 
-/* 요약 테이블 스타일 */
+/* 요약 테이블 스타일 및 가로 스크롤 시 종목명 고정 (Sticky Column) */
+.fa-table-wrapper-sticky {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  position: relative;
+}
+.fa-table-holdings-summary {
+  min-width: 360px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
 .fa-table-holdings-summary th,
 .fa-table-holdings-summary td {
-  padding: 9px 12px;
+  padding: 10px 12px;
   font-size: 0.88rem;
   white-space: nowrap;
+  border-bottom: 1px solid var(--fa-border);
 }
-.fa-table-holdings-summary .fa-sub-rate {
-  margin-left: 2px;
+.fa-table-holdings-summary th.fa-th-account,
+.fa-table-holdings-summary td.fa-col-account {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--fa-card-bg);
+  width: 60px;
+}
+.fa-table-holdings-summary th.fa-th-account {
+  background: var(--fa-table-header-bg);
+  z-index: 3;
+}
+.fa-table-holdings-summary th.fa-th-symbol,
+.fa-table-holdings-summary td.fa-col-sticky-symbol {
+  position: sticky;
+  left: 60px;
+  z-index: 2;
+  background: var(--fa-card-bg);
+  box-shadow: 4px 0 6px -2px rgba(0, 0, 0, 0.08);
+}
+.fa-table-holdings-summary th.fa-th-symbol {
+  background: var(--fa-table-header-bg);
+  z-index: 3;
+  box-shadow: 4px 0 6px -2px rgba(0, 0, 0, 0.08);
 }
 
 .fa-spin {
