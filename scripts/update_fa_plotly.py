@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.37"
+APP_VERSION = "v2.7.38"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -457,7 +457,7 @@ def _build_rebalancing_alert_banner(data: ReportData, threshold_pct: float = 3.0
             f"  <div class='fa-rebal-alert-body'>"
             f"    <div class='fa-rebal-alert-stat'>"
             f"      <span class='fa-rebal-alert-lbl'>현재 ➡️ 목표 비중</span>"
-            f"      <span class='fa-rebal-alert-val'>{item['curr_pct']:.1f}% ➡️ {item['target_pct']:.1f}% <strong class='{color_cls}'>({diff_pct_str})</strong></span>"
+            f"      <span class='fa-rebal-alert-val'>{item['curr_pct']:.1f}% ➡️ {item['target_pct']:.1f}%</span>"
             f"    </div>"
             f"    <div class='fa-rebal-alert-stat'>"
             f"      <span class='fa-rebal-alert-lbl'>조정 필요금액</span>"
@@ -3142,10 +3142,13 @@ html.dark .fa-dashboard,
 }
 .fa-rebal-alert-lbl {
   color: var(--fa-text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .fa-rebal-alert-val {
   font-variant-numeric: tabular-nums;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 /* =========================================================
