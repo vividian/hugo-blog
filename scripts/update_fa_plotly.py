@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.33"
+APP_VERSION = "v2.7.34"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -1187,12 +1187,12 @@ def _build_account_assets_html_table(summary_df: pd.DataFrame) -> str:
 
 
 def _build_total_holdings_section(holdings_df: pd.DataFrame) -> str:
-    """전체 보유 종목 섹션: [요약] (계좌명, 종목명, 수익금, 등락률 1개 컴팩트 카드) / [상세] (기존 반응형 상세 테이블) 탭 UI 제공"""
+    """전체 보유 종목 섹션: PC는 상세 테이블 바로 노출 / 모바일은 [요약](4열 간결 테이블) 및 [상세](풀 테이블) 탭 분기"""
     filtered = holdings_df[holdings_df["계좌"] != "sema"].copy()
     if filtered.empty:
         return (
             "<section class='fa-card fa-card-wide'>"
-            "<header class='fa-card-head'><h2>전체 보유 종목</h2></header>"
+            "<header class='fa-card-head'><h2>실시간 보유종목 현황</h2></header>"
             "<div class='fa-card-body'><p class='fa-empty-text'>보유 종목 데이터가 없습니다.</p></div>"
             "</section>"
         )
@@ -1200,8 +1200,8 @@ def _build_total_holdings_section(holdings_df: pd.DataFrame) -> str:
     filtered["계좌라벨"] = filtered["계좌"].apply(update_fa.account_label)
     filtered = filtered.sort_values(["계좌", "평가금"], ascending=[True, False])
 
-    summary_cards = []
-    table_rows = []
+    summary_rows = []
+    detail_rows = []
 
     for _, row in filtered.iterrows():
         acct_label = str(row["계좌라벨"])
@@ -1232,40 +1232,18 @@ def _build_total_holdings_section(holdings_df: pd.DataFrame) -> str:
         rate_disp = f"수익 {rate_str}%" if rate_str != "-" else "수익 -"
         fluct_disp = f"등락 {fluct_str}%" if fluct_str != "-" else "등락 -"
 
-        # 1. 요약 카드 (계좌명, 종목명, 수익금, 등락률 직관적 표시)
-        summary_cards.append(
-            f"<div class='fa-holding-card'>"
-            f"  <div class='fa-holding-card-header'>"
-            f"    <div class='fa-holding-card-title'>"
-            f"      <span class='fa-chip-account'>{html.escape(acct_label)}</span>"
-            f"      <strong class='fa-holding-title-text'>{html.escape(symbol)}</strong>"
-            f"    </div>"
-            f"    <div class='fa-holding-card-badges'>"
-            f"      <span class='fa-badge {profit_badge}'>{rate_disp}</span>"
-            f"      <span class='fa-badge {fluct_badge}'>{fluct_disp}</span>"
-            f"    </div>"
-            f"  </div>"
-            f"  <div class='fa-holding-card-metrics'>"
-            f"    <div class='fa-holding-metric'>"
-            f"      <span class='fa-holding-metric-lbl'>평가금</span>"
-            f"      <span class='fa-holding-metric-val fa-font-bold'>{eval_str}원</span>"
-            f"    </div>"
-            f"    <div class='fa-holding-metric'>"
-            f"      <span class='fa-holding-metric-lbl'>수익금</span>"
-            f"      <span class='fa-holding-metric-val {profit_cls}'>{profit_str}원</span>"
-            f"    </div>"
-            f"    <div class='fa-holding-metric'>"
-            f"      <span class='fa-holding-metric-lbl'>현재가 (수량)</span>"
-            f"      <span class='fa-holding-metric-val'>{cur_str}원 ({qty_str}주)</span>"
-            f"    </div>"
-            f"  </div>"
-            f"</div>"
-        )
+        # 1. 요약 테이블 행 (계좌, 종목, 수익금, 등락률)
+        summary_rows.append("  <tr>")
+        summary_rows.append(f"    <td><span class='fa-chip-account'>{html.escape(acct_label)}</span></td>")
+        summary_rows.append(f"    <td><strong>{html.escape(symbol)}</strong></td>")
+        summary_rows.append(f"    <td class='text-right fa-num {profit_cls}'>{profit_str} <span class='fa-sub-rate' style='font-size:0.75rem; color:var(--fa-text-muted);'>({rate_str}%)</span></td>")
+        summary_rows.append(f"    <td class='text-right fa-num'><span class='fa-badge {fluct_badge}'>{fluct_str}%</span></td>")
+        summary_rows.append("  </tr>")
 
-        # 2. 상세 테이블 행
-        table_rows.append("  <tr>")
-        table_rows.append(f"    <td data-label='계좌'><span class='fa-chip-account'>{html.escape(acct_label)}</span></td>")
-        table_rows.append(
+        # 2. 상세 테이블 행 (풀 컬럼)
+        detail_rows.append("  <tr>")
+        detail_rows.append(f"    <td data-label='계좌'><span class='fa-chip-account'>{html.escape(acct_label)}</span></td>")
+        detail_rows.append(
             f"    <td data-label='종목' class='fa-col-symbol'>"
             f"<div class='fa-stock-title-wrap'><span class='fa-chip-account fa-mobile-inline'>{html.escape(acct_label)}</span><strong>{html.escape(symbol)}</strong></div>"
             f"<div class='fa-stock-badges-wrap fa-mobile-inline'>"
@@ -1274,19 +1252,37 @@ def _build_total_holdings_section(holdings_df: pd.DataFrame) -> str:
             f"</div>"
             f"</td>"
         )
-        table_rows.append(f"    <td data-label='수익률' class='text-right fa-num fa-hide-mobile'><span class='fa-badge {profit_badge}'>{rate_str}</span></td>")
-        table_rows.append(f"    <td data-label='수량' class='text-right fa-num'>{qty_str}</td>")
-        table_rows.append(f"    <td data-label='평단가' class='text-right fa-num'>{avg_str}</td>")
-        table_rows.append(f"    <td data-label='현재가' class='text-right fa-num'>{cur_str}</td>")
-        table_rows.append(f"    <td data-label='매수금' class='text-right fa-num'>{buy_str}</td>")
-        table_rows.append(f"    <td data-label='평가금' class='text-right fa-num fa-font-bold'>{eval_str}</td>")
-        table_rows.append(f"    <td data-label='수익금' class='text-right fa-num {profit_cls}'>{profit_str}</td>")
-        table_rows.append(f"    <td data-label='등락률' class='text-right fa-num fa-hide-mobile {fluct_cls}'>{fluct_str}</td>")
-        table_rows.append("  </tr>")
+        detail_rows.append(f"    <td data-label='수익률' class='text-right fa-num fa-hide-mobile'><span class='fa-badge {profit_badge}'>{rate_str}</span></td>")
+        detail_rows.append(f"    <td data-label='수량' class='text-right fa-num'>{qty_str}</td>")
+        detail_rows.append(f"    <td data-label='평단가' class='text-right fa-num'>{avg_str}</td>")
+        detail_rows.append(f"    <td data-label='현재가' class='text-right fa-num'>{cur_str}</td>")
+        detail_rows.append(f"    <td data-label='매수금' class='text-right fa-num'>{buy_str}</td>")
+        detail_rows.append(f"    <td data-label='평가금' class='text-right fa-num fa-font-bold'>{eval_str}</td>")
+        detail_rows.append(f"    <td data-label='수익금' class='text-right fa-num {profit_cls}'>{profit_str}</td>")
+        detail_rows.append(f"    <td data-label='등락률' class='text-right fa-num fa-hide-mobile {fluct_cls}'>{fluct_str}</td>")
+        detail_rows.append("  </tr>")
 
-    summary_cards_html = f"<div class='fa-holdings-summary-grid'>{''.join(summary_cards)}</div>"
+    # 요약 테이블 HTML
+    summary_table_html = "\n".join([
+        "<div class='fa-table-wrapper'>",
+        "<table class='fa-table fa-table-holdings-summary'>",
+        "<thead>",
+        "  <tr>",
+        "    <th>계좌</th>",
+        "    <th>종목</th>",
+        "    <th class='text-right'>수익금</th>",
+        "    <th class='text-right'>등락률</th>",
+        "  </tr>",
+        "</thead>",
+        "<tbody>",
+        *summary_rows,
+        "</tbody>",
+        "</table>",
+        "</div>"
+    ])
 
-    table_html = "\n".join([
+    # 상세 테이블 HTML
+    detail_table_html = "\n".join([
         "<div class='fa-table-wrapper'>",
         "<table class='fa-table fa-table-responsive fa-table-holdings'>",
         "<thead>",
@@ -1304,7 +1300,7 @@ def _build_total_holdings_section(holdings_df: pd.DataFrame) -> str:
         "  </tr>",
         "</thead>",
         "<tbody>",
-        *table_rows,
+        *detail_rows,
         "</tbody>",
         "</table>",
         "</div>"
@@ -1324,8 +1320,8 @@ def _build_total_holdings_section(holdings_df: pd.DataFrame) -> str:
         f"    </div>"
         f"  </header>"
         f"  <div class='fa-card-body'>"
-        f"    <div id='fa-holdings-tab-summary' class='fa-tab-pane active'>{summary_cards_html}</div>"
-        f"    <div id='fa-holdings-tab-detail' class='fa-tab-pane'>{table_html}</div>"
+        f"    <div id='fa-holdings-tab-summary' class='fa-tab-pane active'>{summary_table_html}</div>"
+        f"    <div id='fa-holdings-tab-detail' class='fa-tab-pane'>{detail_table_html}</div>"
         f"  </div>"
         f"</section>"
     )
@@ -3155,6 +3151,39 @@ html.dark .fa-dashboard,
   .fa-acct-summary-card .fa-tab-pane.active {
     display: block;
   }
+/* 3. 실시간 보유종목 현황: PC 전체 상세 테이블 표시 (탭 제거), 모바일 탭 분기 */
+@media (min-width: 769px) {
+  .fa-holdings-card .fa-holdings-tab-nav {
+    display: none !important;
+  }
+  .fa-holdings-card #fa-holdings-tab-summary {
+    display: none !important;
+  }
+  .fa-holdings-card #fa-holdings-tab-detail {
+    display: block !important;
+  }
+}
+@media (max-width: 768px) {
+  .fa-holdings-card .fa-holdings-tab-nav {
+    display: flex !important;
+  }
+  .fa-holdings-card .fa-tab-pane {
+    display: none;
+  }
+  .fa-holdings-card .fa-tab-pane.active {
+    display: block;
+  }
+}
+
+/* 요약 테이블 스타일 */
+.fa-table-holdings-summary th,
+.fa-table-holdings-summary td {
+  padding: 9px 12px;
+  font-size: 0.88rem;
+  white-space: nowrap;
+}
+.fa-table-holdings-summary .fa-sub-rate {
+  margin-left: 2px;
 }
 
 .fa-empty-text { color: var(--fa-text-muted); font-size: 0.9rem; margin: 8px 0; }
