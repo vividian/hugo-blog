@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.29"
+APP_VERSION = "v2.7.31"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -1230,6 +1230,7 @@ def _build_total_holdings_html_table(holdings_df: pd.DataFrame) -> str:
         profit_cls = "fa-num-positive" if (profit or 0) > 0 else "fa-num-negative" if (profit or 0) < 0 else ""
         profit_badge = "fa-badge-positive" if (profit or 0) > 0 else "fa-badge-negative" if (profit or 0) < 0 else "fa-badge-neutral"
         fluct_cls = "fa-num-positive" if (fluct_rate or 0) > 0 else "fa-num-negative" if (fluct_rate or 0) < 0 else ""
+        fluct_badge = "fa-badge-positive" if (fluct_rate or 0) > 0 else "fa-badge-negative" if (fluct_rate or 0) < 0 else "fa-badge-neutral"
 
         qty_str = f"{qty:,.2f}".rstrip("0").rstrip(".") if qty is not None else "-"
         avg_str = f"{avg_price:,.0f}" if avg_price is not None else "-"
@@ -1240,9 +1241,20 @@ def _build_total_holdings_html_table(holdings_df: pd.DataFrame) -> str:
         rate_str = f"{return_rate * 100:+.2f}" if return_rate is not None else "-"
         fluct_str = f"{fluct_rate * 100:+.2f}" if fluct_rate is not None else "-"
 
+        rate_disp = f"수익 {rate_str}%" if rate_str != "-" else "수익 -"
+        fluct_disp = f"등락 {fluct_str}%" if fluct_str != "-" else "등락 -"
+
         lines.append("  <tr>")
         lines.append(f"    <td data-label='계좌'><span class='fa-chip-account'>{html.escape(acct_label)}</span></td>")
-        lines.append(f"    <td data-label='종목' class='fa-col-symbol'><div class='fa-stock-title-wrap'><span class='fa-chip-account fa-mobile-inline'>{html.escape(acct_label)}</span><strong>{html.escape(symbol)}</strong></div><span class='fa-badge {profit_badge} fa-mobile-inline fa-stock-rate-badge'>{rate_str}</span></td>")
+        lines.append(
+            f"    <td data-label='종목' class='fa-col-symbol'>"
+            f"<div class='fa-stock-title-wrap'><span class='fa-chip-account fa-mobile-inline'>{html.escape(acct_label)}</span><strong>{html.escape(symbol)}</strong></div>"
+            f"<div class='fa-stock-badges-wrap fa-mobile-inline'>"
+            f"<span class='fa-badge {profit_badge} fa-stock-rate-badge'>{rate_disp}</span>"
+            f"<span class='fa-badge {fluct_badge} fa-stock-fluct-badge'>{fluct_disp}</span>"
+            f"</div>"
+            f"</td>"
+        )
         lines.append(f"    <td data-label='수익률' class='text-right fa-num fa-hide-mobile'><span class='fa-badge {profit_badge}'>{rate_str}</span></td>")
         lines.append(f"    <td data-label='수량' class='text-right fa-num'>{qty_str}</td>")
         lines.append(f"    <td data-label='평단가' class='text-right fa-num'>{avg_str}</td>")
@@ -2238,11 +2250,19 @@ html.dark .fa-dashboard,
     font-size: 0.98rem;
     font-weight: 700;
   }
-  .fa-table-holdings td[data-label='종목'] .fa-stock-rate-badge {
-    font-size: 0.88rem;
-    padding: 2px 8px;
+  .fa-table-holdings td[data-label='종목'] .fa-stock-badges-wrap {
+    display: flex !important;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .fa-table-holdings td[data-label='종목'] .fa-stock-rate-badge,
+  .fa-table-holdings td[data-label='종목'] .fa-stock-fluct-badge {
+    font-size: 0.76rem;
+    padding: 2px 6px;
     font-weight: 600;
     white-space: nowrap;
+    border-radius: 6px;
   }
   .fa-table-holdings td[data-label='종목']::before {
     display: none !important;
