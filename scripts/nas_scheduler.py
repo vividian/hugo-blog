@@ -197,8 +197,8 @@ def sync_fa_artifacts(web_public: Path) -> None:
 def apply_permissions(web_public: Path, owner: str) -> None:
     try:
         run(["chown", "-R", owner, str(web_public)], cwd=ROOT)
-        run(["find", str(web_public), "-type", "d", "-exec", "chmod", "755", "{}", ";"], cwd=ROOT)
-        run(["find", str(web_public), "-type", "f", "-exec", "chmod", "644", "{}", ";"], cwd=ROOT)
+        run(["find", str(web_public), "-type", "d", "-exec", "chmod", "775", "{}", ";"], cwd=ROOT)
+        run(["find", str(web_public), "-type", "f", "-exec", "chmod", "664", "{}", ";"], cwd=ROOT)
     except Exception as exc:
         print(f"(참고) 웹 디렉터리 권한 변경 건너뜀 (일반 사용자 실행): {exc}")
 
@@ -221,7 +221,7 @@ def parse_args() -> argparse.Namespace:
         default="",
         help="Optional user for workspace operations (git/build/update_fa)",
     )
-    parser.add_argument("--owner", default="http:http", help="Final web directory owner")
+    parser.add_argument("--owner", default="vividian:http", help="Final web directory owner")
     parser.add_argument("--skip-permissions", action="store_true", help="Skip chown/chmod")
     parser.add_argument(
         "--workspace-owner",
