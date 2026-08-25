@@ -700,7 +700,7 @@ def build_quantity_series(trades: pd.DataFrame,
 
     for (account, ticker), group in filtered.groupby(["계좌", "ticker"]):
         daily_qty = (
-            group.sort_values("일자")
+            group.sort_values(by=["일자", "수량"], ascending=[True, False])
             .groupby("일자")["수량"]
             .sum()
             .sort_index()
@@ -1330,7 +1330,9 @@ def compute_positions(trades: pd.DataFrame, symbol_map: Dict[str, AssetConfig], 
         total_qty = 0.0
         total_cost = 0.0
 
-        for _, row in group.sort_values("일자").iterrows():
+        # 동일 일자 내에서 매수(+수량)가 매도(-수량)보다 항상 먼저 처리되도록 정렬
+        sorted_group = group.sort_values(by=["일자", "수량"], ascending=[True, False])
+        for _, row in sorted_group.iterrows():
             qty = float(row["수량"])
             price = float(row["단가"])
             trade_date = pd.Timestamp(row["일자"])
@@ -1350,7 +1352,7 @@ def compute_positions(trades: pd.DataFrame, symbol_map: Dict[str, AssetConfig], 
                 total_qty = 0.0
                 total_cost = 0.0
 
-        if total_qty <= 0:
+        if total_qty <= 0.0001:
             continue
 
         positions.append(
