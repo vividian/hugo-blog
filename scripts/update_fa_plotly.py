@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.35"
+APP_VERSION = "v2.7.36"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -1938,9 +1938,15 @@ def _build_dashboard_fragment(data: ReportData) -> str:
         f"    <div class=\"fa-hero-title\">{html.escape(data.month_end.strftime('%Y년 %m월 자산 대시보드'))} <span class=\"fa-badge fa-badge-neutral\" style=\"font-size:0.75rem; vertical-align:middle; margin-left:6px;\">{APP_VERSION}</span></div>"
         f"    <div class=\"fa-hero-meta\">최종 업데이트: {html.escape(data.month_end.strftime('%Y-%m-%d'))} · Engine {APP_VERSION}</div>"
         "  </div>"
-        "  <a href=\"https://fa-admin.vividian.net\" class=\"fa-btn-admin\" target=\"_blank\" rel=\"noopener noreferrer\">"
-        "    <span>⚙️ 거래내역 관리</span>"
-        "  </a>"
+        "  <div class=\"fa-hero-actions\">"
+        "    <button type=\"button\" class=\"fa-btn-refresh-dashboard\" onclick=\"triggerDashboardRefresh(this)\">"
+        "      <span class=\"fa-refresh-icon\">🔄</span>"
+        "      <span class=\"fa-refresh-text\">대시보드 갱신</span>"
+        "    </button>"
+        "    <a href=\"https://fa-admin.vividian.net\" class=\"fa-btn-admin\" target=\"_blank\" rel=\"noopener noreferrer\">"
+        "      <span>⚙️ 거래내역 관리</span>"
+        "    </a>"
+        "  </div>"
         "</div>"
         "</section>",
     ]
@@ -3186,11 +3192,85 @@ html.dark .fa-dashboard,
   margin-left: 2px;
 }
 
+.fa-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.fa-btn-refresh-dashboard {
+  background: var(--fa-accent);
+  color: #ffffff !important;
+  border: 1px solid var(--fa-accent);
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.25);
+  text-decoration: none;
+}
+.fa-btn-refresh-dashboard:hover {
+  background: #4338ca;
+  border-color: #4338ca;
+  color: #ffffff !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(79, 70, 229, 0.35);
+}
+.fa-btn-refresh-dashboard.loading {
+  opacity: 0.85;
+  cursor: wait;
+}
+.fa-spin {
+  display: inline-block;
+  animation: faRotate 0.8s linear infinite;
+}
+@keyframes faRotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .fa-empty-text { color: var(--fa-text-muted); font-size: 0.9rem; margin: 8px 0; }
 </style>
 
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <script>
+window.triggerDashboardRefresh = async function(btn) {
+  if (!btn || btn.classList.contains("loading")) return;
+  btn.classList.add("loading");
+  const textEl = btn.querySelector(".fa-refresh-text");
+  const iconEl = btn.querySelector(".fa-refresh-icon");
+  if (textEl) textEl.innerText = "시세 갱신 중...";
+  if (iconEl) iconEl.classList.add("fa-spin");
+
+  try {
+    const res = await fetch("https://fa-admin.vividian.net/api/build-dashboard", {
+      method: "POST",
+      mode: "cors"
+    });
+    if (res.ok) {
+      if (textEl) textEl.innerText = "갱신 완료! ✨";
+      setTimeout(() => {
+        window.location.reload();
+      }, 1200);
+    } else {
+      if (textEl) textEl.innerText = "갱신 요청됨";
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+    }
+  } catch (err) {
+    if (textEl) textEl.innerText = "갱신 요청됨";
+    setTimeout(() => {
+      window.location.reload();
+    }, 2000);
+  }
+};
+
 document.addEventListener("DOMContentLoaded", function () {
   // 탭 전환 이벤트 리스너
   const tabBtns = document.querySelectorAll(".fa-tab-btn");
