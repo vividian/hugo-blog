@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.39"
+APP_VERSION = "v2.7.40"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -1315,14 +1315,14 @@ def _build_total_holdings_section(holdings_df: pd.DataFrame) -> str:
         f"    <div style='display:flex; justify-content:space-between; align-items:center; width:100%; flex-wrap:wrap; gap:8px;'>"
         f"      <h2 style='margin-bottom:0;'>{html.escape(title)}</h2>"
         f"      <div class='fa-tab-nav fa-holdings-tab-nav'>"
-        f"        <button type='button' class='fa-tab-btn active' data-target='fa-holdings-tab-detail'>상세</button>"
-        f"        <button type='button' class='fa-tab-btn' data-target='fa-holdings-tab-summary'>요약</button>"
+        f"        <button type='button' class='fa-tab-btn active' data-target='fa-holdings-tab-summary'>요약</button>"
+        f"        <button type='button' class='fa-tab-btn' data-target='fa-holdings-tab-detail'>상세</button>"
         f"      </div>"
         f"    </div>"
         f"  </header>"
         f"  <div class='fa-card-body'>"
-        f"    <div id='fa-holdings-tab-detail' class='fa-tab-pane active'>{detail_table_html}</div>"
-        f"    <div id='fa-holdings-tab-summary' class='fa-tab-pane'>{summary_table_html}</div>"
+        f"    <div id='fa-holdings-tab-summary' class='fa-tab-pane active'>{summary_table_html}</div>"
+        f"    <div id='fa-holdings-tab-detail' class='fa-tab-pane'>{detail_table_html}</div>"
         f"  </div>"
         f"</section>"
     )
@@ -3200,7 +3200,9 @@ html.dark .fa-dashboard,
   .fa-acct-summary-card .fa-tab-pane.active {
     display: block;
   }
-/* 3. 실시간 보유종목 현황: PC 전체 상세 테이블 표시 (탭 제거), 모바일 탭 분기 */
+}
+
+/* 3. 실시간 보유종목 현황: PC 상세 테이블 고정(탭 제거), 모바일 탭 분기(기본: 요약) */
 @media (min-width: 769px) {
   .fa-holdings-card .fa-holdings-tab-nav {
     display: none !important;
