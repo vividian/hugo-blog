@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.32"
+APP_VERSION = "v2.7.33"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -1983,6 +1983,9 @@ def _build_dashboard_fragment(data: ReportData) -> str:
    FA Modern Fintech Dashboard Design System
    ========================================================= */
 .fa-dashboard {
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
   --fa-bg: transparent;
   --fa-card-bg: #ffffff;
   --fa-card-border: #e2e8f0;

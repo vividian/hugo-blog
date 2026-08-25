@@ -1,0 +1,31 @@
+{{ define "main" }}
+<style>
+  .wrapper.fa-dashboard-wrapper {
+    max-width: min(1200px, calc(100vw - 1.5rem)) !important;
+    width: 100% !important;
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+    margin: 0 auto !important;
+  }
+  .fa-dashboard-content {
+    margin-top: 0.4rem;
+    max-width: 100% !important;
+  }
+  @media (max-width: 768px) {
+    .wrapper.fa-dashboard-wrapper {
+      max-width: 100% !important;
+      padding-left: 0.5rem !important;
+      padding-right: 0.5rem !important;
+    }
+  }
+</style>
+<div class="wrapper fa-dashboard-wrapper">
+  <main class="page-content" aria-label="Content">
+    <article>
+      <div class="page-content fa-dashboard-content">
+        {{ .Content }}
+      </div>
+    </article>
+  </main>
+</div>
+{{ end }}
