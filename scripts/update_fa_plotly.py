@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.43"
+APP_VERSION = "v2.7.44"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -1233,11 +1233,12 @@ def _build_total_holdings_section(holdings_df: pd.DataFrame) -> str:
         rate_disp = f"수익 {rate_str}%" if rate_str != "-" else "수익 -"
         fluct_disp = f"등락 {fluct_str}%" if fluct_str != "-" else "등락 -"
 
-        # 1. 요약 테이블 행 (계좌, 종목, 수익금, 등락률)
+        # 1. 요약 테이블 행 (계좌, 종목, 수익금, 수익률, 등락률)
         summary_rows.append("  <tr>")
         summary_rows.append(f"    <td class='fa-col-account'><span class='fa-chip-account'>{html.escape(acct_label)}</span></td>")
         summary_rows.append(f"    <td class='fa-col-sticky-symbol'><strong>{html.escape(symbol)}</strong></td>")
         summary_rows.append(f"    <td class='text-right fa-num {profit_cls}'>{profit_str}</td>")
+        summary_rows.append(f"    <td class='text-right fa-num'><span class='fa-badge {profit_badge}'>{rate_str}%</span></td>")
         summary_rows.append(f"    <td class='text-right fa-num'><span class='fa-badge {fluct_badge}'>{fluct_str}%</span></td>")
         summary_rows.append("  </tr>")
 
@@ -1263,7 +1264,7 @@ def _build_total_holdings_section(holdings_df: pd.DataFrame) -> str:
         detail_rows.append(f"    <td data-label='등락률' class='text-right fa-num fa-hide-mobile {fluct_cls}'>{fluct_str}</td>")
         detail_rows.append("  </tr>")
 
-    # 요약 테이블 HTML
+    # 요약 테이블 HTML (5열 구성)
     summary_table_html = "\n".join([
         "<div class='fa-table-wrapper fa-table-wrapper-sticky'>",
         "<table class='fa-table fa-table-holdings-summary'>",
@@ -1272,6 +1273,7 @@ def _build_total_holdings_section(holdings_df: pd.DataFrame) -> str:
         "    <th class='fa-th-account'>계좌</th>",
         "    <th class='fa-th-symbol'>종목</th>",
         "    <th class='text-right'>수익금</th>",
+        "    <th class='text-right'>수익률</th>",
         "    <th class='text-right'>등락률</th>",
         "  </tr>",
         "</thead>",
@@ -3233,7 +3235,7 @@ html.dark .fa-dashboard,
   position: relative;
 }
 .fa-table-holdings-summary {
-  min-width: 360px;
+  min-width: 440px;
   border-collapse: separate;
   border-spacing: 0;
 }
