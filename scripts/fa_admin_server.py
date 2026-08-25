@@ -407,21 +407,17 @@ def export_db_to_csv():
 
 
 def run_dashboard_update():
-    """백그라운드에서 update_fa.py, update_fa_plotly.py 및 nas_scheduler.py를 실행하여 웹 서비스에 즉시 100% 반영합니다."""
+    """백그라운드에서 update_fa_plotly.py 및 nas_scheduler.py를 초고속 실행하여 웹 서비스에 즉시 반영합니다."""
     def _worker():
         try:
-            print("⏳ [대시보드 갱신] 자산 계산 및 대시보드 생성 시작...")
-            # 1. update_fa.py (데이터 계산)
-            cmd_calc = [sys.executable, str(ROOT_DIR / "scripts" / "update_fa.py")]
-            subprocess.run(cmd_calc, cwd=ROOT_DIR, capture_output=True, text=True)
-
-            # 2. update_fa_plotly.py (HTML 대시보드 생성)
+            print("⏳ [대시보드 갱신] 대시보드 생성 시작...")
+            # 1. update_fa_plotly.py (인터랙티브 HTML 대시보드 생성 - 2~3초 완료)
             cmd_plot = [sys.executable, str(ROOT_DIR / "scripts" / "update_fa_plotly.py")]
             res = subprocess.run(cmd_plot, cwd=ROOT_DIR, capture_output=True, text=True)
 
             if res.returncode == 0:
                 print("✅ [대시보드 갱신] HTML 생성 완료!")
-                # 3. NAS 환경일 경우 nas_scheduler.py --skip-permissions 실행하여 웹 서비스 경로로 자동 동기화
+                # 2. NAS 환경일 경우 nas_scheduler.py --skip-permissions 실행하여 웹 서비스 경로로 자동 동기화
                 if Path("/var/services/web").exists() or Path("/volume1").exists() or Path("/volume3").exists():
                     cmd_sync = [sys.executable, str(ROOT_DIR / "scripts" / "nas_scheduler.py"), "--skip-permissions"]
                     res_sync = subprocess.run(cmd_sync, cwd=ROOT_DIR, capture_output=True, text=True)

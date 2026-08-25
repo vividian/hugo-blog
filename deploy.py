@@ -60,15 +60,10 @@ def main() -> int:
     config = load_config()
 
     try:
-        # 자산현황 업데이트 스크립트를 실행합니다.
-        run_python("scripts/convert_fa_md.py")
-        run_python("scripts/convert_trading_records.py")
-        if args.full:
-            run_python("scripts/update_fa.py", "--full")
-        else:
-            run_python("scripts/update_fa.py")
+        # 포트폴리오 대시보드 HTML 업데이트 (Plotly 인터랙티브 웹 대시보드)
+        run_python("scripts/update_fa_plotly.py")
     except Exception as exc:
-        print(f"자산형환 계산 스크립트 실행 중 오류가 발생했습니다: {exc}")
+        print(f"포트폴리오 대시보드 생성 중 오류가 발생했습니다: {exc}")
 
     try:
         # 인기 글 데이터를 가져옵니다.

@@ -101,18 +101,7 @@ def build_site(full_portfolio: bool) -> Path:
     6. Hugo 빌드 실행
     7. 빌드 후처리 (public 디렉터리 내 위키링크 변환)
     """
-    # 1. 포트폴리오 데이터 업데이트
-    try:
-        run_python("scripts/convert_fa_md.py")
-        run_python("scripts/convert_trading_records.py")
-        if full_portfolio:
-            run_python("scripts/update_fa.py", "--full")
-        else:
-            run_python("scripts/update_fa.py")
-    except subprocess.CalledProcessError as exc:
-        print(f"(경고) 포트폴리오 계산 실패: {exc}")
-
-    # 2. 포트폴리오 대시보드 HTML 업데이트
+    # 1. 포트폴리오 대시보드 HTML 업데이트 (Plotly 인터랙티브 웹 대시보드)
     try:
         run_python("scripts/update_fa_plotly.py")
     except subprocess.CalledProcessError as exc:
