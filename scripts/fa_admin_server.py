@@ -2102,6 +2102,11 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
             self.wfile.write(HTML_TEMPLATE.encode("utf-8"))
             return
 
+        if path == "/api/build-dashboard":
+            run_dashboard_update()
+            self._send_json({"ok": True})
+            return
+
         if path == "/api/accounts/allocations":
             allocations = get_all_account_allocations()
             self._send_json(allocations)

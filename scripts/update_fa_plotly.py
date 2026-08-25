@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.44"
+APP_VERSION = "v2.7.45"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -3294,28 +3294,22 @@ window.triggerDashboardRefresh = async function(btn) {
   if (textEl) textEl.innerText = "시세 갱신 중...";
   if (iconEl) iconEl.classList.add("fa-spin");
 
+  const url = "https://fa-admin.vividian.net/api/build-dashboard?t=" + Date.now();
   try {
-    const res = await fetch("https://fa-admin.vividian.net/api/build-dashboard", {
-      method: "POST",
-      mode: "cors"
-    });
-    if (res.ok) {
-      if (textEl) textEl.innerText = "갱신 완료! ✨";
-      setTimeout(() => {
-        window.location.reload();
-      }, 1200);
-    } else {
-      if (textEl) textEl.innerText = "갱신 요청됨";
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
+    let res = await fetch(url, { method: "POST", mode: "cors" });
+    if (!res.ok) {
+      res = await fetch(url, { method: "GET", mode: "cors" });
     }
   } catch (err) {
-    if (textEl) textEl.innerText = "갱신 요청됨";
-    setTimeout(() => {
-      window.location.reload();
-    }, 2000);
+    try {
+      await fetch(url, { method: "GET", mode: "no-cors" });
+    } catch(e) {}
   }
+
+  if (textEl) textEl.innerText = "갱신 완료! ✨";
+  setTimeout(() => {
+    window.location.reload();
+  }, 1800);
 };
 
 document.addEventListener("DOMContentLoaded", function () {
