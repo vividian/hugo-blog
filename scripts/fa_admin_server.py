@@ -283,16 +283,30 @@ def update_symbol_in_fa_yaml(
             print(f"✅ [fa.yaml] 종목 수정 완료: [{account_code}] {old_abbrev} ➡️ {new_abbrev}")
             sync_fa_yaml_to_md()
 
-            # 거래내역 DB 동기화
+            # 거래내역 DB 동기화 (접두사 및 기호 변형까지 완벽하게 매칭하여 동기화)
             if sync_records and (old_abbrev != new_abbrev or old_name != new_abbrev):
                 try:
                     conn = get_db_connection()
                     cur = conn.cursor()
-                    cur.execute("""
+                    # 1) 기존 단축명 및 풀네임 변형들 수집
+                    old_core = re.sub(r"^(SOL|ACE|TIGER|KODEX|RISE|KIWOOM)\s+", "", old_abbrev).strip()
+                    targets = {old_abbrev, old_name, old_core}
+                    # 기호 변형 (: / + / & / -)
+                    for sep in [":", "+", "&", "-", " "]:
+                        targets.add(old_abbrev.replace(":", sep))
+                        targets.add(old_abbrev.replace("+", sep))
+                        targets.add(old_abbrev.replace("&", sep))
+                        targets.add(f"SOL {old_core.replace(':', sep)}")
+                        targets.add(f"SOL {old_core.replace('+', sep)}")
+                        targets.add(f"SOL {old_core.replace('&', sep)}")
+
+                    placeholders = ",".join(["?"] * len(targets))
+                    query = f"""
                         UPDATE trading_records
                         SET symbol = ?
-                        WHERE account = ? AND (symbol = ? OR symbol = ?);
-                    """, (new_abbrev, account_code, old_abbrev, old_name))
+                        WHERE account = ? AND symbol IN ({placeholders});
+                    """
+                    cur.execute(query, [new_abbrev, account_code, *targets])
                     affected = cur.rowcount
                     conn.commit()
                     conn.close()
