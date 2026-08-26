@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.45"
+APP_VERSION = "v2.7.46"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -211,9 +211,10 @@ def _fetch_market_snapshots() -> Dict[str, Tuple[Optional[float], Optional[float
     return snapshots
 
 
-def _kpi_card(label: str, value: str, sub: str = "", state: str = "") -> str:
+def _kpi_card(label: str, value: str, sub: str = "", state: str = "", sub_state: str = "") -> str:
     state_class = f" {state}" if state else ""
-    sub_cls = f" fa-num-{state}" if state in ("positive", "negative") else ""
+    actual_sub_state = sub_state if sub_state else state
+    sub_cls = f" fa-num-{actual_sub_state}" if actual_sub_state in ("positive", "negative") else ""
     return (
         f"<div class=\"fa-kpi-card{state_class}\">"
         f"<div class=\"fa-kpi-label\">{html.escape(label)}</div>"
@@ -245,19 +246,67 @@ def _build_kpi_row(data: ReportData) -> str:
     fx = _as_float(data.fx_series_full.iloc[-1]) if not data.fx_series_full.empty else None
     fx_prev = _as_float(data.fx_series_full.iloc[-2]) if len(data.fx_series_full) > 1 else fx
     fx_change_text, fx_state = _build_change_text(fx, fx_prev, decimals=2)
-    month_label = data.month_end.strftime("%Y.%m")
 
     profit_str = _fmt_krw(profit)
     profit_state = "positive" if (profit or 0) > 0 else "negative" if (profit or 0) < 0 else ""
     return_str = _fmt_pct(return_rate)
     return_state = "positive" if (return_rate or 0) > 0 else "negative" if (return_rate or 0) < 0 else ""
 
+    # 1. 총 평가금 전일대비 증감액
+    eval_day_change = 0.0
+    if not data.holdings_df.empty:
+        for _, hrow in data.holdings_df.iterrows():
+            r = _as_float(hrow.get("등락률"))
+            val = _as_float(hrow.get("평가금")) or 0.0
+            if r is not None and (1.0 + r) != 0:
+                eval_day_change += (val * r / (1.0 + r))
+
+    prev_total_eval = (valuation or 0.0) - eval_day_change
+    eval_day_pct = (eval_day_change / prev_total_eval * 100.0) if prev_total_eval > 0 else 0.0
+    eval_state = "positive" if eval_day_change > 0 else "negative" if eval_day_change < 0 else ""
+    eval_sub = f"전일대비 {eval_day_change:+,.0f} ({eval_day_pct:+.2f}%)" if eval_day_change != 0 else "전일대비 0 (0.00%)"
+
+    # 2. 총 투자액 전월대비 증감액
+    inv_month_change = 0.0
+    if data.invest_series is not None and not data.invest_series.empty:
+        inv_s = data.invest_series.dropna()
+        monthly_inv = inv_s.groupby(inv_s.index.to_period("M")).last()
+        if len(monthly_inv) >= 2:
+            inv_month_change = float(monthly_inv.iloc[-1] - monthly_inv.iloc[-2])
+        elif len(monthly_inv) == 1:
+            inv_month_change = float(monthly_inv.iloc[-1])
+    inv_state = "positive" if inv_month_change > 0 else "negative" if inv_month_change < 0 else ""
+    inv_sub = f"전월대비 {inv_month_change:+,.0f}" if inv_month_change != 0 else "전월대비 0"
+
+    # 3. 총 수익금 전일대비 증감액
+    profit_day_change = eval_day_change
+    profit_day_state = "positive" if profit_day_change > 0 else "negative" if profit_day_change < 0 else ""
+    profit_sub = f"전일대비 {profit_day_change:+,.0f}" if profit_day_change != 0 else "전일대비 0"
+
+    # 4. 총 수익률 전일대비 증감률 (%p)
+    rate_day_change_p = 0.0
+    if invest and invest > 0:
+        rate_day_change_p = (profit_day_change / invest) * 100.0
+    rate_day_state = "positive" if rate_day_change_p > 0 else "negative" if rate_day_change_p < 0 else ""
+    rate_sub = f"전일대비 {rate_day_change_p:+.2f}%p" if rate_day_change_p != 0 else "전일대비 0.00%p"
+
+    # 5. 월 배당금 전월대비 증감액
+    div_month_change = 0.0
+    if data.dividends_pivot is not None and not data.dividends_pivot.empty:
+        monthly_div_s = data.dividends_pivot.sort_index().sum(axis=1)
+        if len(monthly_div_s) >= 2:
+            div_month_change = float(monthly_div_s.iloc[-1] - monthly_div_s.iloc[-2])
+        elif len(monthly_div_s) == 1:
+            div_month_change = float(monthly_div_s.iloc[-1])
+    div_state = "positive" if div_month_change > 0 else "negative" if div_month_change < 0 else ""
+    div_sub = f"전월대비 {div_month_change:+,.0f}" if div_month_change != 0 else "전월대비 0"
+
     cards = [
-        _kpi_card("총 평가금", _fmt_krw(valuation), f"{month_label} 기준"),
-        _kpi_card("총 투자금", _fmt_krw(invest), f"{month_label} 누적"),
-        _kpi_card("총 수익금", f"<span class='fa-num-{profit_state}'>{profit_str}</span>", "실현+평가", profit_state),
-        _kpi_card("총 수익률", f"<span class='fa-num-{return_state}'>{return_str}</span>", "투자금 대비", return_state),
-        _kpi_card("월 배당금", _fmt_krw(monthly_div), f"{month_label} 합계"),
+        _kpi_card("총 평가금", _fmt_krw(valuation), eval_sub, sub_state=eval_state),
+        _kpi_card("총 투자금", _fmt_krw(invest), inv_sub, sub_state=inv_state),
+        _kpi_card("총 수익금", f"<span class='fa-num-{profit_state}'>{profit_str}</span>", profit_sub, state=profit_state, sub_state=profit_day_state),
+        _kpi_card("총 수익률", f"<span class='fa-num-{return_state}'>{return_str}</span>", rate_sub, state=return_state, sub_state=rate_day_state),
+        _kpi_card("월 배당금", _fmt_krw(monthly_div), div_sub, sub_state=div_state),
         _kpi_card("USD/KRW", _fmt_number(fx, 2, ""), fx_change_text, fx_state),
     ]
     return "<div class=\"fa-kpi-grid\">" + "".join(cards) + "</div>"
