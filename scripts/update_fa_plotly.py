@@ -27,7 +27,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.54"
+APP_VERSION = "v2.7.55"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -837,21 +837,21 @@ def _build_assets_investment_trend(account_df: pd.DataFrame, invest_series: pd.S
 
 
 def _render_trend_tab_card(title: str, fig_1y: go.Figure, fig_all: go.Figure, card_id: str) -> str:
-    """직전 1년 / 전체 기간 탭이 포함된 차트 카드 HTML"""
+    """직전 1년 / 전체 기간 탭이 포함된 차트 카드 HTML (전체 탭 기본 활성화)"""
     return f"""
 <section class="fa-card fa-card-wide fa-card-tabs" id="{card_id}">
   <header class="fa-card-head" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
     <h2>{title}</h2>
     <div class="fa-holdings-tab-nav" style="display: flex; margin-bottom: 0;">
-      <button type="button" class="fa-tab-btn active" data-target="{card_id}-1y">직전 1년</button>
-      <button type="button" class="fa-tab-btn" data-target="{card_id}-all">전체</button>
+      <button type="button" class="fa-tab-btn" data-target="{card_id}-1y">직전 1년</button>
+      <button type="button" class="fa-tab-btn active" data-target="{card_id}-all">전체</button>
     </div>
   </header>
   <div class="fa-card-body">
-    <div id="{card_id}-1y" class="fa-tab-pane active">
+    <div id="{card_id}-1y" class="fa-tab-pane">
       {_render_figure_html(fig_1y)}
     </div>
-    <div id="{card_id}-all" class="fa-tab-pane">
+    <div id="{card_id}-all" class="fa-tab-pane active">
       {_render_figure_html(fig_all)}
     </div>
   </div>
@@ -2402,56 +2402,6 @@ def _build_report_data(records: pd.DataFrame) -> ReportData:
     )
 
 
-def _build_adsense_section() -> str:
-    """Google AdSense 반응형 광고 섹션"""
-    return """
-<section class="fa-card fa-card-wide fa-ad-card" style="padding: 16px 20px; text-align: center; overflow: hidden;">
-  <div style="font-size: 0.72rem; color: var(--fa-text-sub); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">ADVERTISEMENT</div>
-  <div class="adsense-placeholder" style="min-height: 90px; display: flex; justify-content: center; align-items: center;">
-    <ins class="adsbygoogle"
-         style="display:block; width:100%; text-align:center;"
-         data-ad-layout="in-article"
-         data-ad-format="fluid"
-         data-ad-client="ca-pub-9349922731061739"
-         data-ad-slot="4024915460"></ins>
-  </div>
-  <script>
-    (adsbygoogle = window.adsbygoogle || []).push({});
-  </script>
-</section>
-"""
-
-
-def _build_comments_section() -> str:
-    """Giscus 깃허브 기반 댓글창 섹션"""
-    return """
-<section class="fa-card fa-card-wide fa-comments-card">
-  <header class="fa-card-head">
-    <h2>💬 댓글 & 의견 공유</h2>
-  </header>
-  <div class="fa-card-body" style="padding: 20px;">
-    <div class="comments__body">
-      <script src="https://giscus.app/client.js"
-              data-repo="vividian/hugo-blog"
-              data-repo-id="R_kgDOQKamJQ"
-              data-category="blog-comments"
-              data-category-id="DIC_kwDOQKamJc4CxJv5"
-              data-mapping="pathname"
-              data-strict="0"
-              data-reactions-enabled="1"
-              data-emit-metadata="0"
-              data-input-position="bottom"
-              data-theme="preferred_color_scheme"
-              data-lang="ko"
-              crossorigin="anonymous"
-              async>
-      </script>
-    </div>
-  </div>
-</section>
-"""
-
-
 def _build_dashboard_fragment(data: ReportData) -> str:
     def fig_html(fig: go.Figure) -> str:
         return _render_figure_html(fig)
@@ -2515,7 +2465,6 @@ def _build_dashboard_fragment(data: ReportData) -> str:
         portfolio_alloc_html,
         account_summary_html,
         holdings_section_html,
-        _build_adsense_section(),
     ])
 
     if dividends_section_html:
@@ -2532,9 +2481,6 @@ def _build_dashboard_fragment(data: ReportData) -> str:
                 extra_class="fa-card-wide",
             )
         )
-
-    # 맨 하단 댓글창 추가
-    blocks.append(_build_comments_section())
 
     styles = """
 <style>

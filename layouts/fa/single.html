@@ -1,7 +1,7 @@
 {{ define "main" }}
 <style>
   .wrapper.fa-dashboard-wrapper {
-    max-width: min(1200px, calc(100vw - 1.5rem)) !important;
+    max-width: min(1000px, calc(100vw - 1.5rem)) !important;
     width: 100% !important;
     padding-left: 0.75rem !important;
     padding-right: 0.75rem !important;
@@ -19,13 +19,23 @@
     }
   }
 </style>
-<div class="wrapper fa-dashboard-wrapper">
+<div class="wrapper fa-dashboard-wrapper post">
   <main class="page-content" aria-label="Content">
     <article>
+      <header class="header">
+        <h1 class="header-title">{{ .Title }}</h1>
+        {{ with .Description }}
+        <p class="header-description" style="color: #64748b; margin-top: 4px; font-size: 1rem;">{{ . }}</p>
+        {{ end }}
+      </header>
       <div class="page-content fa-dashboard-content">
         {{ .Content }}
       </div>
+      <div class="post-ads post-ads--bottom" style="margin-top: 24px;">
+        {{ partial "adsense.html" . }}
+      </div>
     </article>
+    {{- partial "comments.html" . -}}
   </main>
 </div>
 {{ end }}
