@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.48"
+APP_VERSION = "v2.7.49"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -336,6 +336,170 @@ def _build_day_change_modal(data: ReportData, eval_day_change: float) -> str:
 """
 
 
+def _build_invest_change_modal(data: ReportData, cur_inv: float, prev_inv: float, inv_month_change: float) -> str:
+    """총 투자금의 전월대비 증감액(당월 신규 입금 내역)을 보여주는 팝업 모달"""
+    month_prefix = data.month_end.strftime("%Y-%m")
+    month_label = data.month_end.strftime("%Y.%m")
+
+    month_rec = data.records[data.records["일자"].dt.strftime("%Y-%m") == month_prefix].copy() if "일자" in data.records.columns else pd.DataFrame()
+    invest_rec = month_rec[month_rec["투자금"].notna() & (month_rec["투자금"] > 0)].copy() if not month_rec.empty else pd.DataFrame()
+
+    table_rows = []
+    if not invest_rec.empty:
+        invest_rec = invest_rec.sort_values(by=["일자", "투자금"], ascending=[True, False])
+        for _, r in invest_rec.iterrows():
+            d_str = r["일자"].strftime("%Y.%m.%d") if pd.notna(r["일자"]) else "-"
+            acct_lbl = update_fa.account_label(str(r["계좌"]))
+            sym_or_kind = str(r["종목"] or r["구분"] or "입금").strip()
+            dep_val = _as_float(r["투자금"]) or 0.0
+            memo = str(r["비고"] or "").strip()
+
+            table_rows.append(
+                f"<tr>"
+                f"  <td class='fa-num'>{d_str}</td>"
+                f"  <td><span class='fa-chip-account'>{html.escape(acct_lbl)}</span></td>"
+                f"  <td><strong>{html.escape(sym_or_kind)}</strong></td>"
+                f"  <td class='text-right fa-num fa-font-bold fa-num-positive'>+{dep_val:,.0f}원</td>"
+                f"  <td style='color:var(--fa-text-muted); font-size:0.82rem;'>{html.escape(memo)}</td>"
+                f"</tr>"
+            )
+
+    if not table_rows:
+        table_rows.append("<tr><td colspan='5' class='text-center fa-empty-text' style='padding:20px;'>당월 신규 입금(투자) 내역이 없습니다.</td></tr>")
+
+    net_cls = "fa-num-positive" if inv_month_change > 0 else "fa-num-negative" if inv_month_change < 0 else ""
+
+    return f"""
+<div id="fa-invest-change-modal" class="fa-modal-overlay" onclick="if(event.target===this)closeInvestChangeModal()">
+  <div class="fa-modal-card">
+    <div class="fa-modal-header">
+      <h3 class="fa-modal-title">💰 {month_label}월 투자금(신규 입금) 변동 상세</h3>
+      <button type="button" class="fa-modal-close" onclick="closeInvestChangeModal()" aria-label="닫기">✕</button>
+    </div>
+    <div class="fa-modal-body">
+      <div class="fa-modal-summary-grid">
+        <div class="fa-modal-stat-box">
+          <div class="fa-modal-stat-lbl">당월 누적 총 투자금</div>
+          <div class="fa-modal-stat-val">{cur_inv:,.0f}원</div>
+        </div>
+        <div class="fa-modal-stat-box">
+          <div class="fa-modal-stat-lbl">전월 말 누적 투자금</div>
+          <div class="fa-modal-stat-val" style="color:var(--fa-text-muted);">{prev_inv:,.0f}원</div>
+        </div>
+        <div class="fa-modal-stat-box">
+          <div class="fa-modal-stat-lbl">전월대비 순 증감액</div>
+          <div class="fa-modal-stat-val {net_cls}">{inv_month_change:+,.0f}원</div>
+        </div>
+      </div>
+      <div class="fa-table-wrapper">
+        <table class="fa-table fa-table-modal-detail">
+          <thead>
+            <tr>
+              <th>일자</th>
+              <th>계좌</th>
+              <th>구분 / 종목</th>
+              <th class="text-right">입금액 (원금)</th>
+              <th>메모</th>
+            </tr>
+          </thead>
+          <tbody>
+            {''.join(table_rows)}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+"""
+
+
+def _build_dividend_change_modal(data: ReportData, cur_div: float, prev_div: float, div_month_change: float) -> str:
+    """월 배당금의 전월대비 증감액(당월 배당 수령 내역)을 보여주는 팝업 모달"""
+    month_prefix = data.month_end.strftime("%Y-%m")
+    month_label = data.month_end.strftime("%Y.%m")
+
+    month_rec = data.records[data.records["일자"].dt.strftime("%Y-%m") == month_prefix].copy() if "일자" in data.records.columns else pd.DataFrame()
+    div_rec = month_rec[month_rec["배당"].notna() & (month_rec["배당"] > 0)].copy() if not month_rec.empty else pd.DataFrame()
+
+    table_rows = []
+    if not div_rec.empty:
+        div_rec = div_rec.sort_values(by=["일자", "배당"], ascending=[True, False])
+        for _, r in div_rec.iterrows():
+            d_str = r["일자"].strftime("%Y.%m.%d") if pd.notna(r["일자"]) else "-"
+            acct_lbl = update_fa.account_label(str(r["계좌"]))
+            sym = str(r["종목"] or "").strip()
+            raw_div = _as_float(r["배당"]) or 0.0
+
+            fx_rate = _as_float(r.get("환율"))
+            if not fx_rate or fx_rate <= 0:
+                fx_rate = float(data.fx_series_full.loc[r["일자"]]) if r["일자"] in data.fx_series_full.index else 1.0
+
+            div_krw = raw_div * fx_rate if r["계좌"] == "usa" else raw_div
+            memo = str(r["비고"] or "").strip()
+
+            foreign_str = f"${raw_div:,.2f}" if r["계좌"] == "usa" else "-"
+
+            table_rows.append(
+                f"<tr>"
+                f"  <td class='fa-num'>{d_str}</td>"
+                f"  <td><span class='fa-chip-account'>{html.escape(acct_lbl)}</span></td>"
+                f"  <td><strong>{html.escape(sym)}</strong></td>"
+                f"  <td class='text-right fa-num fa-font-bold' style='color:var(--fa-purple);'>+{div_krw:,.0f}원</td>"
+                f"  <td class='text-right fa-num fa-hide-mobile' style='color:var(--fa-text-muted); font-size:0.82rem;'>{foreign_str}</td>"
+                f"  <td style='color:var(--fa-text-muted); font-size:0.82rem;'>{html.escape(memo)}</td>"
+                f"</tr>"
+            )
+
+    if not table_rows:
+        table_rows.append("<tr><td colspan='6' class='text-center fa-empty-text' style='padding:20px;'>당월 수령한 배당금 내역이 없습니다.</td></tr>")
+
+    net_cls = "fa-num-positive" if div_month_change > 0 else "fa-num-negative" if div_month_change < 0 else ""
+
+    return f"""
+<div id="fa-dividend-change-modal" class="fa-modal-overlay" onclick="if(event.target===this)closeDividendChangeModal()">
+  <div class="fa-modal-card">
+    <div class="fa-modal-header">
+      <h3 class="fa-modal-title">🎁 {month_label}월 배당금 수령 내역 및 변동 상세</h3>
+      <button type="button" class="fa-modal-close" onclick="closeDividendChangeModal()" aria-label="닫기">✕</button>
+    </div>
+    <div class="fa-modal-body">
+      <div class="fa-modal-summary-grid">
+        <div class="fa-modal-stat-box">
+          <div class="fa-modal-stat-lbl">당월 배당금 합계</div>
+          <div class="fa-modal-stat-val" style="color:var(--fa-purple);">{cur_div:,.0f}원</div>
+        </div>
+        <div class="fa-modal-stat-box">
+          <div class="fa-modal-stat-lbl">전월 배당금 합계</div>
+          <div class="fa-modal-stat-val" style="color:var(--fa-text-muted);">{prev_div:,.0f}원</div>
+        </div>
+        <div class="fa-modal-stat-box">
+          <div class="fa-modal-stat-lbl">전월대비 배당 증감</div>
+          <div class="fa-modal-stat-val {net_cls}">{div_month_change:+,.0f}원</div>
+        </div>
+      </div>
+      <div class="fa-table-wrapper">
+        <table class="fa-table fa-table-modal-detail">
+          <thead>
+            <tr>
+              <th>일자</th>
+              <th>계좌</th>
+              <th>종목</th>
+              <th class="text-right">배당금 (원화)</th>
+              <th class="text-right fa-hide-mobile">외화금액</th>
+              <th>메모</th>
+            </tr>
+          </thead>
+          <tbody>
+            {''.join(table_rows)}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+"""
+
+
 def _build_kpi_row(data: ReportData) -> str:
     total_row = None
     if not data.summary_df.empty and "계좌" in data.summary_df.columns:
@@ -378,13 +542,19 @@ def _build_kpi_row(data: ReportData) -> str:
 
     # 2. 총 투자액 전월대비 증감액
     inv_month_change = 0.0
+    cur_inv_val = invest or 0.0
+    prev_inv_val = cur_inv_val
     if data.invest_series is not None and not data.invest_series.empty:
         inv_s = data.invest_series.dropna()
         monthly_inv = inv_s.groupby(inv_s.index.to_period("M")).last()
         if len(monthly_inv) >= 2:
-            inv_month_change = float(monthly_inv.iloc[-1] - monthly_inv.iloc[-2])
+            cur_inv_val = float(monthly_inv.iloc[-1])
+            prev_inv_val = float(monthly_inv.iloc[-2])
+            inv_month_change = cur_inv_val - prev_inv_val
         elif len(monthly_inv) == 1:
-            inv_month_change = float(monthly_inv.iloc[-1])
+            cur_inv_val = float(monthly_inv.iloc[-1])
+            prev_inv_val = 0.0
+            inv_month_change = cur_inv_val
     inv_state = "positive" if inv_month_change > 0 else "negative" if inv_month_change < 0 else ""
     inv_sub = f"전월대비 {inv_month_change:+,.0f}" if inv_month_change != 0 else "전월대비 0"
 
@@ -402,26 +572,34 @@ def _build_kpi_row(data: ReportData) -> str:
 
     # 5. 월 배당금 전월대비 증감액
     div_month_change = 0.0
+    cur_div_val = monthly_div or 0.0
+    prev_div_val = 0.0
     if data.dividends_pivot is not None and not data.dividends_pivot.empty:
         monthly_div_s = data.dividends_pivot.sort_index().sum(axis=1)
         if len(monthly_div_s) >= 2:
-            div_month_change = float(monthly_div_s.iloc[-1] - monthly_div_s.iloc[-2])
+            cur_div_val = float(monthly_div_s.iloc[-1])
+            prev_div_val = float(monthly_div_s.iloc[-2])
+            div_month_change = cur_div_val - prev_div_val
         elif len(monthly_div_s) == 1:
-            div_month_change = float(monthly_div_s.iloc[-1])
+            cur_div_val = float(monthly_div_s.iloc[-1])
+            prev_div_val = 0.0
+            div_month_change = cur_div_val
     div_state = "positive" if div_month_change > 0 else "negative" if div_month_change < 0 else ""
     div_sub = f"전월대비 {div_month_change:+,.0f}" if div_month_change != 0 else "전월대비 0"
 
-    modal_html = _build_day_change_modal(data, eval_day_change)
+    day_modal_html = _build_day_change_modal(data, eval_day_change)
+    invest_modal_html = _build_invest_change_modal(data, cur_inv_val, prev_inv_val, inv_month_change)
+    dividend_modal_html = _build_dividend_change_modal(data, cur_div_val, prev_div_val, div_month_change)
 
     cards = [
         _kpi_card("총 평가금", _fmt_krw(valuation), eval_sub, sub_state=eval_state, sub_onclick="openDayChangeModal()"),
-        _kpi_card("총 투자금", _fmt_krw(invest), inv_sub, sub_state=inv_state),
+        _kpi_card("총 투자금", _fmt_krw(invest), inv_sub, sub_state=inv_state, sub_onclick="openInvestChangeModal()"),
         _kpi_card("총 수익금", f"<span class='fa-num-{profit_state}'>{profit_str}</span>", profit_sub, state=profit_state, sub_state=profit_day_state, sub_onclick="openDayChangeModal()"),
         _kpi_card("총 수익률", f"<span class='fa-num-{return_state}'>{return_str}</span>", rate_sub, state=return_state, sub_state=rate_day_state, sub_onclick="openDayChangeModal()"),
-        _kpi_card("월 배당금", _fmt_krw(monthly_div), div_sub, sub_state=div_state),
+        _kpi_card("월 배당금", _fmt_krw(monthly_div), div_sub, sub_state=div_state, sub_onclick="openDividendChangeModal()"),
         _kpi_card("USD/KRW", _fmt_number(fx, 2, ""), fx_change_text, fx_state),
     ]
-    return "<div class=\"fa-kpi-grid\">" + "".join(cards) + "</div>" + modal_html
+    return "<div class=\"fa-kpi-grid\">" + "".join(cards) + "</div>" + day_modal_html + invest_modal_html + dividend_modal_html
 
 
 def _build_market_kpi_row() -> str:
@@ -3547,23 +3725,37 @@ html.dark .fa-dashboard,
 
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <script>
-window.openDayChangeModal = function() {
-  const modal = document.getElementById("fa-day-change-modal");
+window.openModal = function(id) {
+  const modal = document.getElementById(id);
   if (modal) {
     modal.classList.add("active");
     document.body.style.overflow = "hidden";
   }
 };
-window.closeDayChangeModal = function() {
-  const modal = document.getElementById("fa-day-change-modal");
+window.closeModal = function(id) {
+  const modal = document.getElementById(id);
   if (modal) {
     modal.classList.remove("active");
     document.body.style.overflow = "";
   }
 };
+window.closeAllModals = function() {
+  document.querySelectorAll(".fa-modal-overlay.active").forEach(m => m.classList.remove("active"));
+  document.body.style.overflow = "";
+};
+
+window.openDayChangeModal = function() { window.openModal("fa-day-change-modal"); };
+window.closeDayChangeModal = function() { window.closeModal("fa-day-change-modal"); };
+
+window.openInvestChangeModal = function() { window.openModal("fa-invest-change-modal"); };
+window.closeInvestChangeModal = function() { window.closeModal("fa-invest-change-modal"); };
+
+window.openDividendChangeModal = function() { window.openModal("fa-dividend-change-modal"); };
+window.closeDividendChangeModal = function() { window.closeModal("fa-dividend-change-modal"); };
+
 document.addEventListener("keydown", function(e) {
   if (e.key === "Escape") {
-    window.closeDayChangeModal();
+    window.closeAllModals();
   }
 });
 
