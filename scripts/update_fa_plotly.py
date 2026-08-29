@@ -27,7 +27,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.51"
+APP_VERSION = "v2.7.52"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -640,21 +640,25 @@ def _build_market_chart_modal(market_history_data: Dict[str, Any]) -> str:
     json_str = json.dumps(market_history_data, ensure_ascii=False)
     return f"""
 <div id="marketChartModal" class="fa-modal-overlay" onclick="if(event.target===this)closeMarketModal()">
-  <div class="fa-modal-card" style="max-width: 840px;">
+  <div class="fa-modal-card" style="max-width: 860px;">
     <div class="fa-modal-header">
       <h3 id="modalChartTitle" class="fa-modal-title">📈 시장 지수 / 환율 추세</h3>
       <button type="button" class="fa-modal-close" onclick="closeMarketModal()" aria-label="닫기">✕</button>
     </div>
     <div class="fa-modal-body">
-      <div class="period-tabs" style="display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap;">
-        <button type="button" class="tab-btn" onclick="changeMarketPeriod('1M')">1개월</button>
-        <button type="button" class="tab-btn" onclick="changeMarketPeriod('3M')">3개월</button>
-        <button type="button" class="tab-btn active" onclick="changeMarketPeriod('6M')">6개월</button>
-        <button type="button" class="tab-btn" onclick="changeMarketPeriod('1Y')">1년</button>
-        <button type="button" class="tab-btn" onclick="changeMarketPeriod('5Y')">5년</button>
-        <button type="button" class="tab-btn" onclick="changeMarketPeriod('10Y')">10년</button>
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 14px;">
+        <div class="period-tabs" style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 0;">
+          <button type="button" class="tab-btn" onclick="changeMarketPeriod('1M')">1개월</button>
+          <button type="button" class="tab-btn" onclick="changeMarketPeriod('3M')">3개월</button>
+          <button type="button" class="tab-btn active" onclick="changeMarketPeriod('6M')">6개월</button>
+          <button type="button" class="tab-btn" onclick="changeMarketPeriod('1Y')">1년</button>
+          <button type="button" class="tab-btn" onclick="changeMarketPeriod('5Y')">5년</button>
+          <button type="button" class="tab-btn" onclick="changeMarketPeriod('10Y')">10년</button>
+        </div>
+        <div id="modalPeriodStats" style="display: flex; gap: 12px; font-size: 0.84rem; color: var(--fa-text-muted);">
+        </div>
       </div>
-      <div id="plotlyMarketChart" style="width: 100%; height: 400px; min-height: 400px;"></div>
+      <div id="plotlyMarketChart" style="width: 100%; height: 420px; min-height: 420px;"></div>
     </div>
   </div>
 </div>
@@ -3886,34 +3890,89 @@ window.renderMarketPlotlyChart = function(period) {
 
   const dates = currentMarketData.dates.slice(-sliceCount);
   const closes = currentMarketData.closes.slice(-sliceCount);
+  if (!closes.length) return;
+
+  let maxVal = -Infinity, minVal = Infinity;
+  let maxIdx = 0, minIdx = 0;
+  for (let i = 0; i < closes.length; i++) {
+    const v = closes[i];
+    if (v > maxVal) { maxVal = v; maxIdx = i; }
+    if (v < minVal) { minVal = v; minIdx = i; }
+  }
+  const maxDate = dates[maxIdx];
+  const minDate = dates[minIdx];
 
   const firstVal = closes[0] || 0;
   const lastVal = closes[closes.length - 1] || 0;
+  const periodReturn = firstVal > 0 ? ((lastVal - firstVal) / firstVal) * 100 : 0;
   const isUp = lastVal >= firstVal;
   const lineColor = isUp ? '#e53e3e' : '#3182ce';
-  const fillColor = isUp ? 'rgba(229, 62, 62, 0.08)' : 'rgba(49, 130, 206, 0.08)';
 
-  const trace = {
+  // 상단 요약 통계 칩 업데이트
+  const statsEl = document.getElementById('modalPeriodStats');
+  if (statsEl) {
+    const retCls = periodReturn >= 0 ? 'fa-num-positive' : 'fa-num-negative';
+    statsEl.innerHTML = `
+      <span>🔴 최고: <strong class="fa-num-positive">${maxVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong></span>
+      <span>🔵 최저: <strong class="fa-num-negative">${minVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong></span>
+      <span>기간등락: <strong class="${retCls}">${periodReturn >= 0 ? '+' : ''}${periodReturn.toFixed(2)}%</strong></span>
+    `;
+  }
+
+  // y축 범위 (최솟값~최댓값 오토스케일 + 12% 여백)
+  let ySpan = maxVal - minVal;
+  if (ySpan === 0) ySpan = maxVal * 0.05 || 1;
+  const yPad = ySpan * 0.12;
+  const yMin = minVal - yPad;
+  const yMax = maxVal + yPad;
+
+  const mainTrace = {
+    name: '종가',
     x: dates,
     y: closes,
     type: 'scatter',
     mode: 'lines',
-    line: { color: lineColor, width: 2.2 },
-    fill: 'tozeroy',
-    fillcolor: fillColor,
+    line: { color: lineColor, width: 2.4 },
     hovertemplate: '%{x}: %{y:,.2f}<extra></extra>'
   };
 
+  const pointTrace = {
+    name: '최고/최저',
+    x: [maxDate, minDate],
+    y: [maxVal, minVal],
+    type: 'scatter',
+    mode: 'markers+text',
+    marker: {
+      size: [8, 8],
+      color: ['#e53e3e', '#3182ce'],
+      line: { color: '#ffffff', width: 2 }
+    },
+    text: [
+      `최고 ${maxVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`,
+      `최저 ${minVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+    ],
+    textposition: ['top center', 'bottom center'],
+    textfont: { size: 12, color: ['#e53e3e', '#3182ce'], family: 'inherit' },
+    hoverinfo: 'none'
+  };
+
   const layout = {
-    margin: { t: 15, r: 20, l: 50, b: 35 },
+    margin: { t: 30, r: 25, l: 55, b: 35 },
     paper_bgcolor: 'transparent',
     plot_bgcolor: 'transparent',
+    showlegend: false,
     xaxis: { color: '#94a3b8', gridcolor: 'rgba(148, 163, 184, 0.15)', fixedrange: true },
-    yaxis: { color: '#94a3b8', gridcolor: 'rgba(148, 163, 184, 0.15)', autorange: true, fixedrange: true },
+    yaxis: {
+      color: '#94a3b8',
+      gridcolor: 'rgba(148, 163, 184, 0.15)',
+      range: [yMin, yMax],
+      fixedrange: true,
+      tickformat: ',.2f'
+    },
     hovermode: 'x'
   };
 
-  Plotly.newPlot('plotlyMarketChart', [trace], layout, { responsive: true, displayModeBar: false });
+  Plotly.newPlot('plotlyMarketChart', [mainTrace, pointTrace], layout, { responsive: true, displayModeBar: false });
 };
 
 window.closeMarketModal = function() {
