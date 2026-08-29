@@ -2073,6 +2073,85 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 """
 
 
+def init_market_history_db():
+    """시장 지표(환율/지수) 과거 10년 시계열 캐시 테이블 초기화"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS market_history (
+                symbol TEXT NOT NULL,
+                date TEXT NOT NULL,
+                close REAL NOT NULL,
+                PRIMARY KEY (symbol, date)
+            )
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_sym_date ON market_history(symbol, date)")
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"⚠️ [market_history] 테이블 초기화 실패: {e}")
+
+
+def fetch_and_save_market_history(symbol: str):
+    """Yahoo Finance API를 통해 과거 일별 종가를 가져와 DB에 스마트 캐싱"""
+    import urllib.request
+    import urllib.parse
+    from datetime import datetime
+
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(symbol)}?range=10y&interval=1d"
+    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+
+    try:
+        with urllib.request.urlopen(req, timeout=12) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            result = data['chart']['result'][0]
+            timestamps = result.get('timestamp', [])
+            closes = result['indicators']['quote'][0].get('close', [])
+
+            rows = []
+            for ts, close in zip(timestamps, closes):
+                if close is not None:
+                    dt = datetime.fromtimestamp(ts).strftime('%Y-%m-%d')
+                    rows.append((symbol, dt, round(float(close), 2)))
+
+            if rows:
+                conn = get_db_connection()
+                cur = conn.cursor()
+                cur.executemany("INSERT OR REPLACE INTO market_history VALUES (?, ?, ?)", rows)
+                conn.commit()
+                conn.close()
+                print(f"[{datetime.now()}] {symbol} 과거 시계열 {len(rows)}건 DB 저장 완료")
+    except Exception as e:
+        print(f"[{datetime.now()}] {symbol} 데이터 수집 실패: {e}")
+
+
+def get_market_history(symbol: str) -> Dict[str, Any]:
+    """스마트 캐시된 시장 지표 10년 시계열 조회 (부족 시 야후 파이낸스 자동 갱신)"""
+    from datetime import datetime
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("SELECT MAX(date), COUNT(*) FROM market_history WHERE symbol = ?", (symbol,))
+    row = cur.fetchone()
+    last_date = row[0] if row else None
+    count = row[1] if row else 0
+
+    today = datetime.now().strftime('%Y-%m-%d')
+    if not last_date or count < 30 or last_date < today:
+        fetch_and_save_market_history(symbol)
+
+    cur.execute("SELECT date, close FROM market_history WHERE symbol = ? ORDER BY date ASC", (symbol,))
+    records = cur.fetchall()
+    conn.close()
+
+    return {
+        "symbol": symbol,
+        "dates": [r[0] for r in records],
+        "closes": [r[1] for r in records]
+    }
+
+
 class FAAdminRequestHandler(SimpleHTTPRequestHandler):
     def _send_json(self, data: Any, status: int = 200):
         self.send_response(status)
@@ -2105,6 +2184,13 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
         if path == "/api/build-dashboard":
             run_dashboard_update()
             self._send_json({"ok": True})
+            return
+
+        if path == "/api/market/history":
+            qs = parse_qs(parsed.query)
+            symbol = qs.get("symbol", ["USDKRW=X"])[0]
+            data = get_market_history(symbol)
+            self._send_json(data)
             return
 
         if path == "/api/accounts/allocations":
@@ -2428,6 +2514,7 @@ def main():
     args = parser.parse_args()
 
     ensure_db_normalized()
+    init_market_history_db()
 
     server_address = (args.host, args.port)
     httpd = HTTPServer(server_address, FAAdminRequestHandler)

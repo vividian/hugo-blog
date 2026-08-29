@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.49"
+APP_VERSION = "v2.7.50"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -597,9 +597,34 @@ def _build_kpi_row(data: ReportData) -> str:
         _kpi_card("총 수익금", f"<span class='fa-num-{profit_state}'>{profit_str}</span>", profit_sub, state=profit_state, sub_state=profit_day_state, sub_onclick="openDayChangeModal()"),
         _kpi_card("총 수익률", f"<span class='fa-num-{return_state}'>{return_str}</span>", rate_sub, state=return_state, sub_state=rate_day_state, sub_onclick="openDayChangeModal()"),
         _kpi_card("월 배당금", _fmt_krw(monthly_div), div_sub, sub_state=div_state, sub_onclick="openDividendChangeModal()"),
-        _kpi_card("USD/KRW", _fmt_number(fx, 2, ""), fx_change_text, fx_state),
+        _kpi_card("USD/KRW", _fmt_number(fx, 2, ""), fx_change_text, fx_state, sub_onclick="openMarketModal('USDKRW=X', 'USD/KRW 원/달러 환율')"),
     ]
     return "<div class=\"fa-kpi-grid\">" + "".join(cards) + "</div>" + day_modal_html + invest_modal_html + dividend_modal_html
+
+
+def _build_market_chart_modal() -> str:
+    """환율/지수 10년 시계열 인터랙티브 차트 모달"""
+    return """
+<div id="marketChartModal" class="fa-modal-overlay" onclick="if(event.target===this)closeMarketModal()">
+  <div class="fa-modal-card" style="max-width: 840px;">
+    <div class="fa-modal-header">
+      <h3 id="modalChartTitle" class="fa-modal-title">📈 시장 지수 / 환율 추세</h3>
+      <button type="button" class="fa-modal-close" onclick="closeMarketModal()" aria-label="닫기">✕</button>
+    </div>
+    <div class="fa-modal-body">
+      <div class="period-tabs" style="display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap;">
+        <button type="button" class="tab-btn" onclick="changeMarketPeriod('1M')">1개월</button>
+        <button type="button" class="tab-btn" onclick="changeMarketPeriod('3M')">3개월</button>
+        <button type="button" class="tab-btn active" onclick="changeMarketPeriod('6M')">6개월</button>
+        <button type="button" class="tab-btn" onclick="changeMarketPeriod('1Y')">1년</button>
+        <button type="button" class="tab-btn" onclick="changeMarketPeriod('5Y')">5년</button>
+        <button type="button" class="tab-btn" onclick="changeMarketPeriod('10Y')">10년</button>
+      </div>
+      <div id="plotlyMarketChart" style="width: 100%; height: 400px; min-height: 400px;"></div>
+    </div>
+  </div>
+</div>
+"""
 
 
 def _build_market_kpi_row() -> str:
@@ -623,9 +648,10 @@ def _build_market_kpi_row() -> str:
                 _fmt_number(current, decimals, value_suffix),
                 change_text,
                 state,
+                sub_onclick=f"openMarketModal('{ticker}', '{cfg['label']}')",
             )
         )
-    return "<div class=\"fa-kpi-grid fa-kpi-grid-market\">" + "".join(cards) + "</div>"
+    return "<div class=\"fa-kpi-grid fa-kpi-grid-market\">" + "".join(cards) + "</div>" + _build_market_chart_modal()
 
 
 def _build_assets_trend(account_df: pd.DataFrame) -> go.Figure:
@@ -3720,6 +3746,14 @@ html.dark .fa-dashboard,
   white-space: nowrap;
 }
 
+.period-tabs { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+.period-tabs .tab-btn {
+  background: var(--fa-table-header-bg); border: 1px solid var(--fa-border); color: var(--fa-text-muted);
+  padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 600; transition: all 0.15s;
+}
+.period-tabs .tab-btn:hover { background: var(--fa-table-hover); color: var(--fa-text-main); }
+.period-tabs .tab-btn.active { background: #3182ce; border-color: #3182ce; color: #ffffff; }
+
 .fa-empty-text { color: var(--fa-text-muted); font-size: 0.9rem; margin: 8px 0; }
 </style>
 
@@ -3752,6 +3786,90 @@ window.closeInvestChangeModal = function() { window.closeModal("fa-invest-change
 
 window.openDividendChangeModal = function() { window.openModal("fa-dividend-change-modal"); };
 window.closeDividendChangeModal = function() { window.closeModal("fa-dividend-change-modal"); };
+
+let currentMarketData = null;
+const BACKEND_API_URL = "https://fa-admin.vividian.net";
+
+window.openMarketModal = async function(symbol, title) {
+  const titleEl = document.getElementById('modalChartTitle');
+  if (titleEl) titleEl.innerText = "📈 " + title + " 10년 추세";
+  window.openModal('marketChartModal');
+
+  const container = document.getElementById('plotlyMarketChart');
+  if (container) {
+    container.innerHTML = "<div style='text-align:center; padding:140px 0; color:var(--fa-text-muted); font-size:0.95rem;'><span class='fa-spin' style='font-size:1.5rem;'>⏳</span><br><br>과거 시계열 데이터 불러오는 중...</div>";
+  }
+
+  document.querySelectorAll('#marketChartModal .period-tabs .tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.innerText.trim() === '6개월');
+  });
+
+  try {
+    const res = await fetch(`${BACKEND_API_URL}/api/market/history?symbol=${encodeURIComponent(symbol)}`);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    currentMarketData = await res.json();
+    renderMarketPlotlyChart('6M');
+  } catch (err) {
+    if (container) {
+      container.innerHTML = "<div style='text-align:center; padding:140px 0; color:var(--fa-loss); font-size:0.95rem;'>⚠️ 데이터를 불러오지 못했습니다.<br><small style='color:var(--fa-text-muted);'>(" + err.message + ")</small></div>";
+    }
+  }
+};
+
+window.changeMarketPeriod = function(period) {
+  const map = {'1M':'1개월', '3M':'3개월', '6M':'6개월', '1Y':'1년', '5Y':'5년', '10Y':'10년'};
+  document.querySelectorAll('#marketChartModal .period-tabs .tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.innerText.trim() === map[period]);
+  });
+  renderMarketPlotlyChart(period);
+};
+
+window.renderMarketPlotlyChart = function(period) {
+  if (!currentMarketData || !currentMarketData.dates || !currentMarketData.dates.length) return;
+  const total = currentMarketData.dates.length;
+  let sliceCount = total;
+  if (period === '1M') sliceCount = 22;
+  else if (period === '3M') sliceCount = 66;
+  else if (period === '6M') sliceCount = 130;
+  else if (period === '1Y') sliceCount = 252;
+  else if (period === '5Y') sliceCount = 252 * 5;
+  else if (period === '10Y') sliceCount = total;
+
+  const dates = currentMarketData.dates.slice(-sliceCount);
+  const closes = currentMarketData.closes.slice(-sliceCount);
+
+  const firstVal = closes[0] || 0;
+  const lastVal = closes[closes.length - 1] || 0;
+  const isUp = lastVal >= firstVal;
+  const lineColor = isUp ? '#e53e3e' : '#3182ce';
+  const fillColor = isUp ? 'rgba(229, 62, 62, 0.08)' : 'rgba(49, 130, 206, 0.08)';
+
+  const trace = {
+    x: dates,
+    y: closes,
+    type: 'scatter',
+    mode: 'lines',
+    line: { color: lineColor, width: 2.2 },
+    fill: 'tozeroy',
+    fillcolor: fillColor,
+    hovertemplate: '%{x}: %{y:,.2f}<extra></extra>'
+  };
+
+  const layout = {
+    margin: { t: 15, r: 20, l: 50, b: 35 },
+    paper_bgcolor: 'transparent',
+    plot_bgcolor: 'transparent',
+    xaxis: { color: '#94a3b8', gridcolor: 'rgba(148, 163, 184, 0.15)', fixedrange: true },
+    yaxis: { color: '#94a3b8', gridcolor: 'rgba(148, 163, 184, 0.15)', autorange: true, fixedrange: true },
+    hovermode: 'x'
+  };
+
+  Plotly.newPlot('plotlyMarketChart', [trace], layout, { responsive: true, displayModeBar: false });
+};
+
+window.closeMarketModal = function() {
+  window.closeModal('marketChartModal');
+};
 
 document.addEventListener("keydown", function(e) {
   if (e.key === "Escape") {
