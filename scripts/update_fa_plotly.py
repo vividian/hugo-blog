@@ -27,7 +27,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.53"
+APP_VERSION = "v2.7.54"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -2402,6 +2402,56 @@ def _build_report_data(records: pd.DataFrame) -> ReportData:
     )
 
 
+def _build_adsense_section() -> str:
+    """Google AdSense 반응형 광고 섹션"""
+    return """
+<section class="fa-card fa-card-wide fa-ad-card" style="padding: 16px 20px; text-align: center; overflow: hidden;">
+  <div style="font-size: 0.72rem; color: var(--fa-text-sub); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">ADVERTISEMENT</div>
+  <div class="adsense-placeholder" style="min-height: 90px; display: flex; justify-content: center; align-items: center;">
+    <ins class="adsbygoogle"
+         style="display:block; width:100%; text-align:center;"
+         data-ad-layout="in-article"
+         data-ad-format="fluid"
+         data-ad-client="ca-pub-9349922731061739"
+         data-ad-slot="4024915460"></ins>
+  </div>
+  <script>
+    (adsbygoogle = window.adsbygoogle || []).push({});
+  </script>
+</section>
+"""
+
+
+def _build_comments_section() -> str:
+    """Giscus 깃허브 기반 댓글창 섹션"""
+    return """
+<section class="fa-card fa-card-wide fa-comments-card">
+  <header class="fa-card-head">
+    <h2>💬 댓글 & 의견 공유</h2>
+  </header>
+  <div class="fa-card-body" style="padding: 20px;">
+    <div class="comments__body">
+      <script src="https://giscus.app/client.js"
+              data-repo="vividian/hugo-blog"
+              data-repo-id="R_kgDOQKamJQ"
+              data-category="blog-comments"
+              data-category-id="DIC_kwDOQKamJc4CxJv5"
+              data-mapping="pathname"
+              data-strict="0"
+              data-reactions-enabled="1"
+              data-emit-metadata="0"
+              data-input-position="bottom"
+              data-theme="preferred_color_scheme"
+              data-lang="ko"
+              crossorigin="anonymous"
+              async>
+      </script>
+    </div>
+  </div>
+</section>
+"""
+
+
 def _build_dashboard_fragment(data: ReportData) -> str:
     def fig_html(fig: go.Figure) -> str:
         return _render_figure_html(fig)
@@ -2465,6 +2515,7 @@ def _build_dashboard_fragment(data: ReportData) -> str:
         portfolio_alloc_html,
         account_summary_html,
         holdings_section_html,
+        _build_adsense_section(),
     ])
 
     if dividends_section_html:
@@ -2482,13 +2533,16 @@ def _build_dashboard_fragment(data: ReportData) -> str:
             )
         )
 
+    # 맨 하단 댓글창 추가
+    blocks.append(_build_comments_section())
+
     styles = """
 <style>
 /* =========================================================
    FA Modern Fintech Dashboard Design System
    ========================================================= */
 .fa-dashboard {
-  max-width: 1200px;
+  max-width: 1000px;
   width: 100%;
   margin: 0 auto;
   --fa-bg: transparent;
@@ -4175,11 +4229,12 @@ def _wrap_standalone_html(content_html: str, title: str) -> str:
             "  <meta charset=\"utf-8\">",
             "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, user-scalable=yes, maximum-scale=5.0\">",
             f"  <title>{html.escape(title)}</title>",
+            "  <script async src=\"https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9349922731061739\" crossorigin=\"anonymous\"></script>",
             "  <script src=\"https://cdn.plot.ly/plotly-2.35.2.min.js\"></script>",
             "  <style>",
             "    :root { color-scheme: light; }",
             "    body { margin: 0; background: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif; }",
-            "    .fa-standalone-wrap { max-width: 1200px; margin: 0 auto; padding: 20px 16px 40px; }",
+            "    .fa-standalone-wrap { max-width: 1000px; margin: 0 auto; padding: 20px 16px 40px; }",
             "  </style>",
             "</head>",
             "<body>",
