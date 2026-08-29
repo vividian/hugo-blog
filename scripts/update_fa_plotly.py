@@ -27,7 +27,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.52"
+APP_VERSION = "v2.7.53"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -696,20 +696,49 @@ def _build_market_kpi_row() -> str:
     return "<div class=\"fa-kpi-grid fa-kpi-grid-market\">" + "".join(cards) + "</div>" + _build_market_chart_modal(market_history_data)
 
 
-def _build_assets_trend(account_df: pd.DataFrame) -> go.Figure:
+def _build_assets_trend(account_df: pd.DataFrame, period: str = "1Y") -> go.Figure:
     fig = go.Figure()
-    for idx, column in enumerate(account_df.columns):
+    df = account_df.iloc[-12:] if period == "1Y" and len(account_df) > 12 else account_df.copy()
+
+    for idx, column in enumerate(df.columns):
         label = update_fa.account_label(column)
         fig.add_trace(
             go.Scatter(
-                x=account_df.index,
-                y=account_df[column],
+                x=df.index,
+                y=df[column],
                 mode="lines",
                 name=label,
                 line=dict(color=_palette_color(idx), width=2.5),
                 hovertemplate="%{x|%Y-%m}: %{y:,.0f}<extra>%{fullData.name}</extra>",
             )
         )
+
+    # 전체 합산 최고점 표시
+    if not df.empty:
+        total_eval = df.sum(axis=1)
+        max_val = total_eval.max()
+        max_idx = total_eval.idxmax()
+        max_str = f"합계최고 {max_val/100000000:.2f}억" if max_val >= 100000000 else f"합계최고 {max_val:,.0f}"
+
+        # 최고점 점선 수직선 또는 뱃지 마커
+        max_acct_col = df.loc[max_idx].idxmax()
+        max_acct_top_val = df.loc[max_idx, max_acct_col]
+
+        fig.add_trace(
+            go.Scatter(
+                x=[max_idx],
+                y=[max_acct_top_val],
+                mode="markers+text",
+                name="합계 최고점",
+                marker=dict(size=8, color="#E53E3E", line=dict(color="#ffffff", width=2)),
+                text=[f"🏆 {max_str}"],
+                textposition="top center",
+                textfont=dict(size=12, color="#E53E3E", family=FONT_FAMILY),
+                hoverinfo="none",
+                showlegend=False,
+            )
+        )
+
     fig.update_layout(
         height=370,
         margin=dict(l=15, r=15, t=65, b=25),
@@ -720,7 +749,7 @@ def _build_assets_trend(account_df: pd.DataFrame) -> go.Figure:
         plot_bgcolor=THEME_BG,
     )
     fig.update_xaxes(tickfont=dict(size=13, family=FONT_FAMILY), showgrid=False)
-    y_max = account_df.max().max() if not account_df.empty else 0
+    y_max = df.max().max() if not df.empty else 0
     tickvals, ticktext = _get_korean_y_ticks(y_max, y_min=0)
     fig.update_yaxes(
         tickmode="array",
@@ -734,14 +763,16 @@ def _build_assets_trend(account_df: pd.DataFrame) -> go.Figure:
     return fig
 
 
-def _build_assets_investment_trend(account_df: pd.DataFrame, invest_series: pd.Series) -> go.Figure:
+def _build_assets_investment_trend(account_df: pd.DataFrame, invest_series: pd.Series, period: str = "1Y") -> go.Figure:
     fig = go.Figure()
-    total_valuation = account_df.sum(axis=1)
-    invest_aligned = update_fa.align_series(invest_series, account_df.index)
+    df = account_df.iloc[-12:] if period == "1Y" and len(account_df) > 12 else account_df.copy()
+
+    total_valuation = df.sum(axis=1)
+    invest_aligned = update_fa.align_series(invest_series, df.index)
 
     fig.add_trace(
         go.Scatter(
-            x=account_df.index,
+            x=df.index,
             y=invest_aligned,
             mode="lines",
             name="누적 투자금",
@@ -751,7 +782,7 @@ def _build_assets_investment_trend(account_df: pd.DataFrame, invest_series: pd.S
     )
     fig.add_trace(
         go.Scatter(
-            x=account_df.index,
+            x=df.index,
             y=total_valuation,
             mode="lines",
             name="누적 평가금",
@@ -759,6 +790,28 @@ def _build_assets_investment_trend(account_df: pd.DataFrame, invest_series: pd.S
             hovertemplate="%{x|%Y-%m}: %{y:,.0f}<extra>누적 평가금</extra>",
         )
     )
+
+    # 최고 평가금 포인트 마커 표시
+    if len(total_valuation) > 0 and not total_valuation.isna().all():
+        max_val = total_valuation.max()
+        max_idx = total_valuation.idxmax()
+        max_str = f"최고 {max_val/100000000:.2f}억" if max_val >= 100000000 else f"최고 {max_val:,.0f}"
+
+        fig.add_trace(
+            go.Scatter(
+                x=[max_idx],
+                y=[max_val],
+                mode="markers+text",
+                name="최고 평가금",
+                marker=dict(size=8, color="#E53E3E", line=dict(color="#ffffff", width=2)),
+                text=[f"🏆 {max_str}"],
+                textposition="top center",
+                textfont=dict(size=12, color="#E53E3E", family=FONT_FAMILY),
+                hoverinfo="none",
+                showlegend=False,
+            )
+        )
+
     fig.update_layout(
         height=370,
         margin=dict(l=15, r=15, t=65, b=25),
@@ -781,6 +834,29 @@ def _build_assets_investment_trend(account_df: pd.DataFrame, invest_series: pd.S
         gridcolor=THEME_GRID,
     )
     return fig
+
+
+def _render_trend_tab_card(title: str, fig_1y: go.Figure, fig_all: go.Figure, card_id: str) -> str:
+    """직전 1년 / 전체 기간 탭이 포함된 차트 카드 HTML"""
+    return f"""
+<section class="fa-card fa-card-wide fa-card-tabs" id="{card_id}">
+  <header class="fa-card-head" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+    <h2>{title}</h2>
+    <div class="fa-holdings-tab-nav" style="display: flex; margin-bottom: 0;">
+      <button type="button" class="fa-tab-btn active" data-target="{card_id}-1y">직전 1년</button>
+      <button type="button" class="fa-tab-btn" data-target="{card_id}-all">전체</button>
+    </div>
+  </header>
+  <div class="fa-card-body">
+    <div id="{card_id}-1y" class="fa-tab-pane active">
+      {_render_figure_html(fig_1y)}
+    </div>
+    <div id="{card_id}-all" class="fa-tab-pane">
+      {_render_figure_html(fig_all)}
+    </div>
+  </div>
+</section>
+"""
 
 
 def _collect_rebalancing_alerts(data: ReportData, threshold_pct: float = 3.0) -> List[Dict[str, Any]]:
@@ -2330,8 +2406,24 @@ def _build_dashboard_fragment(data: ReportData) -> str:
     def fig_html(fig: go.Figure) -> str:
         return _render_figure_html(fig)
 
-    assets_investment_fig = _build_assets_investment_trend(data.account_df, data.invest_series)
-    assets_fig = _build_assets_trend(data.account_df)
+    fig_invest_1y = _build_assets_investment_trend(data.account_df, data.invest_series, period="1Y")
+    fig_invest_all = _build_assets_investment_trend(data.account_df, data.invest_series, period="ALL")
+    invest_trend_card_html = _render_trend_tab_card(
+        update_fa.ACCOUNT_TITLES.get("title_assets_investment_trend", "누적 투자금 vs 평가금 추세"),
+        fig_invest_1y,
+        fig_invest_all,
+        "fa-invest-trend-tabs",
+    )
+
+    fig_assets_1y = _build_assets_trend(data.account_df, period="1Y")
+    fig_assets_all = _build_assets_trend(data.account_df, period="ALL")
+    assets_trend_card_html = _render_trend_tab_card(
+        update_fa.ACCOUNT_TITLES.get("title_assets_trend", "전체 금융자산 추이"),
+        fig_assets_1y,
+        fig_assets_all,
+        "fa-assets-trend-tabs",
+    )
+
     portfolio_alloc_html = _build_portfolio_allocation_section(data.holdings_df, data.symbol_map, fig_html)
     account_summary_html = _build_account_assets_html_table(data.summary_df)
     holdings_section_html = _build_total_holdings_section(data.holdings_df)
@@ -2368,8 +2460,8 @@ def _build_dashboard_fragment(data: ReportData) -> str:
     blocks.extend([
         _build_kpi_row(data),
         _build_market_kpi_row(),
-        _dashboard_card(update_fa.ACCOUNT_TITLES.get("title_assets_investment_trend", "누적 투자금 vs 평가금 추세"), fig_html(assets_investment_fig), extra_class="fa-card-wide"),
-        _dashboard_card(update_fa.ACCOUNT_TITLES.get("title_assets_trend", "전체 금융자산 추이"), fig_html(assets_fig), extra_class="fa-card-wide"),
+        invest_trend_card_html,
+        assets_trend_card_html,
         portfolio_alloc_html,
         account_summary_html,
         holdings_section_html,
