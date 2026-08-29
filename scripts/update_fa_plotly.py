@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import html
+import json
 import re
 import sys
 from dataclasses import dataclass
@@ -26,7 +27,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.50"
+APP_VERSION = "v2.7.51"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -602,9 +603,42 @@ def _build_kpi_row(data: ReportData) -> str:
     return "<div class=\"fa-kpi-grid\">" + "".join(cards) + "</div>" + day_modal_html + invest_modal_html + dividend_modal_html
 
 
-def _build_market_chart_modal() -> str:
+def _fetch_all_market_history() -> Dict[str, Any]:
+    """7대 시장 지표(환율/지수)의 10년 일별 종가 시계열 데이터를 스마트 수집"""
+    import urllib.request
+    import urllib.parse
+    from datetime import datetime
+
+    symbols = ["USDKRW=X", "^GSPC", "^NDX", "SCHD", "IEF", "^KS11", "^KQ11"]
+    result_data = {}
+
+    for sym in symbols:
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(sym)}?range=10y&interval=1d"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+        try:
+            with urllib.request.urlopen(req, timeout=8) as res:
+                data = json.loads(res.read().decode("utf-8"))
+                res_obj = data["chart"]["result"][0]
+                ts = res_obj.get("timestamp", [])
+                closes = res_obj["indicators"]["quote"][0].get("close", [])
+
+                dates = []
+                vals = []
+                for t, c in zip(ts, closes):
+                    if c is not None:
+                        dates.append(datetime.fromtimestamp(t).strftime("%Y-%m-%d"))
+                        vals.append(round(float(c), 2))
+                result_data[sym] = {"dates": dates, "closes": vals}
+        except Exception as e:
+            print(f"(참고) {sym} 10년 시계열 수집 건너뜀: {e}")
+
+    return result_data
+
+
+def _build_market_chart_modal(market_history_data: Dict[str, Any]) -> str:
     """환율/지수 10년 시계열 인터랙티브 차트 모달"""
-    return """
+    json_str = json.dumps(market_history_data, ensure_ascii=False)
+    return f"""
 <div id="marketChartModal" class="fa-modal-overlay" onclick="if(event.target===this)closeMarketModal()">
   <div class="fa-modal-card" style="max-width: 840px;">
     <div class="fa-modal-header">
@@ -624,11 +658,15 @@ def _build_market_chart_modal() -> str:
     </div>
   </div>
 </div>
+<script>
+window.MARKET_HISTORY_DATA = {json_str};
+</script>
 """
 
 
 def _build_market_kpi_row() -> str:
     snapshots = _fetch_market_snapshots()
+    market_history_data = _fetch_all_market_history()
     cards: List[str] = []
     for cfg in MARKET_KPI_CONFIG:
         ticker = cfg["ticker"]
@@ -651,7 +689,7 @@ def _build_market_kpi_row() -> str:
                 sub_onclick=f"openMarketModal('{ticker}', '{cfg['label']}')",
             )
         )
-    return "<div class=\"fa-kpi-grid fa-kpi-grid-market\">" + "".join(cards) + "</div>" + _build_market_chart_modal()
+    return "<div class=\"fa-kpi-grid fa-kpi-grid-market\">" + "".join(cards) + "</div>" + _build_market_chart_modal(market_history_data)
 
 
 def _build_assets_trend(account_df: pd.DataFrame) -> go.Figure:
@@ -3795,6 +3833,17 @@ window.openMarketModal = async function(symbol, title) {
   if (titleEl) titleEl.innerText = "📈 " + title + " 10년 추세";
   window.openModal('marketChartModal');
 
+  // 1. 인라인 캐시 데이터가 있으면 즉시 렌더링 (지연시간 0초)
+  if (window.MARKET_HISTORY_DATA && window.MARKET_HISTORY_DATA[symbol] && window.MARKET_HISTORY_DATA[symbol].dates.length > 0) {
+    currentMarketData = window.MARKET_HISTORY_DATA[symbol];
+    document.querySelectorAll('#marketChartModal .period-tabs .tab-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.innerText.trim() === '6개월');
+    });
+    renderMarketPlotlyChart('6M');
+    return;
+  }
+
+  // 2. 인라인 데이터 부재 시 백엔드 API에서 조회
   const container = document.getElementById('plotlyMarketChart');
   if (container) {
     container.innerHTML = "<div style='text-align:center; padding:140px 0; color:var(--fa-text-muted); font-size:0.95rem;'><span class='fa-spin' style='font-size:1.5rem;'>⏳</span><br><br>과거 시계열 데이터 불러오는 중...</div>";
