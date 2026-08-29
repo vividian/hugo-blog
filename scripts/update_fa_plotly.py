@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.46"
+APP_VERSION = "v2.7.47"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -261,10 +261,8 @@ def _build_kpi_row(data: ReportData) -> str:
             if r is not None and (1.0 + r) != 0:
                 eval_day_change += (val * r / (1.0 + r))
 
-    prev_total_eval = (valuation or 0.0) - eval_day_change
-    eval_day_pct = (eval_day_change / prev_total_eval * 100.0) if prev_total_eval > 0 else 0.0
     eval_state = "positive" if eval_day_change > 0 else "negative" if eval_day_change < 0 else ""
-    eval_sub = f"전일대비 {eval_day_change:+,.0f} ({eval_day_pct:+.2f}%)" if eval_day_change != 0 else "전일대비 0 (0.00%)"
+    eval_sub = f"전일대비 {eval_day_change:+,.0f}" if eval_day_change != 0 else "전일대비 0"
 
     # 2. 총 투자액 전월대비 증감액
     inv_month_change = 0.0
