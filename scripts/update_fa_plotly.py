@@ -26,7 +26,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.47"
+APP_VERSION = "v2.7.48"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -211,17 +211,129 @@ def _fetch_market_snapshots() -> Dict[str, Tuple[Optional[float], Optional[float
     return snapshots
 
 
-def _kpi_card(label: str, value: str, sub: str = "", state: str = "", sub_state: str = "") -> str:
+def _kpi_card(label: str, value: str, sub: str = "", state: str = "", sub_state: str = "", sub_onclick: str = "") -> str:
     state_class = f" {state}" if state else ""
     actual_sub_state = sub_state if sub_state else state
     sub_cls = f" fa-num-{actual_sub_state}" if actual_sub_state in ("positive", "negative") else ""
+    onclick_attr = f" onclick=\"{sub_onclick}\" style=\"cursor:pointer; text-decoration:underline; text-underline-offset:3px;\" title=\"클릭하여 종목별 변동 상세 보기\"" if sub_onclick else ""
     return (
         f"<div class=\"fa-kpi-card{state_class}\">"
         f"<div class=\"fa-kpi-label\">{html.escape(label)}</div>"
         f"<div class=\"fa-kpi-value\">{value}</div>"
-        f"<div class=\"fa-kpi-sub{sub_cls}\">{html.escape(sub)}</div>"
+        f"<div class=\"fa-kpi-sub{sub_cls}\"{onclick_attr}>{html.escape(sub)}</div>"
         "</div>"
     )
+
+
+def _build_day_change_modal(data: ReportData, eval_day_change: float) -> str:
+    """총 평가금/수익금의 전일대비 증감액을 종목별로 상세히 분해하여 보여주는 팝업 모달"""
+    items = []
+    total_gain = 0.0
+    total_loss = 0.0
+    gain_count = 0
+    loss_count = 0
+
+    if not data.holdings_df.empty:
+        for _, hrow in data.holdings_df.iterrows():
+            sym = str(hrow.get("종목", "")).strip()
+            acct = str(hrow.get("계좌", "")).strip()
+            acct_label = update_fa.account_label(acct)
+            qty = _as_float(hrow.get("수량")) or 0.0
+            cur_price = _as_float(hrow.get("현재가")) or 0.0
+            r = _as_float(hrow.get("등락률"))
+            val = _as_float(hrow.get("평가금")) or 0.0
+
+            change_amt = 0.0
+            if r is not None and (1.0 + r) != 0:
+                change_amt = (val * r / (1.0 + r))
+
+            prev_price = (cur_price / (1.0 + r)) if (r is not None and (1.0 + r) != 0) else cur_price
+
+            if change_amt > 0:
+                total_gain += change_amt
+                gain_count += 1
+            elif change_amt < 0:
+                total_loss += change_amt
+                loss_count += 1
+
+            items.append({
+                "account": acct_label,
+                "symbol": sym,
+                "qty": qty,
+                "cur_price": cur_price,
+                "prev_price": prev_price,
+                "rate": r,
+                "change_amt": change_amt,
+            })
+
+    # 변동액 오름차순(손실이 큰 순서대로 먼저 표시)
+    items.sort(key=lambda x: x["change_amt"])
+
+    table_rows = []
+    for item in items:
+        amt = item["change_amt"]
+        r = item["rate"]
+        amt_cls = "fa-num-positive" if amt > 0 else "fa-num-negative" if amt < 0 else ""
+        badge_cls = "fa-badge-positive" if (r or 0) > 0 else "fa-badge-negative" if (r or 0) < 0 else "fa-badge-neutral"
+        rate_str = f"{r * 100:+.2f}%" if r is not None else "-"
+        amt_str = f"{amt:+,.0f}원" if amt != 0 else "0원"
+
+        table_rows.append(
+            f"<tr>"
+            f"  <td><span class='fa-chip-account'>{html.escape(item['account'])}</span></td>"
+            f"  <td><strong>{html.escape(item['symbol'])}</strong></td>"
+            f"  <td class='text-right fa-num'>{item['qty']:,.0f}</td>"
+            f"  <td class='text-right fa-num'>{item['cur_price']:,.0f}</td>"
+            f"  <td class='text-right fa-num'><span class='fa-badge {badge_cls}'>{rate_str}</span></td>"
+            f"  <td class='text-right fa-num {amt_cls} fa-font-bold'>{amt_str}</td>"
+            f"</tr>"
+        )
+
+    net_cls = "fa-num-positive" if eval_day_change > 0 else "fa-num-negative" if eval_day_change < 0 else ""
+
+    return f"""
+<div id="fa-day-change-modal" class="fa-modal-overlay" onclick="if(event.target===this)closeDayChangeModal()">
+  <div class="fa-modal-card">
+    <div class="fa-modal-header">
+      <h3 class="fa-modal-title">📊 전일대비 종목별 손익 변동 상세</h3>
+      <button type="button" class="fa-modal-close" onclick="closeDayChangeModal()" aria-label="닫기">✕</button>
+    </div>
+    <div class="fa-modal-body">
+      <div class="fa-modal-summary-grid">
+        <div class="fa-modal-stat-box">
+          <div class="fa-modal-stat-lbl">당일 순 변동 합계</div>
+          <div class="fa-modal-stat-val {net_cls}">{eval_day_change:+,.0f}원</div>
+        </div>
+        <div class="fa-modal-stat-box">
+          <div class="fa-modal-stat-lbl">하락 종목 ({loss_count}개)</div>
+          <div class="fa-modal-stat-val fa-num-negative">{total_loss:+,.0f}원</div>
+        </div>
+        <div class="fa-modal-stat-box">
+          <div class="fa-modal-stat-lbl">상승 종목 ({gain_count}개)</div>
+          <div class="fa-modal-stat-val fa-num-positive">{total_gain:+,.0f}원</div>
+        </div>
+      </div>
+      <div class="fa-table-wrapper">
+        <table class="fa-table fa-table-modal-detail">
+          <thead>
+            <tr>
+              <th>계좌</th>
+              <th>종목</th>
+              <th class="text-right">보유수량</th>
+              <th class="text-right">현재가</th>
+              <th class="text-right">등락률</th>
+              <th class="text-right">전일대비 변동액</th>
+            </tr>
+          </thead>
+          <tbody>
+            {''.join(table_rows)}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+"""
 
 
 def _build_kpi_row(data: ReportData) -> str:
@@ -299,15 +411,17 @@ def _build_kpi_row(data: ReportData) -> str:
     div_state = "positive" if div_month_change > 0 else "negative" if div_month_change < 0 else ""
     div_sub = f"전월대비 {div_month_change:+,.0f}" if div_month_change != 0 else "전월대비 0"
 
+    modal_html = _build_day_change_modal(data, eval_day_change)
+
     cards = [
-        _kpi_card("총 평가금", _fmt_krw(valuation), eval_sub, sub_state=eval_state),
+        _kpi_card("총 평가금", _fmt_krw(valuation), eval_sub, sub_state=eval_state, sub_onclick="openDayChangeModal()"),
         _kpi_card("총 투자금", _fmt_krw(invest), inv_sub, sub_state=inv_state),
-        _kpi_card("총 수익금", f"<span class='fa-num-{profit_state}'>{profit_str}</span>", profit_sub, state=profit_state, sub_state=profit_day_state),
-        _kpi_card("총 수익률", f"<span class='fa-num-{return_state}'>{return_str}</span>", rate_sub, state=return_state, sub_state=rate_day_state),
+        _kpi_card("총 수익금", f"<span class='fa-num-{profit_state}'>{profit_str}</span>", profit_sub, state=profit_state, sub_state=profit_day_state, sub_onclick="openDayChangeModal()"),
+        _kpi_card("총 수익률", f"<span class='fa-num-{return_state}'>{return_str}</span>", rate_sub, state=return_state, sub_state=rate_day_state, sub_onclick="openDayChangeModal()"),
         _kpi_card("월 배당금", _fmt_krw(monthly_div), div_sub, sub_state=div_state),
         _kpi_card("USD/KRW", _fmt_number(fx, 2, ""), fx_change_text, fx_state),
     ]
-    return "<div class=\"fa-kpi-grid\">" + "".join(cards) + "</div>"
+    return "<div class=\"fa-kpi-grid\">" + "".join(cards) + "</div>" + modal_html
 
 
 def _build_market_kpi_row() -> str:
@@ -3328,11 +3442,131 @@ html.dark .fa-dashboard,
   to { transform: rotate(360deg); }
 }
 
+/* 전일대비 변동 상세 모달 */
+.fa-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(4px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+  padding: 16px;
+}
+.fa-modal-overlay.active {
+  display: flex;
+}
+.fa-modal-card {
+  background: var(--fa-card-bg);
+  border: 1px solid var(--fa-card-border);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 680px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 40px -8px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  animation: faModalPop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes faModalPop {
+  from { opacity: 0; transform: scale(0.96) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.fa-modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--fa-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--fa-card-bg);
+}
+.fa-modal-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--fa-text-main);
+}
+.fa-modal-close {
+  background: transparent;
+  border: none;
+  font-size: 1.25rem;
+  color: var(--fa-text-muted);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all 0.15s;
+}
+.fa-modal-close:hover {
+  background: var(--fa-table-hover);
+  color: var(--fa-text-main);
+}
+.fa-modal-body {
+  padding: 16px 20px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.fa-modal-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+@media (max-width: 540px) {
+  .fa-modal-summary-grid { grid-template-columns: 1fr; }
+}
+.fa-modal-stat-box {
+  background: var(--fa-table-header-bg);
+  border: 1px solid var(--fa-border);
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+.fa-modal-stat-lbl {
+  font-size: 0.76rem;
+  color: var(--fa-text-muted);
+  font-weight: 600;
+}
+.fa-modal-stat-val {
+  font-size: 1.05rem;
+  font-weight: 800;
+  margin-top: 4px;
+}
+.fa-table-modal-detail th,
+.fa-table-modal-detail td {
+  padding: 8px 10px;
+  font-size: 0.86rem;
+  white-space: nowrap;
+}
+
 .fa-empty-text { color: var(--fa-text-muted); font-size: 0.9rem; margin: 8px 0; }
 </style>
 
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <script>
+window.openDayChangeModal = function() {
+  const modal = document.getElementById("fa-day-change-modal");
+  if (modal) {
+    modal.classList.add("active");
+    document.body.style.overflow = "hidden";
+  }
+};
+window.closeDayChangeModal = function() {
+  const modal = document.getElementById("fa-day-change-modal");
+  if (modal) {
+    modal.classList.remove("active");
+    document.body.style.overflow = "";
+  }
+};
+document.addEventListener("keydown", function(e) {
+  if (e.key === "Escape") {
+    window.closeDayChangeModal();
+  }
+});
+
 window.triggerDashboardRefresh = async function(btn) {
   if (!btn || btn.classList.contains("loading")) return;
   btn.classList.add("loading");
