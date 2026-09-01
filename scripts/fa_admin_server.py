@@ -879,7 +879,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="fa-header">
       <div class="fa-header-title">
         <span>📈 FA 자산 거래내역 관리자</span>
-        <span class="fa-header-badge">v2.7.57</span>
+        <span class="fa-header-badge">v2.7.58</span>
         <span class="fa-header-badge" style="background:var(--fa-border); color:var(--fa-text-muted);">SQLite DB</span>
       </div>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
@@ -1334,13 +1334,19 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       document.getElementById("wrap-amount").style.display = isTrade ? 'flex' : 'none';
       document.getElementById("wrap-deposit").style.display = (isBuy || isDeposit) ? 'flex' : 'none';
       document.getElementById("wrap-dividend").style.display = isDiv ? 'flex' : 'none';
-      document.getElementById("wrap-evaluation").style.display = isEval ? 'flex' : 'none';
+      document.getElementById("wrap-evaluation").style.display = (isEval || isDeposit) ? 'flex' : 'none';
 
       const depositInput = document.getElementById("f-deposit");
+      const evalInput = document.getElementById("f-evaluation");
+      const evalLabel = document.querySelector("#wrap-evaluation .fa-label");
       if (isDeposit) {
         depositInput.placeholder = "입금된 원금(투자금) 금액(원) 입력";
+        if (evalLabel) evalLabel.innerText = "계좌/종목 평가금 (원, 선택사항)";
+        evalInput.placeholder = "입금 후 총 평가금(원) 기록 시 입력 (공제회 등)";
       } else {
         depositInput.placeholder = "매수 시 신규 투입된 투자금(원)이 있을 경우 입력";
+        if (evalLabel) evalLabel.innerText = "계좌 평가금 (원)";
+        evalInput.placeholder = "0";
       }
     }
 
@@ -1625,8 +1631,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           return;
         }
       } else if (kind === "입금") {
-        if (payload.deposit <= 0) {
-          alert("입금액(투자금)을 올바르게 입력해주세요.");
+        if (payload.deposit <= 0 && payload.evaluation <= 0) {
+          alert("입금액(투자금) 또는 평가금을 올바르게 입력해주세요.");
           document.getElementById("f-deposit").focus();
           return;
         }
