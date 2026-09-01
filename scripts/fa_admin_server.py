@@ -2534,8 +2534,11 @@ def main():
     ensure_db_normalized()
     init_market_history_db()
 
+    class ReusableHTTPServer(HTTPServer):
+        allow_reuse_address = True
+
     server_address = (args.host, args.port)
-    httpd = HTTPServer(server_address, FAAdminRequestHandler)
+    httpd = ReusableHTTPServer(server_address, FAAdminRequestHandler)
     print(f"🚀 FA 거래내역 관리자 서버 시작: http://{args.host}:{args.port}")
     try:
         httpd.serve_forever()

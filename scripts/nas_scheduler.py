@@ -244,10 +244,21 @@ def parse_args() -> argparse.Namespace:
 def restart_fa_admin_server(run_as: str = "") -> None:
     """스케줄러 실행 시마다 fa_admin_server.py를 항상 안전하게 재시작"""
     try:
-        print("[fa-admin] 최신 상태 반영을 위해 fa_admin_server.py 재시작 중...")
-        subprocess.run(["pkill", "-f", "fa_admin_server.py"], check=False)
+        print("[fa-admin] 최신 상태 반영을 위해 fa_admin_server.py 프로세스 종료 시도 중...")
+        # Synology DSM 및 일반 리눅스 호환 다중 kill
+        kill_script = (
+            "pkill -9 -f fa_admin_server.py 2>/dev/null || true; "
+            "for pid in $(ps aux | grep '[f]a_admin_server.py' | awk '{print $2}'); do kill -9 $pid 2>/dev/null || true; done; "
+            "fuser -k -9 8095/tcp 2>/dev/null || true"
+        )
+        if run_as:
+            subprocess.run(["su", "-s", "/bin/bash", run_as, "-c", kill_script], check=False)
+        else:
+            subprocess.run(kill_script, shell=True, check=False)
+
         import time
-        time.sleep(1)
+        time.sleep(1.5)
+
         cmd = f"cd {shlex.quote(str(ROOT))} && nohup {PYTHON} scripts/fa_admin_server.py --port 8095 > /dev/null 2>&1 &"
         if run_as:
             subprocess.Popen(["su", "-s", "/bin/bash", run_as, "-c", cmd], cwd=ROOT)
