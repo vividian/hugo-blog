@@ -241,6 +241,25 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def restart_fa_admin_server_if_running(run_as: str = "") -> None:
+    """fa_admin_server.py가 실행 중인 경우 최신 코드로 안전하게 재시작"""
+    try:
+        check = subprocess.run(["pgrep", "-f", "fa_admin_server.py"], capture_output=True, text=True)
+        if check.returncode == 0:
+            print("[fa-admin] 최신 코드 반영을 위해 fa_admin_server.py 재시작...")
+            subprocess.run(["pkill", "-f", "fa_admin_server.py"], check=False)
+            import time
+            time.sleep(1)
+            cmd = f"cd {shlex.quote(str(ROOT))} && nohup {PYTHON} scripts/fa_admin_server.py --port 8095 > /dev/null 2>&1 &"
+            if run_as:
+                subprocess.Popen(["su", "-s", "/bin/bash", run_as, "-c", cmd], cwd=ROOT)
+            else:
+                subprocess.Popen(cmd, shell=True, cwd=ROOT)
+            print("[fa-admin] fa_admin_server.py 재시작 완료.")
+    except Exception as exc:
+        print(f"(참고) fa_admin_server 재시작 건너뜀: {exc}")
+
+
 def main() -> int:
     args = parse_args()
     content_repo = get_path("content")
@@ -267,6 +286,8 @@ def main() -> int:
             args.run_as,
         )
         sync_full_site(web_public)
+        if root_changed:
+            restart_fa_admin_server_if_running(args.run_as)
     else:
         print("원격 변경 없음: update_fa + FA 산출물만 동기화합니다.")
         run_fa_refresh(args.run_as)
