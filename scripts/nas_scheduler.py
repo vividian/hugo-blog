@@ -241,23 +241,21 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def restart_fa_admin_server_if_running(run_as: str = "") -> None:
-    """fa_admin_server.py가 실행 중인 경우 최신 코드로 안전하게 재시작"""
+def restart_fa_admin_server(run_as: str = "") -> None:
+    """스케줄러 실행 시마다 fa_admin_server.py를 항상 안전하게 재시작"""
     try:
-        check = subprocess.run(["pgrep", "-f", "fa_admin_server.py"], capture_output=True, text=True)
-        if check.returncode == 0:
-            print("[fa-admin] 최신 코드 반영을 위해 fa_admin_server.py 재시작...")
-            subprocess.run(["pkill", "-f", "fa_admin_server.py"], check=False)
-            import time
-            time.sleep(1)
-            cmd = f"cd {shlex.quote(str(ROOT))} && nohup {PYTHON} scripts/fa_admin_server.py --port 8095 > /dev/null 2>&1 &"
-            if run_as:
-                subprocess.Popen(["su", "-s", "/bin/bash", run_as, "-c", cmd], cwd=ROOT)
-            else:
-                subprocess.Popen(cmd, shell=True, cwd=ROOT)
-            print("[fa-admin] fa_admin_server.py 재시작 완료.")
+        print("[fa-admin] 최신 상태 반영을 위해 fa_admin_server.py 재시작 중...")
+        subprocess.run(["pkill", "-f", "fa_admin_server.py"], check=False)
+        import time
+        time.sleep(1)
+        cmd = f"cd {shlex.quote(str(ROOT))} && nohup {PYTHON} scripts/fa_admin_server.py --port 8095 > /dev/null 2>&1 &"
+        if run_as:
+            subprocess.Popen(["su", "-s", "/bin/bash", run_as, "-c", cmd], cwd=ROOT)
+        else:
+            subprocess.Popen(cmd, shell=True, cwd=ROOT)
+        print("[fa-admin] fa_admin_server.py 백그라운드 재시작 완료.")
     except Exception as exc:
-        print(f"(참고) fa_admin_server 재시작 건너뜀: {exc}")
+        print(f"(참고) fa_admin_server 재시작 예외 발생: {exc}")
 
 
 def main() -> int:
@@ -286,13 +284,14 @@ def main() -> int:
             args.run_as,
         )
         sync_full_site(web_public)
-        if root_changed:
-            restart_fa_admin_server_if_running(args.run_as)
     else:
         print("원격 변경 없음: update_fa + FA 산출물만 동기화합니다.")
         run_fa_refresh(args.run_as)
         render_fa_index(args.run_as)
         sync_fa_artifacts(web_public)
+
+    # 30분 주기 갱신 및 수동 실행 시마다 관리자 서버를 항상 최신 코드로 재시작
+    restart_fa_admin_server(args.run_as)
 
     if not args.skip_permissions:
         apply_permissions(web_public, args.owner)
