@@ -421,7 +421,7 @@ def export_db_to_csv():
 
 
 def run_dashboard_update():
-    """백그라운드에서 update_fa_plotly.py 및 nas_scheduler.py를 초고속 실행하여 웹 서비스에 즉시 반영합니다."""
+    """백그라운드에서 update_fa_plotly.py를 실행하고 웹 서비스 경로로 즉시 반영(권한 보장)합니다."""
     def _worker():
         try:
             print("⏳ [대시보드 갱신] 대시보드 생성 시작...")
@@ -431,28 +431,50 @@ def run_dashboard_update():
 
             if res.returncode == 0:
                 print("✅ [대시보드 갱신] HTML 생성 완료!")
-                # 2. 웹 서비스 경로로 핵심 HTML 파일 직접 복사 (rsync 권한 에러 완전 우회)
+
+                # 2. Hugo 세그먼트 렌더 (index.html 갱신)
+                try:
+                    subprocess.run(
+                        ["hugo", "--config", "hugo.yaml,config/config.yaml", "--renderSegments", "fa", "--noTimes", "--noChmod"],
+                        cwd=ROOT_DIR,
+                        capture_output=True,
+                        text=True,
+                        check=False
+                    )
+                except Exception as he:
+                    print(f"(참고) hugo fa 세그먼트 렌더 건너뜀: {he}")
+
+                # 3. 웹 서비스 경로로 핵심 HTML/JSON 파일 직접 복사 및 644 권한 부여 (403 방지)
                 web_fa = Path("/var/services/web/hugo/fa")
+                if not web_fa.exists():
+                    alt_web = Path("/var/services/web/fa")
+                    if alt_web.exists():
+                        web_fa = alt_web
+
                 if web_fa.exists():
+                    try:
+                        os.chmod(web_fa, 0o755)
+                    except Exception:
+                        pass
+
                     for src_path, dst_name in [
                         (ROOT_DIR / "content" / "fa" / "latest_fa.html", "latest_fa.html"),
                         (ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html", "latest_fa_fragment.html"),
+                        (ROOT_DIR / "public" / "fa" / "index.html", "index.html"),
+                        (ROOT_DIR / "public" / "fa" / "latest_fa.html", "latest_fa.html"),
+                        (ROOT_DIR / "data" / "fa.json", "fa.json"),
                     ]:
                         if src_path.exists():
                             try:
-                                shutil.copy2(src_path, web_fa / dst_name)
-                                print(f"🚀 [직접 배포] {dst_name} -> {web_fa} 복사 완료!")
+                                target_path = web_fa / dst_name
+                                shutil.copy2(src_path, target_path)
+                                try:
+                                    os.chmod(target_path, 0o644)
+                                except Exception:
+                                    pass
+                                print(f"🚀 [직접 배포] {dst_name} -> {target_path} (권한: 644) 완료!")
                             except Exception as ce:
                                 print(f"⚠️ [직접 배포] {dst_name} 복사 실패: {ce}")
-
-                # 3. NAS 환경일 경우 nas_scheduler.py --skip-permissions 실행
-                if Path("/var/services/web").exists() or Path("/volume1").exists() or Path("/volume3").exists():
-                    cmd_sync = [sys.executable, str(ROOT_DIR / "scripts" / "nas_scheduler.py"), "--skip-permissions"]
-                    res_sync = subprocess.run(cmd_sync, cwd=ROOT_DIR, capture_output=True, text=True)
-                    if res_sync.returncode == 0:
-                        print("🚀 [실시간 배포] NAS 웹 서버 동기화 성공!")
-                    else:
-                        print(f"⚠️ [실시간 배포] nas_scheduler 경고: {res_sync.stderr}")
             else:
                 print(f"⚠️ 대시보드 갱신 에러: {res.stderr}")
         except Exception as e:

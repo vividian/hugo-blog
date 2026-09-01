@@ -170,7 +170,13 @@ def sync_fa_artifacts(web_public: Path) -> None:
     ]:
         if src_file.is_file():
             try:
-                shutil.copy2(src_file, fa_dst / dst_name)
+                target_file = fa_dst / dst_name
+                shutil.copy2(src_file, target_file)
+                try:
+                    import os
+                    os.chmod(target_file, 0o644)
+                except Exception:
+                    pass
             except Exception as e:
                 print(f"(참고) {dst_name} 직접 복사 건너뜀: {e}")
 
