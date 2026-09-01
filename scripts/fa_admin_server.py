@@ -954,6 +954,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
               <button type="button" class="fa-kind-btn active buy" onclick="selectKind('매수', this)">매수</button>
               <button type="button" class="fa-kind-btn sell" onclick="selectKind('매도', this)">매도</button>
               <button type="button" class="fa-kind-btn div" onclick="selectKind('배당', this)">배당</button>
+              <button type="button" class="fa-kind-btn deposit" onclick="selectKind('입금', this)">입금</button>
               <button type="button" class="fa-kind-btn eval" onclick="selectKind('평가금', this)">평가금</button>
             </div>
           </div>
@@ -1316,21 +1317,31 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
     function selectKind(kind, btnEl) {
       document.querySelectorAll(".fa-kind-btn").forEach(b => b.classList.remove("active"));
-      btnEl.classList.add("active");
+      if (btnEl) btnEl.classList.add("active");
       document.getElementById("f-kind").value = kind;
 
       // 필드 가시성 토글
       const isBuy = (kind === '매수');
+      const isSell = (kind === '매도');
+      const isTrade = (isBuy || isSell);
       const isDiv = (kind === '배당');
+      const isDeposit = (kind === '입금');
       const isEval = (kind === '평가금');
 
       document.getElementById("wrap-symbol").style.display = (isEval) ? 'none' : 'flex';
-      document.getElementById("wrap-unit-price").style.display = (isDiv || isEval) ? 'none' : 'flex';
-      document.getElementById("wrap-quantity").style.display = (isDiv || isEval) ? 'none' : 'flex';
-      document.getElementById("wrap-amount").style.display = (isDiv || isEval) ? 'none' : 'flex';
-      document.getElementById("wrap-deposit").style.display = (isBuy) ? 'flex' : 'none';
+      document.getElementById("wrap-unit-price").style.display = isTrade ? 'flex' : 'none';
+      document.getElementById("wrap-quantity").style.display = isTrade ? 'flex' : 'none';
+      document.getElementById("wrap-amount").style.display = isTrade ? 'flex' : 'none';
+      document.getElementById("wrap-deposit").style.display = (isBuy || isDeposit) ? 'flex' : 'none';
       document.getElementById("wrap-dividend").style.display = isDiv ? 'flex' : 'none';
       document.getElementById("wrap-evaluation").style.display = isEval ? 'flex' : 'none';
+
+      const depositInput = document.getElementById("f-deposit");
+      if (isDeposit) {
+        depositInput.placeholder = "입금된 원금(투자금) 금액(원) 입력";
+      } else {
+        depositInput.placeholder = "매수 시 신규 투입된 투자금(원)이 있을 경우 입력";
+      }
     }
 
     function openNewSymbolModal() {
@@ -1613,6 +1624,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           document.getElementById("f-dividend").focus();
           return;
         }
+      } else if (kind === "입금") {
+        if (payload.deposit <= 0) {
+          alert("입금액(투자금)을 올바르게 입력해주세요.");
+          document.getElementById("f-deposit").focus();
+          return;
+        }
+        if (!payload.symbol) payload.symbol = "계좌 입금";
       } else if (kind === "매수" || kind === "매도") {
         if (!payload.symbol) {
           alert("종목명을 선택하거나 입력해주세요.");
