@@ -11,6 +11,7 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 from urllib.parse import urlparse
 
 import math
+from datetime import datetime
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -27,7 +28,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.56"
+APP_VERSION = "v2.7.59"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -2448,12 +2449,13 @@ def _build_dashboard_fragment(data: ReportData) -> str:
     trading_summary, trading_items = _build_trading_history(data.records, data.fx_series_month, data.month_end)
     account_detail_section_html = _build_account_detail_section(data, fig_html)
 
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
     blocks: List[str] = [
         "<section class=\"fa-hero\">"
         "<div class=\"fa-hero-header\">"
         "  <div>"
         f"    <div class=\"fa-hero-title\">{html.escape(data.month_end.strftime('%Y년 %m월 자산 대시보드'))} <span class=\"fa-badge fa-badge-neutral\" style=\"font-size:0.75rem; vertical-align:middle; margin-left:6px;\">{APP_VERSION}</span></div>"
-        f"    <div class=\"fa-hero-meta\">최종 업데이트: {html.escape(data.month_end.strftime('%Y-%m-%d'))} · Engine {APP_VERSION}</div>"
+        f"    <div class=\"fa-hero-meta\">최종 업데이트: {now_str}</div>"
         "  </div>"
         "  <div class=\"fa-hero-actions\">"
         "    <button type=\"button\" class=\"fa-btn-hero fa-btn-hero-secondary\" onclick=\"triggerDashboardRefresh(this)\">"
