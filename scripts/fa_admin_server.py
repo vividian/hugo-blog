@@ -901,7 +901,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="fa-header">
       <div class="fa-header-title">
         <span>📈 FA 자산 거래내역 관리자</span>
-        <span class="fa-header-badge">v2.7.59</span>
+        <span class="fa-header-badge">v2.7.60</span>
         <span class="fa-header-badge" style="background:var(--fa-border); color:var(--fa-text-muted);">SQLite DB</span>
       </div>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
@@ -1586,18 +1586,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
         const acctLabel = ACCOUNT_MAP[r.account] || r.account;
 
-        const isTradeKind = (kindText === "매수" || kindText === "매도");
-        const unitPriceStr = (isTradeKind && r.unit_price > 0) ? r.unit_price.toLocaleString() : "-";
-        const quantityStr = (isTradeKind && r.quantity !== 0 && r.quantity !== null && r.quantity !== undefined) ? r.quantity.toLocaleString() : "-";
-
         return `
           <tr>
             <td style="font-weight:600;">${r.date}</td>
             <td><span class="badge badge-account">${acctLabel}</span></td>
             <td><span class="badge ${badgeClass}">${kindText}</span></td>
             <td style="font-weight:700; color:var(--fa-text-main);">${displaySymbol}</td>
-            <td class="text-right">${unitPriceStr}</td>
-            <td class="text-right">${quantityStr}</td>
+            <td class="text-right">${r.unit_price > 0 ? r.unit_price.toLocaleString() : "-"}</td>
+            <td class="text-right">${r.quantity !== 0 && r.quantity !== null && r.quantity !== undefined ? r.quantity.toLocaleString() : "-"}</td>
             <td class="text-right">${depositStr}</td>
             <td class="text-right">${tradeAmountStr}</td>
             <td style="color:var(--fa-text-muted); font-size:0.8rem;">${r.memo || ""}</td>
@@ -1629,12 +1625,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         exchange_rate: parseFloat(String(document.getElementById("f-exchange").value || "1.0").replace(/,/g, "")) || 1.0,
         memo: document.getElementById("f-memo").value.trim()
       };
-
-      // 매수/매도가 아닌 거래(배당, 입금, 출금, 평가금)는 단가와 수량을 0으로 고정
-      if (kind !== "매수" && kind !== "매도") {
-        payload.unit_price = 0.0;
-        payload.quantity = 0.0;
-      }
 
       if (kind === "평가금") {
         if (payload.evaluation <= 0) {
@@ -2527,8 +2517,6 @@ def ensure_db_normalized():
         cur.execute("UPDATE trading_records SET kind = '평가금' WHERE (kind IS NULL OR kind = '') AND evaluation > 0;")
         cur.execute("UPDATE trading_records SET kind = '매도' WHERE (kind IS NULL OR kind = '') AND quantity < 0;")
         cur.execute("UPDATE trading_records SET kind = '매수' WHERE (kind IS NULL OR kind = '') AND (quantity > 0 OR unit_price > 0);")
-        # 배당/입금/출금/평가금에 잘못 들어가 있던 단가 및 수량 0으로 정규화
-        cur.execute("UPDATE trading_records SET unit_price = 0, quantity = 0 WHERE kind IN ('배당', '입금', '출금', '평가금') AND (unit_price > 0 OR quantity > 0);")
 
         # 모든 거래 날짜를 YYYY.MM.DD 형식으로 일괄 정규화 마이그레이션
         cur.execute("SELECT id, date FROM trading_records;")
