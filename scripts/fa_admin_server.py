@@ -1029,18 +1029,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <label class="fa-label">계좌 평가금 (원)</label>
             <input type="number" step="any" id="f-evaluation" class="fa-input" placeholder="0">
           </div>
-
-          <!-- 환율 -->
-          <div class="fa-field">
-            <label class="fa-label">적용 환율</label>
-            <input type="number" step="any" id="f-exchange" class="fa-input" value="1.0">
-          </div>
-
-          <!-- 비고 / 메모 -->
-          <div class="fa-field">
-            <label class="fa-label">메모 / 비고</label>
-            <input type="text" id="f-memo" class="fa-input" placeholder="메모 입력">
-          </div>
         </div>
 
         <div class="fa-form-actions">
@@ -1095,8 +1083,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
               <th class="text-right">단가</th>
               <th class="text-right">수량</th>
               <th class="text-right">투자금 (입/출금)</th>
-              <th class="text-right">체결/배당금액</th>
-              <th>비고</th>
+              <th class="text-right">체결금액</th>
+              <th class="text-right">배당금액</th>
               <th class="text-right">관리</th>
             </tr>
           </thead>
@@ -1459,10 +1447,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     function handleAccountChange() {
       const acct = document.getElementById("f-account").value;
       const exField = document.getElementById("f-exchange");
-      if (acct === 'usa') {
-        if (parseFloat(exField.value) <= 1.0) exField.value = 1380.0;
-      } else {
-        exField.value = 1.0;
+      if (exField) {
+        if (acct === 'usa') {
+          if (parseFloat(exField.value) <= 1.0) exField.value = 1380.0;
+        } else {
+          exField.value = 1.0;
+        }
       }
       loadSymbols(acct);
     }
@@ -1567,11 +1557,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           depositStr = `<span style="color:var(--fa-loss); font-weight:700;">-${Math.abs(r.deposit).toLocaleString()}원</span>`;
         }
 
-        // 2. 체결/배당금액 컬럼
+        // 2. 체결금액 컬럼
         let tradeAmountStr = "-";
-        if (r.dividend > 0) {
-          tradeAmountStr = `<span style="color:var(--fa-purple); font-weight:700;">+${r.dividend.toLocaleString()}원</span>`;
-        } else if (r.evaluation > 0) {
+        if (r.evaluation > 0) {
           tradeAmountStr = `<span style="font-weight:700;">${r.evaluation.toLocaleString()}원</span>`;
         } else if (r.amount > 0) {
           tradeAmountStr = (kindText === "매도" || r.quantity < 0)
@@ -1582,6 +1570,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           tradeAmountStr = (kindText === "매도" || r.quantity < 0)
             ? `<span style="color:var(--fa-loss); font-weight:700;">-${calcAmt.toLocaleString()}원</span>`
             : `<span style="color:var(--fa-gain); font-weight:700;">+${calcAmt.toLocaleString()}원</span>`;
+        }
+
+        // 3. 배당금액 컬럼
+        let dividendStr = "-";
+        if (r.dividend > 0) {
+          dividendStr = `<span style="color:var(--fa-purple); font-weight:700;">+${r.dividend.toLocaleString()}원</span>`;
         }
 
         const acctLabel = ACCOUNT_MAP[r.account] || r.account;
@@ -1596,7 +1590,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <td class="text-right">${r.quantity !== 0 && r.quantity !== null && r.quantity !== undefined ? r.quantity.toLocaleString() : "-"}</td>
             <td class="text-right">${depositStr}</td>
             <td class="text-right">${tradeAmountStr}</td>
-            <td style="color:var(--fa-text-muted); font-size:0.8rem;">${r.memo || ""}</td>
+            <td class="text-right">${dividendStr}</td>
             <td class="text-right">
               <button class="fa-btn-action fa-btn-edit" onclick='startEdit(${JSON.stringify(r)})'>수정</button>
               <button class="fa-btn-action fa-btn-del" onclick="deleteRecord(${r.id})">삭제</button>
@@ -1622,8 +1616,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         dividend: parseFloat(String(document.getElementById("f-dividend").value || "0").replace(/,/g, "")) || 0.0,
         deposit: parseFloat(String(document.getElementById("f-deposit").value || "0").replace(/,/g, "")) || 0.0,
         evaluation: parseFloat(String(document.getElementById("f-evaluation").value || "0").replace(/,/g, "")) || 0.0,
-        exchange_rate: parseFloat(String(document.getElementById("f-exchange").value || "1.0").replace(/,/g, "")) || 1.0,
-        memo: document.getElementById("f-memo").value.trim()
+        exchange_rate: document.getElementById("f-exchange") ? (parseFloat(String(document.getElementById("f-exchange").value || "1.0").replace(/,/g, "")) || 1.0) : 1.0,
+        memo: document.getElementById("f-memo") ? document.getElementById("f-memo").value.trim() : ""
       };
 
       if (kind === "평가금") {
@@ -1721,8 +1715,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       document.getElementById("f-dividend").value = r.dividend || "";
       document.getElementById("f-deposit").value = r.deposit || "";
       document.getElementById("f-evaluation").value = r.evaluation || "";
-      document.getElementById("f-exchange").value = r.exchange_rate || "1.0";
-      document.getElementById("f-memo").value = r.memo || "";
+      if (document.getElementById("f-exchange")) document.getElementById("f-exchange").value = r.exchange_rate || "1.0";
+      if (document.getElementById("f-memo")) document.getElementById("f-memo").value = r.memo || "";
 
       // 버튼 뱃지 선택
       const kind = r.kind || "매수";
