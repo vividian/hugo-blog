@@ -28,7 +28,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.59"
+APP_VERSION = "v2.7.61"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -4251,6 +4251,10 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    try:
+        (ROOT_DIR / "logs" / "plotly_exec.log").write_text(f"Started at {datetime.now()}\n", encoding="utf-8")
+    except Exception:
+        pass
     args = parse_args()
     update_fa.update_titles_from_fa_yaml()
     static_dir = update_fa.PATHS.get("static_dir", ROOT_DIR / "content/fa")
@@ -4273,6 +4277,21 @@ def main() -> None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(standalone_html, encoding="utf-8")
         print(f"HTML saved: {output_path}")
+
+        # Nginx 도커 서빙 경로(public/fa)로도 직접 동시 반영
+        public_fa = ROOT_DIR / "public" / "fa"
+        public_fa.mkdir(parents=True, exist_ok=True)
+        for pub_target in [public_fa / "latest_fa.html", public_fa / "index.html"]:
+            try:
+                pub_target.write_text(standalone_html, encoding="utf-8")
+                import os
+                try:
+                    os.chmod(pub_target, 0o666)
+                except Exception:
+                    pass
+                print(f"HTML synced to web public: {pub_target}")
+            except Exception as e:
+                print(f"(참고) 웹 경로 동기화 건너뜀: {e}")
 
 
 if __name__ == "__main__":

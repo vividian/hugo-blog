@@ -428,53 +428,60 @@ def run_dashboard_update():
             # 1. update_fa_plotly.py (인터랙티브 HTML 대시보드 생성 - 2~3초 완료)
             cmd_plot = [sys.executable, str(ROOT_DIR / "scripts" / "update_fa_plotly.py")]
             res = subprocess.run(cmd_plot, cwd=ROOT_DIR, capture_output=True, text=True)
+            log_p = ROOT_DIR / "logs" / "fa_dashboard_update.log"
+            log_p.parent.mkdir(parents=True, exist_ok=True)
+            log_p.write_text(f"ReturnCode: {res.returncode}\nSTDOUT:\n{res.stdout}\nSTDERR:\n{res.stderr}\n", encoding="utf-8")
 
             if res.returncode == 0:
                 print("✅ [대시보드 갱신] HTML 생성 완료!")
 
-                # 2. Hugo 세그먼트 렌더 (index.html 갱신)
+                # 2. Hugo 세그먼트 렌더 (헤더, 푸터, 댓글이 포함된 index.html 초고속 갱신)
                 try:
-                    subprocess.run(
-                        ["hugo", "--config", "hugo.yaml,config/config.yaml", "--renderSegments", "fa", "--noTimes", "--noChmod"],
+                    hugo_bin = str(ROOT_DIR / "bin" / "hugo") if (ROOT_DIR / "bin" / "hugo").is_file() else "hugo"
+                    h_res = subprocess.run(
+                        [hugo_bin, "--config", "hugo.yaml,config/config.yaml", "--renderSegments", "fa", "--noTimes", "--noChmod"],
                         cwd=ROOT_DIR,
                         capture_output=True,
                         text=True,
                         check=False
                     )
+                    if h_res.returncode == 0:
+                        print("✅ [대시보드 갱신] Hugo fa 세그먼트(헤더/푸터/댓글 포함 index.html) 렌더 완료!")
+                    else:
+                        print(f"⚠️ [대시보드 갱신] Hugo 세그먼트 에러: {h_res.stderr}")
                 except Exception as he:
                     print(f"(참고) hugo fa 세그먼트 렌더 건너뜀: {he}")
 
-                # 3. 웹 서비스 경로로 핵심 HTML/JSON 파일 직접 복사 및 644 권한 부여 (403 방지)
-                web_fa = Path("/var/services/web/hugo/fa")
-                if not web_fa.exists():
-                    alt_web = Path("/var/services/web/fa")
-                    if alt_web.exists():
-                        web_fa = alt_web
+                # 3. 도커 Nginx 웹 서빙 경로(public/fa)로 핵심 HTML/JSON 파일 직접 복사
+                public_fa = ROOT_DIR / "public" / "fa"
+                public_fa.mkdir(parents=True, exist_ok=True)
 
-                if web_fa.exists():
-                    try:
-                        os.chmod(web_fa, 0o755)
-                    except Exception:
-                        pass
+                latest_html_src = ROOT_DIR / "content" / "fa" / "latest_fa.html"
+                if latest_html_src.exists():
+                    for dst_file in [public_fa / "latest_fa.html", public_fa / "index.html"]:
+                        try:
+                            shutil.copy2(latest_html_src, dst_file)
+                            os.chmod(dst_file, 0o666)
+                            print(f"🚀 [도커 웹 서빙 반영] {latest_html_src.name} -> {dst_file} 완료!")
+                        except Exception as ce:
+                            print(f"⚠️ [도커 웹 서빙 반영] {dst_file} 복사 실패: {ce}")
 
-                    for src_path, dst_name in [
-                        (ROOT_DIR / "content" / "fa" / "latest_fa.html", "latest_fa.html"),
-                        (ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html", "latest_fa_fragment.html"),
-                        (ROOT_DIR / "public" / "fa" / "index.html", "index.html"),
-                        (ROOT_DIR / "public" / "fa" / "latest_fa.html", "latest_fa.html"),
-                        (ROOT_DIR / "data" / "fa.json", "fa.json"),
-                    ]:
-                        if src_path.exists():
-                            try:
-                                target_path = web_fa / dst_name
-                                shutil.copy2(src_path, target_path)
-                                try:
-                                    os.chmod(target_path, 0o644)
-                                except Exception:
-                                    pass
-                                print(f"🚀 [직접 배포] {dst_name} -> {target_path} (권한: 644) 완료!")
-                            except Exception as ce:
-                                print(f"⚠️ [직접 배포] {dst_name} 복사 실패: {ce}")
+                # 4. 과거 Synology 호스트 경로(호환성 유지)
+                for candidate in ["/var/services/web/hugo/fa", "/var/services/web/fa"]:
+                    web_fa = Path(candidate)
+                    if web_fa.exists():
+                        try:
+                            os.chmod(web_fa, 0o755)
+                            for src_p, dst_n in [
+                                (latest_html_src, "latest_fa.html"),
+                                (latest_html_src, "index.html"),
+                                (ROOT_DIR / "data" / "fa.json", "fa.json"),
+                            ]:
+                                if src_p.exists():
+                                    shutil.copy2(src_p, web_fa / dst_n)
+                                    os.chmod(web_fa / dst_n, 0o644)
+                        except Exception as ce:
+                            pass
             else:
                 print(f"⚠️ 대시보드 갱신 에러: {res.stderr}")
         except Exception as e:
@@ -901,7 +908,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="fa-header">
       <div class="fa-header-title">
         <span>📈 FA 자산 거래내역 관리자</span>
-        <span class="fa-header-badge">v2.7.60</span>
+        <span class="fa-header-badge">v2.7.61</span>
         <span class="fa-header-badge" style="background:var(--fa-border); color:var(--fa-text-muted);">SQLite DB</span>
       </div>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">

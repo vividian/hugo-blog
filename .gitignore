@@ -168,3 +168,12 @@ data/
 static/wordpress/
 .hugo_build.lock
 author.mailmap
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+entrypoint*.sh
+nginx.conf
+requirements-*.txt
+bin/
+

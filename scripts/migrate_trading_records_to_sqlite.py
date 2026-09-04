@@ -108,6 +108,7 @@ def migrate():
     cursor.execute("UPDATE trading_records SET kind = '매도' WHERE (kind IS NULL OR kind = '') AND quantity < 0;")
     cursor.execute("UPDATE trading_records SET kind = '매수' WHERE (kind IS NULL OR kind = '') AND (quantity > 0 OR unit_price > 0);")
     cursor.execute("UPDATE trading_records SET date = REPLACE(date, '-', '.') WHERE date LIKE '%-%';")
+    cursor.execute("UPDATE trading_records SET amount = ROUND(ABS(unit_price * quantity), 2) WHERE (amount IS NULL OR amount = 0) AND unit_price > 0 AND quantity != 0;")
     conn.commit()
 
     cursor.execute("SELECT COUNT(*) FROM trading_records;")
