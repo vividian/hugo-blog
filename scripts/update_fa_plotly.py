@@ -529,7 +529,25 @@ def _build_kpi_row(data: ReportData) -> str:
     return_str = _fmt_pct(return_rate)
     return_state = "positive" if (return_rate or 0) > 0 else "negative" if (return_rate or 0) < 0 else ""
 
-    # 1. 총 평가금 전일대비 증감액
+    # 1. 총 평가금 전월대비 증감액
+    eval_month_change = 0.0
+    cur_eval_val = valuation or 0.0
+    prev_eval_val = cur_eval_val
+    if data.account_df is not None and not data.account_df.empty:
+        total_eval_s = data.account_df.sum(axis=1)
+        monthly_eval = total_eval_s.groupby(total_eval_s.index.to_period("M")).last()
+        if len(monthly_eval) >= 2:
+            cur_eval_val = valuation if valuation is not None else float(monthly_eval.iloc[-1])
+            prev_eval_val = float(monthly_eval.iloc[-2])
+            eval_month_change = cur_eval_val - prev_eval_val
+        elif len(monthly_eval) == 1:
+            cur_eval_val = valuation if valuation is not None else float(monthly_eval.iloc[-1])
+            prev_eval_val = 0.0
+            eval_month_change = cur_eval_val
+    eval_state = "positive" if eval_month_change > 0 else "negative" if eval_month_change < 0 else ""
+    eval_sub = f"전월대비 {eval_month_change:+,.0f}" if eval_month_change != 0 else "전월대비 0"
+
+    # 전일대비 변동액 (총 수익금/수익률 및 일별 모달용)
     eval_day_change = 0.0
     if not data.holdings_df.empty:
         for _, hrow in data.holdings_df.iterrows():
@@ -537,9 +555,6 @@ def _build_kpi_row(data: ReportData) -> str:
             val = _as_float(hrow.get("평가금")) or 0.0
             if r is not None and (1.0 + r) != 0:
                 eval_day_change += (val * r / (1.0 + r))
-
-    eval_state = "positive" if eval_day_change > 0 else "negative" if eval_day_change < 0 else ""
-    eval_sub = f"전일대비 {eval_day_change:+,.0f}" if eval_day_change != 0 else "전일대비 0"
 
     # 2. 총 투자액 전월대비 증감액
     inv_month_change = 0.0
@@ -593,7 +608,7 @@ def _build_kpi_row(data: ReportData) -> str:
     dividend_modal_html = _build_dividend_change_modal(data, cur_div_val, prev_div_val, div_month_change)
 
     cards = [
-        _kpi_card("총 평가금", _fmt_krw(valuation), eval_sub, sub_state=eval_state, sub_onclick="openDayChangeModal()"),
+        _kpi_card("총 평가금", _fmt_krw(valuation), eval_sub, sub_state=eval_state),
         _kpi_card("총 투자금", _fmt_krw(invest), inv_sub, sub_state=inv_state, sub_onclick="openInvestChangeModal()"),
         _kpi_card("총 수익금", f"<span class='fa-num-{profit_state}'>{profit_str}</span>", profit_sub, state=profit_state, sub_state=profit_day_state, sub_onclick="openDayChangeModal()"),
         _kpi_card("총 수익률", f"<span class='fa-num-{return_state}'>{return_str}</span>", rate_sub, state=return_state, sub_state=rate_day_state, sub_onclick="openDayChangeModal()"),
