@@ -4251,26 +4251,47 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    log_file = ROOT_DIR / "logs" / "plotly_exec.log"
     try:
-        (ROOT_DIR / "logs" / "plotly_exec.log").write_text(f"Started at {datetime.now()}\n", encoding="utf-8")
-    except Exception:
-        pass
+        log_file.write_text(f"Started at {datetime.now()}\n", encoding="utf-8")
+        _run_main()
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(f"Completed successfully at {datetime.now()}\n")
+    except Exception as exc:
+        import traceback
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(f"ERROR at {datetime.now()}:\n{traceback.format_exc()}\n")
+        raise
+
+
+def _log(msg: str) -> None:
+    with open(ROOT_DIR / "logs" / "plotly_exec.log", "a", encoding="utf-8") as f:
+        f.write(f"[{datetime.now()}] {msg}\n")
+        f.flush()
+
+
+def _run_main() -> None:
     args = parse_args()
+    _log("Step 1: update_titles_from_fa_yaml")
     update_fa.update_titles_from_fa_yaml()
     static_dir = update_fa.PATHS.get("static_dir", ROOT_DIR / "content/fa")
     output_path = args.output or (static_dir / "latest_fa.html")
     fragment_path = args.fragment_output or DEFAULT_FRAGMENT_PATH
 
+    _log("Step 2: read_trading_records")
     records = update_fa.read_trading_records()
     if records.empty:
         raise ValueError("Trading records are empty.")
+    _log(f"Step 3: _build_report_data (records count: {len(records)})")
     data = _build_report_data(records)
 
+    _log("Step 4: _build_dashboard_fragment")
     dashboard_fragment = _build_dashboard_fragment(data)
     fragment_path.parent.mkdir(parents=True, exist_ok=True)
     fragment_path.write_text(dashboard_fragment, encoding="utf-8")
-    print(f"Dashboard fragment saved: {fragment_path}")
     _remove_legacy_fragment(fragment_path)
+
+    _log("Step 5: save standalone and sync to public")
 
     if not args.no_standalone:
         standalone_html = _wrap_standalone_html(dashboard_fragment, args.title)

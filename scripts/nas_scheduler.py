@@ -90,8 +90,15 @@ def run_full_deploy(
     hard_reset(content_repo, content_remote, content_branch, run_as)
 
     if public_dir.exists():
-        print(f"public 디렉터리 삭제: {public_dir}")
-        shutil.rmtree(public_dir)
+        print(f"public 디렉터리 내부 정리: {public_dir}")
+        for p_item in public_dir.iterdir():
+            try:
+                if p_item.is_dir():
+                    shutil.rmtree(p_item)
+                else:
+                    p_item.unlink()
+            except Exception:
+                pass
 
     run([PYTHON, "deploy.py", "--nas"], cwd=ROOT, run_as=run_as)
 
