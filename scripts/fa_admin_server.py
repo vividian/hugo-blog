@@ -19,6 +19,8 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qs, urlparse
+import os
+import time
 import yaml
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -26,6 +28,36 @@ DB_PATH = ROOT_DIR / "db" / "fa_records.db"
 CSV_PATH = ROOT_DIR / "config" / "trading_records.csv"
 FA_YAML_PATH = ROOT_DIR / "config" / "fa.yaml"
 FA_MD_PATH = ROOT_DIR / "content" / "fa" / "fa.md"
+
+
+def start_file_watcher():
+    """스크립트 파일 및 관련 설정 파일 변경 감지 시 프로세스를 즉시 재실행(Hot-reload)합니다."""
+    watch_files = [
+        Path(__file__).resolve(),
+        FA_YAML_PATH,
+    ]
+    mtimes = {f: f.stat().st_mtime for f in watch_files if f.exists()}
+
+    def _watch_loop():
+        while True:
+            time.sleep(1.5)
+            for f in watch_files:
+                if not f.exists():
+                    continue
+                try:
+                    current_mtime = f.stat().st_mtime
+                    if f in mtimes and current_mtime > mtimes[f]:
+                        print(f"\n🔄 [Auto-Reload] {f.name} 파일 변경 감지! 서버를 자동으로 재시작합니다...")
+                        time.sleep(0.3)
+                        os.execv(sys.executable, [sys.executable] + sys.argv)
+                    mtimes[f] = current_mtime
+                except Exception:
+                    pass
+
+    t = threading.Thread(target=_watch_loop, daemon=True)
+    t.start()
+    print("👀 [Auto-Reload] 소스 코드 변경 자동 감지 워처가 활성화되었습니다.")
+
 
 
 def sync_fa_yaml_to_md():
@@ -912,6 +944,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <span class="fa-header-badge" style="background:var(--fa-border); color:var(--fa-text-muted);">SQLite DB</span>
       </div>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="fa-btn-refresh" style="background:#475569; border-color:#475569; color:#fff;" onclick="restartServer()" title="서버 프로세스를 즉시 재시작합니다">
+          <span>🔄 서버 리로드</span>
+        </button>
         <button class="fa-btn-refresh" style="background:#7c3aed; border-color:#7c3aed; color:#fff;" onclick="openManageAllocationsModal()">
           <span>🎯 목표 비중 설정</span>
         </button>
@@ -941,6 +976,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       <div class="fa-kpi-box">
         <div class="fa-kpi-label">당월 총 배당금</div>
         <div class="fa-kpi-val" style="color:var(--fa-purple);" id="kpi-month-div">-</div>
+        <div id="kpi-month-div-sub" style="font-size:0.75rem; color:var(--fa-text-muted); margin-top:3px; font-weight:500;"></div>
       </div>
     </div>
 
@@ -1453,9 +1489,28 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
     function handleAccountChange() {
       const acct = document.getElementById("f-account").value;
+      const isUsd = (acct === 'usa');
+
+      const lblPrice = document.querySelector("#wrap-unit-price .fa-label");
+      if (lblPrice) {
+        lblPrice.innerHTML = `체결 단가 (${isUsd ? '$' : '원'}) <span id="symbol-price-hint" style="color:var(--fa-accent); font-weight:700; font-size:0.78rem; margin-left:6px;"></span>`;
+      }
+      const lblAmount = document.querySelector("#wrap-amount .fa-label");
+      if (lblAmount) {
+        lblAmount.innerText = `체결 금액 (${isUsd ? '$' : '원'}) (자동계산)`;
+      }
+      const lblDiv = document.querySelector("#wrap-dividend .fa-label");
+      if (lblDiv) {
+        lblDiv.innerText = `배당금 (${isUsd ? '$' : '원'})`;
+      }
+      const lblDeposit = document.querySelector("#wrap-deposit .fa-label");
+      if (lblDeposit) {
+        lblDeposit.innerText = isUsd ? "투자금 ($)" : "투자금 (원금 입금액)";
+      }
+
       const exField = document.getElementById("f-exchange");
       if (exField) {
-        if (acct === 'usa') {
+        if (isUsd) {
           if (parseFloat(exField.value) <= 1.0) exField.value = 1380.0;
         } else {
           exField.value = 1.0;
@@ -1529,6 +1584,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       document.getElementById("kpi-latest-date").innerText = kpi.latest_date || "-";
       document.getElementById("kpi-month-buy").innerText = `${Math.round(kpi.month_buy).toLocaleString()}원`;
       document.getElementById("kpi-month-div").innerText = `${Math.round(kpi.month_div).toLocaleString()}원`;
+      const divSub = document.getElementById("kpi-month-div-sub");
+      if (divSub) {
+        divSub.innerText = (kpi.month_div_usd && kpi.month_div_usd > 0)
+          ? `(미국 배당 $${kpi.month_div_usd.toLocaleString()} 환산 포함)`
+          : "";
+      }
       document.getElementById("record-count-badge").innerText = `조회된 거래: ${kpi.filtered_count.toLocaleString()}건`;
     }
 
@@ -1556,33 +1617,39 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           else displaySymbol = "-";
         }
 
+        const isUsd = (r.account === "usa");
+        const currSym = isUsd ? "$" : "";
+        const currUnit = isUsd ? "" : "원";
+
         // 1. 투자금 (입/출금) 컬럼
         let depositStr = "-";
         if (r.deposit > 0) {
-          depositStr = `<span style="color:var(--fa-gain); font-weight:700;">+${r.deposit.toLocaleString()}원</span>`;
+          depositStr = `<span style="color:var(--fa-gain); font-weight:700;">+${currSym}${r.deposit.toLocaleString()}${currUnit}</span>`;
         } else if (r.deposit < 0) {
-          depositStr = `<span style="color:var(--fa-loss); font-weight:700;">-${Math.abs(r.deposit).toLocaleString()}원</span>`;
+          depositStr = `<span style="color:var(--fa-loss); font-weight:700;">-${currSym}${Math.abs(r.deposit).toLocaleString()}${currUnit}</span>`;
         }
 
         // 2. 체결금액 컬럼
         let tradeAmountStr = "-";
         if (r.evaluation > 0) {
-          tradeAmountStr = `<span style="font-weight:700;">${r.evaluation.toLocaleString()}원</span>`;
+          tradeAmountStr = `<span style="font-weight:700;">${currSym}${r.evaluation.toLocaleString()}${currUnit}</span>`;
         } else if (r.amount > 0) {
           tradeAmountStr = (kindText === "매도" || r.quantity < 0)
-            ? `<span style="color:var(--fa-loss); font-weight:700;">-${r.amount.toLocaleString()}원</span>`
-            : `<span style="color:var(--fa-gain); font-weight:700;">+${r.amount.toLocaleString()}원</span>`;
+            ? `<span style="color:var(--fa-loss); font-weight:700;">-${currSym}${r.amount.toLocaleString()}${currUnit}</span>`
+            : `<span style="color:var(--fa-gain); font-weight:700;">+${currSym}${r.amount.toLocaleString()}${currUnit}</span>`;
         } else if (r.unit_price > 0 && r.quantity !== 0) {
           const calcAmt = Math.abs(r.unit_price * r.quantity);
           tradeAmountStr = (kindText === "매도" || r.quantity < 0)
-            ? `<span style="color:var(--fa-loss); font-weight:700;">-${calcAmt.toLocaleString()}원</span>`
-            : `<span style="color:var(--fa-gain); font-weight:700;">+${calcAmt.toLocaleString()}원</span>`;
+            ? `<span style="color:var(--fa-loss); font-weight:700;">-${currSym}${calcAmt.toLocaleString()}${currUnit}</span>`
+            : `<span style="color:var(--fa-gain); font-weight:700;">+${currSym}${calcAmt.toLocaleString()}${currUnit}</span>`;
         }
 
         // 3. 배당금액 컬럼
         let dividendStr = "-";
         if (r.dividend > 0) {
-          dividendStr = `<span style="color:var(--fa-purple); font-weight:700;">+${r.dividend.toLocaleString()}원</span>`;
+          dividendStr = isUsd
+            ? `<span style="color:var(--fa-purple); font-weight:700;">+$${r.dividend.toLocaleString()}</span>`
+            : `<span style="color:var(--fa-purple); font-weight:700;">+${r.dividend.toLocaleString()}원</span>`;
         }
 
         const acctLabel = ACCOUNT_MAP[r.account] || r.account;
@@ -1593,7 +1660,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <td><span class="badge badge-account">${acctLabel}</span></td>
             <td><span class="badge ${badgeClass}">${kindText}</span></td>
             <td style="font-weight:700; color:var(--fa-text-main);">${displaySymbol}</td>
-            <td class="text-right">${r.unit_price > 0 ? r.unit_price.toLocaleString() : "-"}</td>
+            <td class="text-right">${r.unit_price > 0 ? (isUsd ? '$' + r.unit_price.toLocaleString() : r.unit_price.toLocaleString() + '원') : "-"}</td>
             <td class="text-right">${r.quantity !== 0 && r.quantity !== null && r.quantity !== undefined ? r.quantity.toLocaleString() : "-"}</td>
             <td class="text-right">${depositStr}</td>
             <td class="text-right">${tradeAmountStr}</td>
@@ -1761,6 +1828,18 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       } catch(e) {
         alert("삭제 실패");
       }
+    }
+
+    async function restartServer() {
+      if (!confirm("서버 프로세스를 재시작하시겠습니까? (최신 소스 코드가 즉시 적용됩니다)")) return;
+      showToast("서버 프로세스를 재시작하는 중입니다... 🔄");
+      try {
+        await fetch("/api/restart-server");
+      } catch(e) {}
+      setTimeout(() => {
+        showToast("서버 재시작 완료! 화면을 새로고침합니다. ✨");
+        setTimeout(() => location.reload(), 600);
+      }, 1200);
     }
 
     async function triggerDashboardBuild() {
@@ -2215,6 +2294,14 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
             self.wfile.write(HTML_TEMPLATE.encode("utf-8"))
             return
 
+        if path == "/api/restart-server":
+            self._send_json({"ok": True, "message": "서버를 재시작합니다."})
+            def _restart():
+                time.sleep(0.3)
+                os.execv(sys.executable, [sys.executable] + sys.argv)
+            threading.Thread(target=_restart, daemon=True).start()
+            return
+
         if path == "/api/build-dashboard":
             run_dashboard_update()
             self._send_json({"ok": True})
@@ -2307,22 +2394,51 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
             total_count = base_stat["cnt"] if base_stat else 0
             latest_date = base_stat["max_date"] if base_stat else "-"
 
-            # 최신 거래월 기준 당월 매수금 / 배당금 합산 (YYYY.MM 또는 YYYY-MM 지원)
+            # 최신 거래월 기준 당월 매수금 / 배당금 합산 (환율 반영 정밀 계산)
             month_prefix = latest_date[:7].replace("-", ".") if latest_date and len(latest_date) >= 7 else date.today().strftime("%Y.%m")
             cur.execute("""
-                SELECT
-                    SUM(CASE 
-                        WHEN (kind = '매수' OR (COALESCE(kind, '') = '' AND quantity > 0))
-                        THEN COALESCE(amount, quantity * unit_price, 0)
-                        ELSE 0 
-                    END) AS month_buy,
-                    SUM(COALESCE(dividend, 0)) AS month_div
+                SELECT account, kind, quantity, unit_price, amount, dividend, date
                 FROM trading_records
                 WHERE REPLACE(date, '-', '.') LIKE ?;
             """, (f"{month_prefix}%",))
-            month_stat = cur.fetchone()
-            month_buy = month_stat["month_buy"] or 0.0
-            month_div = month_stat["month_div"] or 0.0
+            month_rows = cur.fetchall()
+
+            # 환율 사전 로드 (USDKRW=X)
+            cur.execute("SELECT date, close FROM market_history WHERE symbol = 'USDKRW=X' ORDER BY date ASC;")
+            fx_rows = cur.fetchall()
+            fx_dict = {r[0]: float(r[1]) for r in fx_rows}
+            latest_fx = float(fx_rows[-1][1]) if fx_rows else 1350.0
+
+            def get_fx(d_str):
+                d_clean = str(d_str or "").replace(".", "-")
+                if d_clean in fx_dict:
+                    return fx_dict[d_clean]
+                past = [v for k, v in fx_dict.items() if k <= d_clean]
+                return past[-1] if past else latest_fx
+
+            month_buy = 0.0
+            month_div = 0.0
+            month_div_usd = 0.0
+
+            for mr in month_rows:
+                acct = str(mr["account"] or "").lower()
+                k = str(mr["kind"] or "")
+                q = float(mr["quantity"] or 0)
+                up = float(mr["unit_price"] or 0)
+                amt = float(mr["amount"] or (q * up if q and up else 0))
+                div = float(mr["dividend"] or 0)
+                d = str(mr["date"] or "")
+                is_usd = (acct == "usa")
+                fx = get_fx(d) if is_usd else 1.0
+
+                if k == "매수" or (not k and q > 0):
+                    month_buy += amt * fx
+                if div > 0:
+                    if is_usd:
+                        month_div += div * fx
+                        month_div_usd += div
+                    else:
+                        month_div += div
 
             conn.close()
 
@@ -2333,6 +2449,7 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
                     "latest_date": latest_date,
                     "month_buy": month_buy,
                     "month_div": month_div,
+                    "month_div_usd": month_div_usd,
                     "filtered_count": len(rows),
                 }
             })
@@ -2343,6 +2460,14 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
         path = parsed.path
+
+        if path == "/api/restart-server":
+            self._send_json({"ok": True, "message": "서버를 재시작합니다."})
+            def _restart():
+                time.sleep(0.3)
+                os.execv(sys.executable, [sys.executable] + sys.argv)
+            threading.Thread(target=_restart, daemon=True).start()
+            return
 
         if path == "/api/build-dashboard":
             run_dashboard_update()
@@ -2549,6 +2674,7 @@ def main():
 
     ensure_db_normalized()
     init_market_history_db()
+    start_file_watcher()
 
     class ReusableHTTPServer(HTTPServer):
         allow_reuse_address = True
