@@ -28,7 +28,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.63"
+APP_VERSION = "v2.7.64"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -1441,7 +1441,7 @@ def _extract_dividend_data(records: pd.DataFrame, fx_series: pd.Series):
     return yearly_series, quarterly_agg, monthly_series, yearly_detail_df
 
 
-def _build_yearly_dividend_line_chart(yearly_series: pd.Series) -> go.Figure:
+def _build_yearly_dividend_bar_chart(yearly_series: pd.Series) -> go.Figure:
     fig = go.Figure()
     if yearly_series.empty:
         return fig
@@ -1451,19 +1451,22 @@ def _build_yearly_dividend_line_chart(yearly_series: pd.Series) -> go.Figure:
     y_raw = yearly_series.values
     y_mil = y_raw / 1_000_000.0
     y_max = max(y_mil) if len(y_mil) > 0 else 1.0
-    y_range = [0, y_max * 1.15]
+    y_range = [0, y_max * 1.18]
 
     customdata = np.stack((hover_labels, y_raw), axis=-1)
+    bar_texts = [f"{v:,.1f}" if v > 0 else "" for v in y_mil]
 
     fig.add_trace(
-        go.Scatter(
+        go.Bar(
             x=list(range(len(x_labels))),
             y=y_mil,
-            mode="lines+markers",
-            line=dict(color="#4F46E5", width=3),
-            marker=dict(size=8, color="#4F46E5"),
+            text=bar_texts,
+            textposition="outside",
+            textfont=dict(size=12, family=FONT_FAMILY, color="#475569"),
+            marker=dict(color="#4F46E5", opacity=0.9),
             customdata=customdata,
-            hovertemplate="<b>%{customdata[0]}</b><br>배당금: %{y:,.2f} 백만원 (%{customdata[1]:,.0f})<extra></extra>",
+            hovertemplate="<b>%{customdata[0]}</b><br>총 배당금: <b>%{customdata[1]:,.0f}원</b> (%{y:,.2f} 백만원)<extra></extra>",
+            cliponaxis=False,
         )
     )
     fig.update_layout(
@@ -1473,6 +1476,7 @@ def _build_yearly_dividend_line_chart(yearly_series: pd.Series) -> go.Figure:
         font=dict(family=FONT_FAMILY, size=14),
         paper_bgcolor=THEME_BG,
         plot_bgcolor=THEME_BG,
+        bargap=0.35,
     )
     fig.update_yaxes(
         tickformat=",.1f",
@@ -1492,7 +1496,7 @@ def _build_yearly_dividend_line_chart(yearly_series: pd.Series) -> go.Figure:
     return fig
 
 
-def _build_quarterly_dividend_line_chart(quarterly_agg: pd.DataFrame) -> go.Figure:
+def _build_quarterly_dividend_bar_chart(quarterly_agg: pd.DataFrame) -> go.Figure:
     fig = go.Figure()
     if quarterly_agg.empty:
         return fig
@@ -1538,14 +1542,13 @@ def _build_quarterly_dividend_line_chart(quarterly_agg: pd.DataFrame) -> go.Figu
             )
 
     fig.add_trace(
-        go.Scatter(
+        go.Bar(
             x=list(range(len(x_labels))),
             y=y_mil,
-            mode="lines+markers",
-            line=dict(color="#06B6D4", width=3),
-            marker=dict(size=8, color="#06B6D4"),
+            marker=dict(color="#06B6D4", opacity=0.9),
             customdata=customdata,
-            hovertemplate="<b>%{customdata[0]}</b><br>배당금: %{y:,.2f} 백만원 (%{customdata[1]:,.0f})<extra></extra>",
+            hovertemplate="<b>%{customdata[0]}</b><br>총 배당금: <b>%{customdata[1]:,.0f}원</b> (%{y:,.2f} 백만원)<extra></extra>",
+            cliponaxis=False,
         )
     )
     fig.update_layout(
@@ -1555,6 +1558,7 @@ def _build_quarterly_dividend_line_chart(quarterly_agg: pd.DataFrame) -> go.Figu
         font=dict(family=FONT_FAMILY, size=14),
         paper_bgcolor=THEME_BG,
         plot_bgcolor=THEME_BG,
+        bargap=0.25,
     )
     fig.update_yaxes(
         tickformat=",.1f",
@@ -1574,7 +1578,7 @@ def _build_quarterly_dividend_line_chart(quarterly_agg: pd.DataFrame) -> go.Figu
     return fig
 
 
-def _build_monthly_dividend_line_chart(monthly_series: pd.Series) -> go.Figure:
+def _build_monthly_dividend_bar_chart(monthly_series: pd.Series) -> go.Figure:
     fig = go.Figure()
     if monthly_series.empty:
         return fig
@@ -1619,14 +1623,13 @@ def _build_monthly_dividend_line_chart(monthly_series: pd.Series) -> go.Figure:
             )
 
     fig.add_trace(
-        go.Scatter(
+        go.Bar(
             x=list(range(len(x_labels))),
             y=y_mil,
-            mode="lines+markers",
-            line=dict(color="#10B981", width=2.5),
-            marker=dict(size=6, color="#10B981"),
+            marker=dict(color="#10B981", opacity=0.9),
             customdata=customdata,
-            hovertemplate="<b>%{customdata[0]}</b><br>배당금: %{y:,.2f} 백만원 (%{customdata[1]:,.0f})<extra></extra>",
+            hovertemplate="<b>%{customdata[0]}</b><br>총 배당금: <b>%{customdata[1]:,.0f}원</b> (%{y:,.2f} 백만원)<extra></extra>",
+            cliponaxis=False,
         )
     )
     fig.update_layout(
@@ -1636,6 +1639,74 @@ def _build_monthly_dividend_line_chart(monthly_series: pd.Series) -> go.Figure:
         font=dict(family=FONT_FAMILY, size=14),
         paper_bgcolor=THEME_BG,
         plot_bgcolor=THEME_BG,
+        bargap=0.15,
+    )
+    fig.update_yaxes(
+        tickformat=",.1f",
+        range=y_range,
+        showgrid=True,
+        gridcolor=THEME_GRID,
+        zeroline=False,
+        tickfont=dict(size=13, family=FONT_FAMILY),
+    )
+    fig.update_xaxes(
+        tickmode="array",
+        tickvals=list(range(len(x_labels))),
+        ticktext=x_labels,
+        tickfont=dict(size=12, family=FONT_FAMILY),
+        showgrid=False,
+    )
+    return fig
+
+
+def _build_last12m_dividend_bar_chart(monthly_series: pd.Series) -> go.Figure:
+    """최근 12개월의 월별 배당금을 보여주는 막대 그래프"""
+    fig = go.Figure()
+    if monthly_series.empty:
+        return fig
+
+    last12m_s = monthly_series.iloc[-12:] if len(monthly_series) >= 12 else monthly_series
+    x_labels = [d.strftime("'%y.%m") for d in last12m_s.index]
+    hover_labels = [d.strftime("%Y년 %m월") for d in last12m_s.index]
+    y_raw = last12m_s.values
+    y_mil = y_raw / 1_000_000.0
+    y_max = max(y_mil) if len(y_mil) > 0 else 1.0
+    y_range = [0, y_max * 1.25]
+
+    bar_texts = []
+    for v in y_raw:
+        if v >= 100_000_000:
+            bar_texts.append(f"{v/100_000_000:.1f}억")
+        elif v >= 10_000:
+            bar_texts.append(f"{v/10_000:,.0f}만")
+        elif v > 0:
+            bar_texts.append(f"{v:,.0f}")
+        else:
+            bar_texts.append("")
+
+    customdata = np.stack((hover_labels, y_raw), axis=-1)
+
+    fig.add_trace(
+        go.Bar(
+            x=list(range(len(x_labels))),
+            y=y_mil,
+            text=bar_texts,
+            textposition="outside",
+            textfont=dict(size=11, family=FONT_FAMILY, color="#475569"),
+            marker=dict(color="#8B5CF6", opacity=0.9),
+            customdata=customdata,
+            hovertemplate="<b>%{customdata[0]}</b><br>월 배당금: <b>%{customdata[1]:,.0f}원</b> (%{y:,.2f} 백만원)<extra></extra>",
+            cliponaxis=False,
+        )
+    )
+    fig.update_layout(
+        height=320,
+        margin=dict(l=15, r=15, t=30, b=25),
+        showlegend=False,
+        font=dict(family=FONT_FAMILY, size=14),
+        paper_bgcolor=THEME_BG,
+        plot_bgcolor=THEME_BG,
+        bargap=0.35,
     )
     fig.update_yaxes(
         tickformat=",.1f",
@@ -1715,14 +1786,15 @@ def _build_dividends_tabbed_section(
     fx_series: pd.Series,
     fig_renderer: Callable[[go.Figure], str],
 ) -> Optional[str]:
-    """배당금 현황을 4개 탭(연도별, 분기별, 월별, 상세)으로 렌더링하는 통합 컴포넌트"""
+    """배당금 현황을 5개 탭(연도별, 분기별, 월별, 최근 12개월, 상세)으로 렌더링하는 통합 컴포넌트"""
     yearly_series, quarterly_agg, monthly_series, yearly_detail_df = _extract_dividend_data(records, fx_series)
     if yearly_series.empty:
         return None
 
-    fig_yearly = _build_yearly_dividend_line_chart(yearly_series)
-    fig_quarterly = _build_quarterly_dividend_line_chart(quarterly_agg)
-    fig_monthly = _build_monthly_dividend_line_chart(monthly_series)
+    fig_yearly = _build_yearly_dividend_bar_chart(yearly_series)
+    fig_quarterly = _build_quarterly_dividend_bar_chart(quarterly_agg)
+    fig_monthly = _build_monthly_dividend_bar_chart(monthly_series)
+    fig_last12m = _build_last12m_dividend_bar_chart(monthly_series)
 
     # 상세 탭 연도별 목록 (내림차순)
     available_years = sorted(yearly_detail_df["연도"].unique().tolist(), reverse=True) if not yearly_detail_df.empty else []
@@ -1770,12 +1842,14 @@ def _build_dividends_tabbed_section(
         "        <button class='fa-tab-btn active' data-target='fa-div-tab-yearly'>연도별</button>",
         "        <button class='fa-tab-btn' data-target='fa-div-tab-quarterly'>분기별</button>",
         "        <button class='fa-tab-btn' data-target='fa-div-tab-monthly'>월별</button>",
+        "        <button class='fa-tab-btn' data-target='fa-div-tab-last12m'>최근 12개월</button>",
         "        <button class='fa-tab-btn' data-target='fa-div-tab-detail'>상세</button>",
         "      </div>",
         "      <div class='fa-tab-content'>",
         f"        <div id='fa-div-tab-yearly' class='fa-tab-pane active'>{fig_renderer(fig_yearly)}</div>",
         f"        <div id='fa-div-tab-quarterly' class='fa-tab-pane'>{fig_renderer(fig_quarterly)}</div>",
         f"        <div id='fa-div-tab-monthly' class='fa-tab-pane'>{fig_renderer(fig_monthly)}</div>",
+        f"        <div id='fa-div-tab-last12m' class='fa-tab-pane'>{fig_renderer(fig_last12m)}</div>",
         f"        <div id='fa-div-tab-detail' class='fa-tab-pane'>{detail_html}</div>",
         "      </div>",
         "    </div>",
@@ -1809,7 +1883,7 @@ def _fmt_profit_man(profit: Optional[float], rate: Optional[float]) -> str:
 
 
 def _build_summary_man_table(summary_df: pd.DataFrame) -> str:
-    """전체 계좌 요약 현황을 1개의 카드 안에서 계좌명 | 투자금 | 평가금 | 수익금 | 비중 | 배당금 순으로 렌더링 (만원 단위)"""
+    """전체 계좌 요약 현황을 1개의 카드 안에서 계좌명 | 투자금 | 평가금 | 수익금 | 비중 | 배당금 순으로 렌더링 (원 단위)"""
     if summary_df.empty:
         return "<p class='fa-empty-text'>계좌 데이터가 없습니다.</p>"
 
@@ -1848,11 +1922,14 @@ def _build_summary_man_table(summary_df: pd.DataFrame) -> str:
         profit_cls = "fa-num-positive" if (profit or 0) > 0 else "fa-num-negative" if (profit or 0) < 0 else ""
         profit_badge = "fa-badge-positive" if (profit or 0) > 0 else "fa-badge-negative" if (profit or 0) < 0 else "fa-badge-neutral"
 
-        invest_str = _fmt_man(invest)
-        eval_str = _fmt_man(valuation)
-        profit_str = _fmt_profit_man(profit, return_rate)
+        invest_str = f"{invest:,.0f}" if invest is not None and not pd.isna(invest) else "-"
+        eval_str = f"{valuation:,.0f}" if valuation is not None and not pd.isna(valuation) else "-"
+        sign = "+" if (profit or 0) > 0 else ""
+        profit_val_str = f"{sign}{profit:,.0f}" if profit is not None and not pd.isna(profit) else "-"
+        rate_str = f"{return_rate * 100:+.2f}%" if (return_rate is not None and not pd.isna(return_rate)) else ""
+        profit_str = f"{profit_val_str} ({rate_str})" if rate_str else profit_val_str
         weight_str = f"{weight * 100:.1f}" if weight is not None else "-"
-        div_str = _fmt_man(dividend) if dividend is not None and dividend > 0 else "-"
+        div_str = f"{dividend:,.0f}" if dividend is not None and dividend > 0 else "-"
 
         lines.append("  <tr>")
         lines.append(f"    <td class='fa-col-account'><strong>{html.escape(label)}</strong></td>")
@@ -1875,10 +1952,13 @@ def _build_summary_man_table(summary_df: pd.DataFrame) -> str:
         profit_cls = "fa-num-positive" if (profit or 0) > 0 else "fa-num-negative" if (profit or 0) < 0 else ""
         profit_badge = "fa-badge-positive" if (profit or 0) > 0 else "fa-badge-negative" if (profit or 0) < 0 else "fa-badge-neutral"
 
-        invest_str = _fmt_man(invest)
-        eval_str = _fmt_man(valuation)
-        profit_str = _fmt_profit_man(profit, return_rate)
-        div_str = _fmt_man(dividend) if dividend is not None and dividend > 0 else "-"
+        invest_str = f"{invest:,.0f}" if invest is not None and not pd.isna(invest) else "-"
+        eval_str = f"{valuation:,.0f}" if valuation is not None and not pd.isna(valuation) else "-"
+        sign = "+" if (profit or 0) > 0 else ""
+        profit_val_str = f"{sign}{profit:,.0f}" if profit is not None and not pd.isna(profit) else "-"
+        rate_str = f"{return_rate * 100:+.2f}%" if (return_rate is not None and not pd.isna(return_rate)) else ""
+        profit_str = f"{profit_val_str} ({rate_str})" if rate_str else profit_val_str
+        div_str = f"{dividend:,.0f}" if dividend is not None and dividend > 0 else "-"
 
         lines.append("<tfoot>")
         lines.append("  <tr class='fa-tr-total'>")
@@ -1898,7 +1978,7 @@ def _build_summary_man_table(summary_df: pd.DataFrame) -> str:
 
 
 def _build_single_account_card(row: pd.Series) -> str:
-    """개별 계좌 1개의 지표를 1개의 통합 카드로 깔끔하게 렌더링 (투자금 -> 평가금 -> 수익금 -> 비중 -> 배당금)"""
+    """개별 계좌 1개의 지표를 1개의 통합 카드로 깔끔하게 렌더링 (투자금 -> 평가금 -> 수익금 -> 비중 -> 배당금, 원 단위)"""
     if row is None:
         return ""
     acct_name = str(row["계좌"])
@@ -1913,12 +1993,13 @@ def _build_single_account_card(row: pd.Series) -> str:
     profit_cls = "fa-num-positive" if (profit or 0) > 0 else "fa-num-negative" if (profit or 0) < 0 else ""
     profit_badge = "fa-badge-positive" if (profit or 0) > 0 else "fa-badge-negative" if (profit or 0) < 0 else "fa-badge-neutral"
 
-    invest_str = f"{_fmt_man(invest)} ({invest:,.0f})" if invest is not None else "-"
-    eval_str = f"{_fmt_man(valuation)} ({valuation:,.0f})" if valuation is not None else "-"
-    profit_str = f"{profit:+,.0f}" if profit is not None and profit != 0 else (f"{profit:,.0f}" if profit is not None else "-")
-    profit_man_str = f"{_fmt_profit_man(profit, return_rate)} ({profit_str})"
-    weight_str = f"{weight * 100:.1f}" if weight is not None else "-"
-    div_str = f"{_fmt_man(dividend)} ({dividend:,.0f})" if dividend is not None and dividend > 0 else None
+    invest_str = f"{invest:,.0f}원" if invest is not None else "-"
+    eval_str = f"{valuation:,.0f}원" if valuation is not None else "-"
+    profit_str = f"{profit:+,.0f}원" if profit is not None and profit != 0 else (f"{profit:,.0f}원" if profit is not None else "-")
+    rate_str = f"{return_rate * 100:+.2f}%" if return_rate is not None else ""
+    profit_disp = f"{profit_str} ({rate_str})" if rate_str else profit_str
+    weight_str = f"{weight * 100:.1f}%" if weight is not None else "-"
+    div_str = f"{dividend:,.0f}원" if dividend is not None and dividend > 0 else None
 
     div_html = f"<div class='fa-stat-line'><span class='fa-stat-lbl'>누적 배당금</span><span class='fa-stat-val' style='color:var(--fa-purple);'>{div_str}</span></div>" if div_str else ""
 
@@ -1931,7 +2012,7 @@ def _build_single_account_card(row: pd.Series) -> str:
       <div class="fa-stat-line-group">
         <div class="fa-stat-line"><span class="fa-stat-lbl">투자금</span><span class="fa-stat-val">{invest_str}</span></div>
         <div class="fa-stat-line"><span class="fa-stat-lbl">평가금</span><span class="fa-stat-val fa-font-bold">{eval_str}</span></div>
-        <div class="fa-stat-line"><span class="fa-stat-lbl">수익금</span><span class="fa-stat-val {profit_cls}"><span class="fa-badge {profit_badge}">{profit_man_str}</span></span></div>
+        <div class="fa-stat-line"><span class="fa-stat-lbl">수익금</span><span class="fa-stat-val {profit_cls}"><span class="fa-badge {profit_badge}">{profit_disp}</span></span></div>
         <div class="fa-stat-line"><span class="fa-stat-lbl">비중</span><span class="fa-stat-val">{weight_str}</span></div>
         {div_html}
       </div>
