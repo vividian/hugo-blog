@@ -28,7 +28,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.65"
+APP_VERSION = "v2.7.66"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -2314,6 +2314,15 @@ def _build_account_detail_section(
         for (acct_code, sym), grp in div_records.groupby(["계좌", "종목"]):
             div_by_acct_sym[(str(acct_code).strip(), str(sym).strip())] = float(grp["배당원화"].sum())
 
+    # 계좌별/종목별 누적 투자금(사용자가 직접 입력한 deposit 합) 사전 계산
+    inv_records = data.records[(data.records["투자금"].notna()) & (pd.to_numeric(data.records["투자금"], errors="coerce") > 0)].copy()
+    inv_by_acct_sym: Dict[Tuple[str, str], float] = {}
+    if not inv_records.empty:
+        for (acct_code, sym), grp in inv_records.groupby(["계좌", "종목"]):
+            sym_clean = str(sym).strip() if pd.notna(sym) else ""
+            if sym_clean:
+                inv_by_acct_sym[(str(acct_code).strip(), sym_clean)] = float(grp["투자금"].sum())
+
     accounts = list(data.valid_detail_accounts)
     for idx, account in enumerate(accounts):
         label = update_fa.account_label(account)
@@ -2437,10 +2446,29 @@ def _build_account_detail_section(
             buy_p_amt = e_amt - b_amt
             buy_r_rate = (buy_p_amt / b_amt * 100.0) if b_amt > 0 else 0.0
 
-            # 종목별 투자금(계좌 원금 배분액) 대비 수익금 및 수익률
-            alloc_inv_amt = (invest_val * (b_amt / total_acct_buy)) if (invest_val and invest_val > 0 and b_amt > 0) else b_amt
-            inv_p_amt = e_amt - alloc_inv_amt
-            inv_r_rate = (inv_p_amt / alloc_inv_amt * 100.0) if alloc_inv_amt > 0 else 0.0
+            # 종목별 투자금 (사용자가 직접 입력한 투자금 deposit 합계)
+            user_inv_amt = inv_by_acct_sym.get((account, sym), 0.0)
+            if user_inv_amt == 0.0 and account == "sema" and invest_val is not None:
+                user_inv_amt = invest_val
+
+            if user_inv_amt > 0:
+                inv_p_amt = e_amt - user_inv_amt
+                inv_r_rate = (inv_p_amt / user_inv_amt * 100.0)
+                inv_p_cls = "fa-num-positive" if inv_p_amt > 0 else "fa-num-negative" if inv_p_amt < 0 else ""
+                inv_p_bdg = "fa-badge-positive" if inv_p_amt > 0 else "fa-badge-negative" if inv_p_amt < 0 else "fa-badge-neutral"
+                inv_str = f"{user_inv_amt:,.0f}"
+                inv_p_str = f"{inv_p_amt:+,.0f}" if inv_p_amt != 0 else "0"
+                inv_r_str = f"{inv_r_rate:+.2f}"
+                inv_badge_html = f"<span class='fa-badge {inv_p_bdg}'>투 {inv_r_str}</span>"
+            else:
+                inv_p_amt = None
+                inv_r_rate = None
+                inv_p_cls = ""
+                inv_p_bdg = "fa-badge-neutral"
+                inv_str = "-"
+                inv_p_str = "-"
+                inv_r_str = "-"
+                inv_badge_html = f"<span class='fa-badge fa-badge-neutral'>투 -</span>"
 
             cum_div = div_by_acct_sym.get((account, sym), 0.0)
             if cum_div == 0.0 and account == "sema" and dividend_val is not None:
@@ -2450,23 +2478,17 @@ def _build_account_detail_section(
             buy_p_cls = "fa-num-positive" if buy_p_amt > 0 else "fa-num-negative" if buy_p_amt < 0 else ""
             buy_p_bdg = "fa-badge-positive" if buy_p_amt > 0 else "fa-badge-negative" if buy_p_amt < 0 else "fa-badge-neutral"
 
-            inv_p_cls = "fa-num-positive" if inv_p_amt > 0 else "fa-num-negative" if inv_p_amt < 0 else ""
-            inv_p_bdg = "fa-badge-positive" if inv_p_amt > 0 else "fa-badge-negative" if inv_p_amt < 0 else "fa-badge-neutral"
-
             b_str = f"{b_amt:,.0f}"
             e_str = f"{e_amt:,.0f}"
-            inv_str = f"{alloc_inv_amt:,.0f}"
             buy_p_str = f"{buy_p_amt:+,.0f}" if buy_p_amt != 0 else "0"
             buy_r_str = f"{buy_r_rate:+.2f}"
-            inv_p_str = f"{inv_p_amt:+,.0f}" if inv_p_amt != 0 else "0"
-            inv_r_str = f"{inv_r_rate:+.2f}"
 
             stock_cards.append(
                 f"<div class='fa-stock-card'>"
                 f"  <div class='fa-stock-card-head'>"
                 f"    <div class='fa-stock-card-title'>{html.escape(sym)}</div>"
                 f"    <div class='fa-stock-card-badges'>"
-                f"      <span class='fa-badge {inv_p_bdg}'>투 {inv_r_str}</span>"
+                f"      {inv_badge_html}"
                 f"      <span class='fa-rate-divider'>/</span>"
                 f"      <span class='fa-badge {buy_p_bdg}'>매 {buy_r_str}</span>"
                 f"    </div>"
