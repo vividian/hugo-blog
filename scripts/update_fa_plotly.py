@@ -28,7 +28,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.62"
+APP_VERSION = "v2.7.63"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -213,11 +213,12 @@ def _fetch_market_snapshots() -> Dict[str, Tuple[Optional[float], Optional[float
     return snapshots
 
 
-def _kpi_card(label: str, value: str, sub: str = "", state: str = "", sub_state: str = "", sub_onclick: str = "") -> str:
+def _kpi_card(label: str, value: str, sub: str = "", state: str = "", sub_state: str = "", sub_onclick: str = "", sub_title: str = "") -> str:
     state_class = f" {state}" if state else ""
     actual_sub_state = sub_state if sub_state else state
     sub_cls = f" fa-num-{actual_sub_state}" if actual_sub_state in ("positive", "negative") else ""
-    onclick_attr = f" onclick=\"{sub_onclick}\" style=\"cursor:pointer; text-decoration:underline; text-underline-offset:3px;\" title=\"클릭하여 종목별 변동 상세 보기\"" if sub_onclick else ""
+    tooltip_title = sub_title or "클릭하여 종목별 변동 상세 보기"
+    onclick_attr = f" onclick=\"{sub_onclick}\" style=\"cursor:pointer; text-decoration:underline; text-underline-offset:3px;\" title=\"{html.escape(tooltip_title)}\"" if sub_onclick else ""
     return (
         f"<div class=\"fa-kpi-card{state_class}\">"
         f"<div class=\"fa-kpi-label\">{html.escape(label)}</div>"
@@ -225,6 +226,192 @@ def _kpi_card(label: str, value: str, sub: str = "", state: str = "", sub_state:
         f"<div class=\"fa-kpi-sub{sub_cls}\"{onclick_attr}>{html.escape(sub)}</div>"
         "</div>"
     )
+
+
+def _build_eval_change_modal(data: ReportData, cur_eval_val: float, prev_eval_val: float, eval_month_change: float) -> str:
+    """총 평가금의 최근 12개월 전월대비 변동 추세를 보여주는 Plotly 막대 그래프 팝업 모달"""
+    monthly_data_list = []
+
+    if data.account_df is not None and not data.account_df.empty:
+        total_eval_s = data.account_df.sum(axis=1)
+        monthly_eval = total_eval_s.groupby(total_eval_s.index.to_period("M")).last()
+
+        # 최근 12개월 period 추출
+        periods = monthly_eval.index[-12:]
+        for p in periods:
+            c_val = float(monthly_eval.loc[p])
+            p_prev = p - 1
+            if p_prev in monthly_eval.index:
+                prev_v = float(monthly_eval.loc[p_prev])
+                diff_v = c_val - prev_v
+            else:
+                prev_v = c_val
+                diff_v = 0.0
+
+            rate_v = (diff_v / prev_v * 100.0) if prev_v > 0 else 0.0
+            monthly_data_list.append({
+                "period": p,
+                "label": p.strftime("%Y.%m"),
+                "short_label": p.strftime("%y.%m"),
+                "eval": c_val,
+                "diff": diff_v,
+                "rate": rate_v
+            })
+
+    # 최신 월 수치가 실시간 KPI 수치(cur_eval_val, eval_month_change)와 일치하도록 보정
+    if monthly_data_list:
+        monthly_data_list[-1]["eval"] = cur_eval_val
+        monthly_data_list[-1]["diff"] = eval_month_change
+        if prev_eval_val > 0:
+            monthly_data_list[-1]["rate"] = (eval_month_change / prev_eval_val) * 100.0
+
+    if not monthly_data_list:
+        return ""
+
+    diffs = [m["diff"] for m in monthly_data_list]
+    total_12m_diff = sum(diffs)
+    best_item = max(monthly_data_list, key=lambda x: x["diff"])
+    worst_item = min(monthly_data_list, key=lambda x: x["diff"])
+
+    x_labels = [m["label"] for m in monthly_data_list]
+    y_values = [m["diff"] for m in monthly_data_list]
+    bar_colors = ["#e53e3e" if v >= 0 else "#3182ce" for v in y_values]
+
+    def _fmt_bar_krw(v: float) -> str:
+        sign = "+" if v > 0 else ""
+        if abs(v) >= 100000000:
+            return f"{sign}{v/100000000:.1f}억"
+        elif abs(v) >= 10000:
+            return f"{sign}{v/10000:,.0f}만"
+        else:
+            return f"{sign}{v:,.0f}"
+
+    bar_texts = [_fmt_bar_krw(v) for v in y_values]
+
+    custom_data = [
+        [
+            f"{m['diff']:+,.0f}원",
+            f"{m['rate']:+.2f}%",
+            f"{m['eval']:,.0f}원"
+        ]
+        for m in monthly_data_list
+    ]
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Bar(
+            x=x_labels,
+            y=y_values,
+            text=bar_texts,
+            textposition="outside",
+            textfont=dict(family=FONT_FAMILY, size=11, color="#334155"),
+            marker=dict(color=bar_colors, line=dict(width=0)),
+            customdata=custom_data,
+            hovertemplate="<b>%{x}</b><br>전월대비: <b>%{customdata[0]}</b> (%{customdata[1]})<br>총 평가금: %{customdata[2]}<extra></extra>",
+            cliponaxis=False,
+        )
+    )
+
+    max_abs_y = max([abs(v) for v in y_values]) if y_values else 1000000
+    y_pad = max_abs_y * 0.22
+    y_min = min(y_values) - y_pad
+    y_max = max(y_values) + y_pad
+
+    fig.update_layout(
+        height=320,
+        margin=dict(l=10, r=10, t=35, b=20),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        showlegend=False,
+        font=dict(family=FONT_FAMILY, size=12),
+        bargap=0.35,
+    )
+    fig.update_xaxes(
+        tickfont=dict(family=FONT_FAMILY, size=11, color="#64748b"),
+        showgrid=False,
+        fixedrange=True,
+    )
+    fig.update_yaxes(
+        range=[y_min, y_max],
+        showgrid=True,
+        gridcolor="#f1f5f9",
+        zeroline=True,
+        zerolinecolor="#94a3b8",
+        zerolinewidth=1.5,
+        tickfont=dict(family=FONT_FAMILY, size=11, color="#94a3b8"),
+        fixedrange=True,
+    )
+
+    chart_html = fig.to_html(include_plotlyjs=False, full_html=False, config={"displayModeBar": False, "responsive": True})
+
+    table_rows = []
+    for m in reversed(monthly_data_list):
+        net_cls = "fa-num-positive" if m["diff"] > 0 else "fa-num-negative" if m["diff"] < 0 else ""
+        diff_str = f"{m['diff']:+,.0f}원" if m["diff"] != 0 else "0원"
+        rate_str = f"{m['rate']:+.2f}%" if m["rate"] != 0 else "0.00%"
+        table_rows.append(
+            f"<tr>"
+            f"  <td class='fa-num fa-font-bold'>{m['label']}</td>"
+            f"  <td class='text-right fa-num'>{m['eval']:,.0f}원</td>"
+            f"  <td class='text-right fa-num fa-font-bold {net_cls}'>{diff_str}</td>"
+            f"  <td class='text-right fa-num {net_cls}'>{rate_str}</td>"
+            f"</tr>"
+        )
+
+    net_12m_cls = "fa-num-positive" if total_12m_diff > 0 else "fa-num-negative" if total_12m_diff < 0 else ""
+    cur_cls = "fa-num-positive" if eval_month_change > 0 else "fa-num-negative" if eval_month_change < 0 else ""
+
+    return f"""
+<div id="fa-eval-change-modal" class="fa-modal-overlay" onclick="if(event.target===this)closeEvalChangeModal()">
+  <div class="fa-modal-card" style="max-width:780px; width:95%;">
+    <div class="fa-modal-header">
+      <h3 class="fa-modal-title">📈 최근 12개월 전월대비 자산 평가금 변동 추세</h3>
+      <button type="button" class="fa-modal-close" onclick="closeEvalChangeModal()" aria-label="닫기">✕</button>
+    </div>
+    <div class="fa-modal-body">
+      <div class="fa-modal-summary-grid" style="grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));">
+        <div class="fa-modal-stat-box">
+          <div class="fa-modal-stat-lbl">당월 전월대비 변동액</div>
+          <div class="fa-modal-stat-val {cur_cls}">{eval_month_change:+,.0f}원</div>
+        </div>
+        <div class="fa-modal-stat-box">
+          <div class="fa-modal-stat-lbl">최근 12개월 누적 순변동</div>
+          <div class="fa-modal-stat-val {net_12m_cls}">{total_12m_diff:+,.0f}원</div>
+        </div>
+        <div class="fa-modal-stat-box">
+          <div class="fa-modal-stat-lbl">최대 상승 월</div>
+          <div class="fa-modal-stat-val fa-num-positive">{best_item['label']} ({_fmt_bar_krw(best_item['diff'])})</div>
+        </div>
+        <div class="fa-modal-stat-box">
+          <div class="fa-modal-stat-lbl">최대 하락 월</div>
+          <div class="fa-modal-stat-val fa-num-negative">{worst_item['label']} ({_fmt_bar_krw(worst_item['diff'])})</div>
+        </div>
+      </div>
+
+      <div style="background:var(--fa-card-bg); border:1px solid var(--fa-card-border); border-radius:12px; padding:12px 8px 4px; margin:16px 0;">
+        <div style="font-size:0.85rem; font-weight:700; color:var(--fa-text-main); margin:0 8px 4px;">📊 최근 12개월 월별 전월대비 손익 막대 그래프</div>
+        {chart_html}
+      </div>
+
+      <div class="fa-table-wrapper" style="max-height:240px; overflow-y:auto;">
+        <table class="fa-table fa-table-modal-detail">
+          <thead>
+            <tr>
+              <th>기준월</th>
+              <th class="text-right">총 평가금</th>
+              <th class="text-right">전월대비 변동액</th>
+              <th class="text-right">전월대비 증감률</th>
+            </tr>
+          </thead>
+          <tbody>
+            {''.join(table_rows)}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+"""
 
 
 def _build_day_change_modal(data: ReportData, eval_day_change: float) -> str:
@@ -705,20 +892,21 @@ def _build_kpi_row(data: ReportData) -> str:
     div_state = "positive" if div_month_change > 0 else "negative" if div_month_change < 0 else ""
     div_sub = f"전월대비 {div_month_change:+,.0f}" if div_month_change != 0 else "전월대비 0"
 
+    eval_modal_html = _build_eval_change_modal(data, cur_eval_val, prev_eval_val, eval_month_change)
     day_modal_html = _build_day_change_modal(data, eval_day_change)
     invest_modal_html = _build_invest_change_modal(data, cur_inv_val, prev_inv_val, inv_month_change)
     dividend_modal_html = _build_dividend_change_modal(data, cur_div_val, prev_div_val, div_month_change)
     refresh_modal_html = _build_refresh_modal()
 
     cards = [
-        _kpi_card("총 평가금", _fmt_krw(valuation), eval_sub, sub_state=eval_state),
+        _kpi_card("총 평가금", _fmt_krw(valuation), eval_sub, sub_state=eval_state, sub_onclick="openEvalChangeModal()", sub_title="클릭하여 최근 12개월 전월대비 변동 추세 보기"),
         _kpi_card("총 투자금", _fmt_krw(invest), inv_sub, sub_state=inv_state, sub_onclick="openInvestChangeModal()"),
         _kpi_card("총 수익금", f"<span class='fa-num-{profit_state}'>{profit_str}</span>", profit_sub, state=profit_state, sub_state=profit_day_state, sub_onclick="openDayChangeModal()"),
         _kpi_card("총 수익률", f"<span class='fa-num-{return_state}'>{return_str}</span>", rate_sub, state=return_state, sub_state=rate_day_state, sub_onclick="openDayChangeModal()"),
         _kpi_card("월 배당금", _fmt_krw(monthly_div), div_sub, sub_state=div_state, sub_onclick="openDividendChangeModal()"),
         _kpi_card("USD/KRW", _fmt_number(fx, 2, ""), fx_change_text, fx_state, sub_onclick="openMarketModal('USDKRW=X', 'USD/KRW 원/달러 환율')"),
     ]
-    return "<div class=\"fa-kpi-grid\">" + "".join(cards) + "</div>" + day_modal_html + invest_modal_html + dividend_modal_html + refresh_modal_html
+    return "<div class=\"fa-kpi-grid\">" + "".join(cards) + "</div>" + eval_modal_html + day_modal_html + invest_modal_html + dividend_modal_html + refresh_modal_html
 
 
 def _fetch_all_market_history() -> Dict[str, Any]:
@@ -4297,6 +4485,18 @@ window.closeAllModals = function() {
     document.body.style.overflow = "";
   }
 };
+
+window.openEvalChangeModal = function() {
+  window.openModal("fa-eval-change-modal");
+  setTimeout(() => {
+    const modal = document.getElementById("fa-eval-change-modal");
+    if (modal) {
+      const plots = modal.querySelectorAll(".js-plotly-plot");
+      plots.forEach(p => { if (window.Plotly) window.Plotly.Plots.resize(p); });
+    }
+  }, 60);
+};
+window.closeEvalChangeModal = function() { window.closeModal("fa-eval-change-modal"); };
 
 window.openDayChangeModal = function() { window.openModal("fa-day-change-modal"); };
 window.closeDayChangeModal = function() { window.closeModal("fa-day-change-modal"); };
