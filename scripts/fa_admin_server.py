@@ -280,60 +280,129 @@ def update_symbol_in_fa_yaml(
     new_ticker: str,
     new_region: str,
     new_asset_class: str,
-    sync_records: bool = True
+    sync_records: bool = True,
+    old_account_code: Optional[str] = None
 ) -> bool:
-    """config/fa.yaml 내의 특정 종목 메타데이터(단축명 등)를 수정하고 필요한 경우 거래내역 DB도 동기화합니다."""
+    """config/fa.yaml 내의 특정 종목 메타데이터(단축명 및 소속 계좌 등)를 수정하고 필요한 경우 거래내역 DB도 동기화합니다."""
     try:
         if not FA_YAML_PATH.exists():
             return False
         with open(FA_YAML_PATH, "r", encoding="utf-8") as f:
             cfg = yaml.safe_load(f) or {}
 
-        target_kw = ACCOUNT_CODE_TO_KEYWORD.get(account_code, account_code)
-        updated = False
+        target_new_kw = ACCOUNT_CODE_TO_KEYWORD.get(account_code, account_code)
+        target_old_kw = ACCOUNT_CODE_TO_KEYWORD.get(old_account_code, old_account_code) if old_account_code else None
 
-        for acct_entry in cfg.get("accounts", []):
-            acct_title = acct_entry.get("name", "")
-            if target_kw in acct_title or account_code == "all":
-                items = acct_entry.get("items", [])
-                for idx, it in enumerate(items):
-                    if len(it) >= 2 and (it[0] == old_name or it[1] == old_abbrev):
-                        items[idx] = [
-                            new_name,
-                            new_abbrev,
-                            new_ticker or new_abbrev,
-                            new_region or "기타",
-                            new_asset_class or "기타"
-                        ]
-                        updated = True
+        # 1. 수정 대상 종목이 있는 원본 계좌 및 위치 찾기
+        found_acct_entry = None
+        found_idx = -1
+
+        # 1-1) 지정된 old_account_code가 있다면 해당 계좌에서 우선 검색
+        if target_old_kw:
+            for acct_entry in cfg.get("accounts", []):
+                if target_old_kw in acct_entry.get("name", ""):
+                    for idx, it in enumerate(acct_entry.get("items", [])):
+                        if len(it) >= 2 and (it[0] == old_name or it[1] == old_abbrev):
+                            found_acct_entry = acct_entry
+                            found_idx = idx
+                            break
+                    if found_acct_entry:
                         break
-                if updated:
+
+        # 1-2) 못 찾았거나 old_account_code가 없는 경우 전체 계좌 순회 검색
+        if not found_acct_entry:
+            for acct_entry in cfg.get("accounts", []):
+                for idx, it in enumerate(acct_entry.get("items", [])):
+                    if len(it) >= 2 and (it[0] == old_name or it[1] == old_abbrev):
+                        found_acct_entry = acct_entry
+                        found_idx = idx
+                        break
+                if found_acct_entry:
                     break
 
-        if updated:
-            with open(FA_YAML_PATH, "w", encoding="utf-8") as f:
-                yaml.dump(cfg, f, allow_unicode=True, sort_keys=False)
-            print(f"✅ [fa.yaml] 종목 수정 완료: [{account_code}] {old_abbrev} ➡️ {new_abbrev}")
-            sync_fa_yaml_to_md()
+        if not found_acct_entry or found_idx == -1:
+            print(f"⚠️ [fa.yaml] 수정할 종목을 찾지 못함: {old_name} / {old_abbrev}")
+            return False
 
-            # 거래내역 DB 동기화 (접두사 및 기호 변형까지 완벽하게 매칭하여 동기화)
-            if sync_records and (old_abbrev != new_abbrev or old_name != new_abbrev):
-                try:
-                    conn = get_db_connection()
-                    cur = conn.cursor()
-                    # 1) 기존 단축명 및 풀네임 변형들 수집
-                    old_core = re.sub(r"^(SOL|ACE|TIGER|KODEX|RISE|KIWOOM)\s+", "", old_abbrev).strip()
-                    targets = {old_abbrev, old_name, old_core}
-                    # 기호 변형 (: / + / & / -)
-                    for sep in [":", "+", "&", "-", " "]:
-                        targets.add(old_abbrev.replace(":", sep))
-                        targets.add(old_abbrev.replace("+", sep))
-                        targets.add(old_abbrev.replace("&", sep))
-                        targets.add(f"SOL {old_core.replace(':', sep)}")
-                        targets.add(f"SOL {old_core.replace('+', sep)}")
-                        targets.add(f"SOL {old_core.replace('&', sep)}")
+        new_item = [
+            new_name,
+            new_abbrev,
+            new_ticker or new_abbrev,
+            new_region or "기타",
+            new_asset_class or "기타"
+        ]
 
-                    placeholders = ",".join(["?"] * len(targets))
+        # 2. 계좌 이동 여부 판별
+        is_same_account = target_new_kw in found_acct_entry.get("name", "")
+
+        # 원본 계좌 코드 파악
+        orig_acct_code = old_account_code
+        if not orig_acct_code:
+            for code, kw in ACCOUNT_CODE_TO_KEYWORD.items():
+                if kw in found_acct_entry.get("name", ""):
+                    orig_acct_code = code
+                    break
+
+        if is_same_account:
+            # 동일 계좌 내에서 수정
+            found_acct_entry["items"][found_idx] = new_item
+            print(f"✅ [fa.yaml] 종목 정보 수정 완료: [{found_acct_entry.get('name')}] {old_abbrev} ➡️ {new_abbrev}")
+        else:
+            # 다른 계좌로 이동 (예: ISA2 -> 국내2)
+            found_acct_entry["items"].pop(found_idx)
+
+            dest_acct_entry = None
+            for acct_entry in cfg.get("accounts", []):
+                if target_new_kw in acct_entry.get("name", ""):
+                    dest_acct_entry = acct_entry
+                    break
+
+            if not dest_acct_entry:
+                print(f"⚠️ [fa.yaml] 이동 대상 계좌를 찾지 못함: {account_code} ({target_new_kw})")
+                return False
+
+            if "items" not in dest_acct_entry or dest_acct_entry["items"] is None:
+                dest_acct_entry["items"] = []
+            dest_acct_entry["items"].append(new_item)
+            print(f"🔄 [fa.yaml] 종목 계좌 이동 완료: [{found_acct_entry.get('name')}] ➡️ [{dest_acct_entry.get('name')}] ({new_abbrev})")
+
+        # 3. fa.yaml 및 fa.md 동기화
+        with open(FA_YAML_PATH, "w", encoding="utf-8") as f:
+            yaml.dump(cfg, f, allow_unicode=True, sort_keys=False)
+        sync_fa_yaml_to_md()
+
+        # 4. 거래내역 DB 동기화
+        if sync_records:
+            try:
+                conn = get_db_connection()
+                cur = conn.cursor()
+                old_core = re.sub(r"^(SOL|ACE|TIGER|KODEX|RISE|KIWOOM)\s+", "", old_abbrev).strip()
+                targets = {old_abbrev, old_name, old_core}
+                for sep in [":", "+", "&", "-", " "]:
+                    targets.add(old_abbrev.replace(":", sep))
+                    targets.add(old_abbrev.replace("+", sep))
+                    targets.add(old_abbrev.replace("&", sep))
+                    targets.add(f"SOL {old_core.replace(':', sep)}")
+                    targets.add(f"SOL {old_core.replace('+', sep)}")
+                    targets.add(f"SOL {old_core.replace('&', sep)}")
+
+                placeholders = ",".join(["?"] * len(targets))
+
+                if not is_same_account and orig_acct_code:
+                    # 계좌 이동 시: 거래내역의 계좌와 종목명 모두 새 계좌 및 새 단축명으로 변경
+                    query = f"""
+                        UPDATE trading_records
+                        SET symbol = ?, account = ?
+                        WHERE account = ? AND symbol IN ({placeholders});
+                    """
+                    cur.execute(query, [new_abbrev, account_code, orig_acct_code, *targets])
+                    affected = cur.rowcount
+                    conn.commit()
+                    if affected > 0:
+                        print(f"✅ [DB] 거래내역 {affected}건 계좌 및 종목명 동기화 완료: [{orig_acct_code}]->[{account_code}], '{old_abbrev}'->'{new_abbrev}'")
+                        export_db_to_csv()
+                elif old_abbrev != new_abbrev or old_name != new_abbrev:
+                    # 동일 계좌 내에서 종목명만 변경
                     query = f"""
                         UPDATE trading_records
                         SET symbol = ?
@@ -342,15 +411,17 @@ def update_symbol_in_fa_yaml(
                     cur.execute(query, [new_abbrev, account_code, *targets])
                     affected = cur.rowcount
                     conn.commit()
-                    conn.close()
                     if affected > 0:
                         print(f"✅ [DB] 거래내역 {affected}건 종목명 동기화 완료: '{old_abbrev}' ➡️ '{new_abbrev}'")
                         export_db_to_csv()
-                except Exception as db_err:
-                    print(f"⚠️ [DB] 거래내역 동기화 실패: {db_err}")
+                conn.close()
+            except Exception as db_err:
+                print(f"⚠️ [DB] 거래내역 동기화 실패: {db_err}")
 
-            run_dashboard_update()
-            return True
+        run_dashboard_update()
+        return True
+    except Exception as e:
+        print(f"⚠️ [fa.yaml] 종목 수정 실패: {e}")
         return False
     except Exception as e:
         print(f"⚠️ [fa.yaml] 종목 수정 실패: {e}")
@@ -1370,6 +1441,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <button type="button" class="fa-modal-close" onclick="closeEditSymbolModal()">&times;</button>
       </div>
       <form id="form-edit-symbol" onsubmit="handleEditSymbolSubmit(event)">
+        <input type="hidden" id="em-old-account" value="">
         <input type="hidden" id="em-old-name" value="">
         <input type="hidden" id="em-old-abbrev" value="">
         <div class="fa-modal-body">
@@ -2058,6 +2130,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }
 
     function openEditSymbolModal(s) {
+      document.getElementById("em-old-account").value = s.account;
       document.getElementById("em-account").value = s.account;
       document.getElementById("em-old-name").value = s.name;
       document.getElementById("em-old-abbrev").value = s.abbrev;
@@ -2078,6 +2151,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     async function handleEditSymbolSubmit(e) {
       e.preventDefault();
       const payload = {
+        old_account: document.getElementById("em-old-account").value,
         account: document.getElementById("em-account").value,
         old_name: document.getElementById("em-old-name").value,
         old_abbrev: document.getElementById("em-old-abbrev").value,
@@ -2639,6 +2713,7 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
             body = self.rfile.read(length).decode("utf-8")
             data = json.loads(body)
             acct = data.get("account", "")
+            old_acct = data.get("old_account", "").strip() or None
             old_name = data.get("old_name", "").strip()
             old_abbrev = data.get("old_abbrev", "").strip()
             new_name = data.get("name", "").strip() or old_name
@@ -2648,7 +2723,7 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
             new_asset_class = data.get("asset_class", "기타")
             sync_records = bool(data.get("sync_records", True))
 
-            ok = update_symbol_in_fa_yaml(acct, old_name, old_abbrev, new_name, new_abbrev, new_ticker, new_region, new_asset_class, sync_records)
+            ok = update_symbol_in_fa_yaml(acct, old_name, old_abbrev, new_name, new_abbrev, new_ticker, new_region, new_asset_class, sync_records, old_account_code=old_acct)
             self._send_json({"ok": ok})
             return
 
