@@ -8,19 +8,20 @@ FA 거래내역 관리자 웹 서버 (FA Admin Server)
 """
 
 import json
+import os
 import re
+import shutil
 import sqlite3
 import subprocess
 import sys
 import threading
+import time
 from datetime import date
 from http import HTTPStatus
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import HTTPServer, ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qs, urlparse
-import os
-import time
 import yaml
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -452,75 +453,185 @@ def export_db_to_csv():
         print(f"(경고) CSV 자동 백업 덤프 실패: {e}")
 
 
-def run_dashboard_update():
+DASHBOARD_UPDATE_STATUS = {
+    "status": "idle",       # "idle", "running", "completed", "error"
+    "step": 0,             # 1, 2, 3, 4
+    "total_steps": 3,
+    "step_title": "",
+    "message": "대기 중",
+    "progress": 0,         # 0 ~ 100
+    "started_at": 0.0,
+    "finished_at": 0.0,
+    "error": None
+}
+DASHBOARD_UPDATE_LOCK = threading.Lock()
+
+
+def get_dashboard_update_status() -> Dict[str, Any]:
+    with DASHBOARD_UPDATE_LOCK:
+        status_copy = dict(DASHBOARD_UPDATE_STATUS)
+        if status_copy["status"] == "running":
+            status_copy["elapsed"] = round(time.time() - status_copy["started_at"], 1)
+        elif status_copy["status"] in ("completed", "error") and status_copy["started_at"] > 0:
+            status_copy["elapsed"] = round(status_copy["finished_at"] - status_copy["started_at"], 1)
+        else:
+            status_copy["elapsed"] = 0.0
+        return status_copy
+
+
+def set_dashboard_update_status(status: str, step: int, step_title: str, message: str, progress: int, error: Optional[str] = None):
+    with DASHBOARD_UPDATE_LOCK:
+        DASHBOARD_UPDATE_STATUS["status"] = status
+        DASHBOARD_UPDATE_STATUS["step"] = step
+        DASHBOARD_UPDATE_STATUS["step_title"] = step_title
+        DASHBOARD_UPDATE_STATUS["message"] = message
+        DASHBOARD_UPDATE_STATUS["progress"] = progress
+        if status == "running" and DASHBOARD_UPDATE_STATUS["started_at"] == 0.0:
+            DASHBOARD_UPDATE_STATUS["started_at"] = time.time()
+        if status in ("completed", "error"):
+            DASHBOARD_UPDATE_STATUS["finished_at"] = time.time()
+        DASHBOARD_UPDATE_STATUS["error"] = error
+
+
+def run_dashboard_update() -> Dict[str, Any]:
     """백그라운드에서 update_fa_plotly.py를 실행하고 웹 서비스 경로로 즉시 반영(권한 보장)합니다."""
+    with DASHBOARD_UPDATE_LOCK:
+        if DASHBOARD_UPDATE_STATUS["status"] == "running":
+            # 이미 실행 중이면 현재 상태 반환
+            status_copy = dict(DASHBOARD_UPDATE_STATUS)
+            status_copy["elapsed"] = round(time.time() - status_copy["started_at"], 1)
+            return status_copy
+
+        # 새로운 실행 초기화
+        DASHBOARD_UPDATE_STATUS["status"] = "running"
+        DASHBOARD_UPDATE_STATUS["step"] = 1
+        DASHBOARD_UPDATE_STATUS["total_steps"] = 3
+        DASHBOARD_UPDATE_STATUS["step_title"] = "실시간 시세 및 환율 수집 & 차트 생성"
+        DASHBOARD_UPDATE_STATUS["message"] = "야후 파이낸스 실시간 시세를 조회하고 대시보드 그래프를 생성 중입니다..."
+        DASHBOARD_UPDATE_STATUS["progress"] = 15
+        DASHBOARD_UPDATE_STATUS["started_at"] = time.time()
+        DASHBOARD_UPDATE_STATUS["finished_at"] = 0.0
+        DASHBOARD_UPDATE_STATUS["error"] = None
+
     def _worker():
         try:
-            print("⏳ [대시보드 갱신] 대시보드 생성 시작...")
-            # 1. update_fa_plotly.py (인터랙티브 HTML 대시보드 생성 - 2~3초 완료)
+            print("⏳ [대시보드 갱신 1/3] 실시간 시세 수집 및 대시보드 HTML 생성 시작...")
+            set_dashboard_update_status(
+                status="running",
+                step=1,
+                step_title="실시간 주가 및 환율 시세 수집 & 차트 생성",
+                message="실시간 시장 데이터를 조회하고 인터랙티브 차트를 렌더링 중입니다... (약 10~15초 소요)",
+                progress=25
+            )
+
+            # 1. update_fa_plotly.py (인터랙티브 HTML 대시보드 생성 - 약 10~15초 소요)
             cmd_plot = [sys.executable, str(ROOT_DIR / "scripts" / "update_fa_plotly.py")]
             res = subprocess.run(cmd_plot, cwd=ROOT_DIR, capture_output=True, text=True)
             log_p = ROOT_DIR / "logs" / "fa_dashboard_update.log"
             log_p.parent.mkdir(parents=True, exist_ok=True)
             log_p.write_text(f"ReturnCode: {res.returncode}\nSTDOUT:\n{res.stdout}\nSTDERR:\n{res.stderr}\n", encoding="utf-8")
 
-            if res.returncode == 0:
-                print("✅ [대시보드 갱신] HTML 생성 완료!")
+            if res.returncode != 0:
+                err_msg = res.stderr.strip() or res.stdout.strip() or "스크립트 실행 실패"
+                print(f"⚠️ [대시보드 갱신] 차트 생성 에러: {err_msg}")
+                set_dashboard_update_status(
+                    status="error",
+                    step=1,
+                    step_title="차트 생성 오류",
+                    message=f"대시보드 HTML 생성 중 오류가 발생했습니다: {err_msg[:150]}",
+                    progress=25,
+                    error=err_msg
+                )
+                return
 
-                # 2. Hugo 세그먼트 렌더 (헤더, 푸터, 댓글이 포함된 index.html 초고속 갱신)
-                try:
-                    hugo_bin = str(ROOT_DIR / "bin" / "hugo") if (ROOT_DIR / "bin" / "hugo").is_file() else "hugo"
-                    h_res = subprocess.run(
-                        [hugo_bin, "--config", "hugo.yaml,config/config.yaml", "--renderSegments", "fa", "--noTimes", "--noChmod"],
-                        cwd=ROOT_DIR,
-                        capture_output=True,
-                        text=True,
-                        check=False
-                    )
-                    if h_res.returncode == 0:
-                        print("✅ [대시보드 갱신] Hugo fa 세그먼트(헤더/푸터/댓글 포함 index.html) 렌더 완료!")
-                    else:
-                        print(f"⚠️ [대시보드 갱신] Hugo 세그먼트 에러: {h_res.stderr}")
-                except Exception as he:
-                    print(f"(참고) hugo fa 세그먼트 렌더 건너뜀: {he}")
+            print("✅ [대시보드 갱신 1/3] HTML 생성 완료!")
+            set_dashboard_update_status(
+                status="running",
+                step=2,
+                step_title="Hugo 블로그 템플릿 통합 빌드",
+                message="블로그 헤더/푸터/댓글 레이아웃과 결합 중입니다...",
+                progress=70
+            )
 
-                # 3. 도커 Nginx 웹 서빙 경로(public/fa)로 핵심 HTML/JSON 파일 직접 복사
-                public_fa = ROOT_DIR / "public" / "fa"
-                public_fa.mkdir(parents=True, exist_ok=True)
+            # 2. Hugo 세그먼트 렌더 (헤더, 푸터, 댓글이 포함된 index.html 초고속 갱신)
+            try:
+                hugo_bin = str(ROOT_DIR / "bin" / "hugo") if (ROOT_DIR / "bin" / "hugo").is_file() else "hugo"
+                h_res = subprocess.run(
+                    [hugo_bin, "--config", "hugo.yaml,config/config.yaml", "--renderSegments", "fa", "--noTimes", "--noChmod"],
+                    cwd=ROOT_DIR,
+                    capture_output=True,
+                    text=True,
+                    check=False
+                )
+                if h_res.returncode == 0:
+                    print("✅ [대시보드 갱신 2/3] Hugo fa 세그먼트(헤더/푸터/댓글 포함 index.html) 렌더 완료!")
+                else:
+                    print(f"⚠️ [대시보드 갱신] Hugo 세그먼트 에러: {h_res.stderr}")
+            except Exception as he:
+                print(f"(참고) hugo fa 세그먼트 렌더 건너뜀: {he}")
 
-                latest_html_src = ROOT_DIR / "content" / "fa" / "latest_fa.html"
-                if latest_html_src.exists():
-                    for dst_file in [public_fa / "latest_fa.html", public_fa / "index.html"]:
-                        try:
-                            shutil.copy2(latest_html_src, dst_file)
-                            os.chmod(dst_file, 0o666)
-                            print(f"🚀 [도커 웹 서빙 반영] {latest_html_src.name} -> {dst_file} 완료!")
-                        except Exception as ce:
-                            print(f"⚠️ [도커 웹 서빙 반영] {dst_file} 복사 실패: {ce}")
+            set_dashboard_update_status(
+                status="running",
+                step=3,
+                step_title="웹 서비스 배포 및 정적 캐시 동기화",
+                message="웹 서빙 경로로 최신 HTML을 배포하고 있습니다...",
+                progress=90
+            )
 
-                # 4. 과거 Synology 호스트 경로(호환성 유지)
-                for candidate in ["/var/services/web/hugo/fa", "/var/services/web/fa"]:
-                    web_fa = Path(candidate)
-                    if web_fa.exists():
-                        try:
-                            os.chmod(web_fa, 0o755)
-                            for src_p, dst_n in [
-                                (latest_html_src, "latest_fa.html"),
-                                (latest_html_src, "index.html"),
-                                (ROOT_DIR / "data" / "fa.json", "fa.json"),
-                            ]:
-                                if src_p.exists():
-                                    shutil.copy2(src_p, web_fa / dst_n)
-                                    os.chmod(web_fa / dst_n, 0o644)
-                        except Exception as ce:
-                            pass
-            else:
-                print(f"⚠️ 대시보드 갱신 에러: {res.stderr}")
+            # 3. 도커 Nginx 웹 서빙 경로(public/fa)로 핵심 HTML/JSON 파일 직접 복사
+            public_fa = ROOT_DIR / "public" / "fa"
+            public_fa.mkdir(parents=True, exist_ok=True)
+
+            latest_html_src = ROOT_DIR / "content" / "fa" / "latest_fa.html"
+            if latest_html_src.exists():
+                for dst_file in [public_fa / "latest_fa.html", public_fa / "index.html"]:
+                    try:
+                        shutil.copy2(latest_html_src, dst_file)
+                        os.chmod(dst_file, 0o666)
+                        print(f"🚀 [도커 웹 서빙 반영] {latest_html_src.name} -> {dst_file} 완료!")
+                    except Exception as ce:
+                        print(f"⚠️ [도커 웹 서빙 반영] {dst_file} 복사 실패: {ce}")
+
+            # 4. 과거 Synology 호스트 경로(호환성 유지)
+            for candidate in ["/var/services/web/hugo/fa", "/var/services/web/fa"]:
+                web_fa = Path(candidate)
+                if web_fa.exists():
+                    try:
+                        os.chmod(web_fa, 0o755)
+                        for src_p, dst_n in [
+                            (latest_html_src, "latest_fa.html"),
+                            (latest_html_src, "index.html"),
+                            (ROOT_DIR / "data" / "fa.json", "fa.json"),
+                        ]:
+                            if src_p.exists():
+                                shutil.copy2(src_p, web_fa / dst_n)
+                                os.chmod(web_fa / dst_n, 0o644)
+                    except Exception:
+                        pass
+
+            print("🎉 [대시보드 갱신] 전체 갱신 프로세스 완료!")
+            set_dashboard_update_status(
+                status="completed",
+                step=4,
+                step_title="대시보드 갱신 완료",
+                message="모든 데이터가 최신으로 동기화되었습니다! 페이지를 새로고침합니다.",
+                progress=100
+            )
+
         except Exception as e:
             print(f"⚠️ 대시보드 갱신 실행 실패: {e}")
+            set_dashboard_update_status(
+                status="error",
+                step=1,
+                step_title="갱신 실패",
+                message=f"실행 중 예외 발생: {e}",
+                progress=0,
+                error=str(e)
+            )
 
     t = threading.Thread(target=_worker, daemon=True)
     t.start()
+    return get_dashboard_update_status()
 
 
 HTML_TEMPLATE = """<!DOCTYPE html>
@@ -1843,10 +1954,29 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }
 
     async function triggerDashboardBuild() {
-      showToast("대시보드 갱신 작업을 백그라운드에서 시작했습니다... ⏳");
+      showToast("대시보드 갱신 작업을 시작합니다... ⏳");
       try {
         await fetch("/api/build-dashboard", { method: "POST" });
-      } catch(e) {}
+        const pollInterval = setInterval(async () => {
+          try {
+            const res = await fetch("/api/dashboard-status");
+            const data = await res.json();
+            if (data.status === "completed") {
+              clearInterval(pollInterval);
+              showToast("대시보드 갱신이 성공적으로 완료되었습니다! ✨");
+            } else if (data.status === "error") {
+              clearInterval(pollInterval);
+              showToast("⚠️ 갱신 실패: " + (data.message || "오류 발생"));
+            } else if (data.status === "running") {
+              showToast(`⏳ [${data.step}/3] ${data.step_title || data.message}`);
+            }
+          } catch(e) {
+            clearInterval(pollInterval);
+          }
+        }, 2000);
+      } catch(e) {
+        showToast("대시보드 갱신 요청 실패");
+      }
     }
 
     let allSymbolsList = [];
@@ -2302,9 +2432,13 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
             threading.Thread(target=_restart, daemon=True).start()
             return
 
+        if path == "/api/dashboard-status":
+            self._send_json(get_dashboard_update_status())
+            return
+
         if path == "/api/build-dashboard":
-            run_dashboard_update()
-            self._send_json({"ok": True})
+            status = run_dashboard_update()
+            self._send_json(status)
             return
 
         if path == "/api/market/history":
@@ -2470,8 +2604,8 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
             return
 
         if path == "/api/build-dashboard":
-            run_dashboard_update()
-            self._send_json({"ok": True})
+            status = run_dashboard_update()
+            self._send_json(status)
             return
 
         if path == "/api/accounts/allocations":
@@ -2676,7 +2810,7 @@ def main():
     init_market_history_db()
     start_file_watcher()
 
-    class ReusableHTTPServer(HTTPServer):
+    class ReusableHTTPServer(ThreadingHTTPServer):
         allow_reuse_address = True
 
     server_address = (args.host, args.port)

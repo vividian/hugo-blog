@@ -502,6 +502,107 @@ def _build_dividend_change_modal(data: ReportData, cur_div: float, prev_div: flo
 """
 
 
+def _build_refresh_modal() -> str:
+    """대시보드 실시간 갱신 진행 상태를 전면에 보여주는 팝업 모달"""
+    return """
+<div id="fa-refresh-modal" class="fa-modal-overlay fa-refresh-overlay" style="display:none;" onclick="if(event.target===this&&window._canCloseRefreshModal)closeRefreshModal()">
+  <div class="fa-modal-card fa-refresh-modal-card">
+    <div class="fa-refresh-modal-header">
+      <div class="fa-refresh-header-left">
+        <div class="fa-refresh-pulse-icon">
+          <span class="fa-refresh-icon-spin">🔄</span>
+        </div>
+        <div>
+          <h3 class="fa-refresh-modal-title">자산 대시보드 실시간 갱신</h3>
+          <p class="fa-refresh-modal-desc">최신 시장 데이터와 거래내역을 동기화하여 대시보드를 생성합니다.</p>
+        </div>
+      </div>
+      <button type="button" id="fa-refresh-modal-close" class="fa-modal-close" onclick="closeRefreshModal()" style="display:none;" aria-label="닫기">✕</button>
+    </div>
+
+    <div class="fa-refresh-modal-body">
+      <!-- 진행률 바 -->
+      <div class="fa-refresh-progress-section">
+        <div class="fa-refresh-progress-meta">
+          <span class="fa-refresh-badge" id="fa-refresh-badge">1 / 3 단계 진행 중</span>
+          <span class="fa-refresh-percent" id="fa-refresh-percent">15%</span>
+        </div>
+        <div class="fa-refresh-progress-track">
+          <div class="fa-refresh-progress-fill" id="fa-refresh-progress-fill" style="width: 15%;"></div>
+        </div>
+      </div>
+
+      <!-- 작업 단계별 리스트 -->
+      <div class="fa-refresh-steps-list">
+        <div class="fa-refresh-step-item active" id="fa-step-1">
+          <div class="fa-step-indicator">
+            <span class="fa-step-dot"></span>
+            <span class="fa-step-spinner"></span>
+            <span class="fa-step-check">✓</span>
+          </div>
+          <div class="fa-step-info">
+            <div class="fa-step-name">1단계: 실시간 주가 및 환율 시세 수집 & 차트 생성</div>
+            <div class="fa-step-sub" id="fa-step-sub-1">야후 파이낸스 실시간 시세 조회 및 대시보드 그래프 렌더링 (약 10~15초 소요)</div>
+          </div>
+        </div>
+
+        <div class="fa-refresh-step-item" id="fa-step-2">
+          <div class="fa-step-indicator">
+            <span class="fa-step-dot"></span>
+            <span class="fa-step-spinner"></span>
+            <span class="fa-step-check">✓</span>
+          </div>
+          <div class="fa-step-info">
+            <div class="fa-step-name">2단계: Hugo 블로그 템플릿 통합 빌드</div>
+            <div class="fa-step-sub" id="fa-step-sub-2">헤더, 내비게이션, 댓글 시스템 및 사이트 레이아웃 결합</div>
+          </div>
+        </div>
+
+        <div class="fa-refresh-step-item" id="fa-step-3">
+          <div class="fa-step-indicator">
+            <span class="fa-step-dot"></span>
+            <span class="fa-step-spinner"></span>
+            <span class="fa-step-check">✓</span>
+          </div>
+          <div class="fa-step-info">
+            <div class="fa-step-name">3단계: 웹 서비스 배포 및 정적 캐시 동기화</div>
+            <div class="fa-step-sub" id="fa-step-sub-3">도커 Nginx 웹 서빙 경로 반영 및 브라우저 최신화 완료</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 실시간 안내 메시지 및 소요 시간 -->
+      <div class="fa-refresh-status-bar">
+        <div class="fa-refresh-current-msg">
+          <span class="fa-spin" id="fa-refresh-msg-spinner">⏳</span>
+          <span id="fa-refresh-msg-text">대시보드 갱신 작업을 시작했습니다...</span>
+        </div>
+        <div class="fa-refresh-timer" id="fa-refresh-timer">⏱️ 소요 시간: <b id="fa-refresh-timer-sec">0초</b></div>
+      </div>
+
+      <!-- 완료 메시지 박스 -->
+      <div id="fa-refresh-success-banner" class="fa-refresh-banner fa-refresh-success" style="display:none;">
+        <div class="fa-banner-icon">🎉</div>
+        <div>
+          <div class="fa-banner-title">대시보드 갱신이 완료되었습니다!</div>
+          <div class="fa-banner-desc">최신 데이터가 적용된 대시보드를 불러오기 위해 페이지를 새로고침합니다...</div>
+        </div>
+      </div>
+
+      <!-- 에러 메시지 박스 -->
+      <div id="fa-refresh-error-banner" class="fa-refresh-banner fa-refresh-error" style="display:none;">
+        <div class="fa-banner-icon">⚠️</div>
+        <div>
+          <div class="fa-banner-title">갱신 작업 중 문제가 발생했습니다.</div>
+          <div class="fa-banner-desc" id="fa-refresh-error-desc">서버 로그를 확인하거나 잠시 후 다시 시도해 주세요.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+"""
+
+
 def _build_kpi_row(data: ReportData) -> str:
     total_row = None
     if not data.summary_df.empty and "계좌" in data.summary_df.columns:
@@ -607,6 +708,7 @@ def _build_kpi_row(data: ReportData) -> str:
     day_modal_html = _build_day_change_modal(data, eval_day_change)
     invest_modal_html = _build_invest_change_modal(data, cur_inv_val, prev_inv_val, inv_month_change)
     dividend_modal_html = _build_dividend_change_modal(data, cur_div_val, prev_div_val, div_month_change)
+    refresh_modal_html = _build_refresh_modal()
 
     cards = [
         _kpi_card("총 평가금", _fmt_krw(valuation), eval_sub, sub_state=eval_state),
@@ -616,7 +718,7 @@ def _build_kpi_row(data: ReportData) -> str:
         _kpi_card("월 배당금", _fmt_krw(monthly_div), div_sub, sub_state=div_state, sub_onclick="openDividendChangeModal()"),
         _kpi_card("USD/KRW", _fmt_number(fx, 2, ""), fx_change_text, fx_state, sub_onclick="openMarketModal('USDKRW=X', 'USD/KRW 원/달러 환율')"),
     ]
-    return "<div class=\"fa-kpi-grid\">" + "".join(cards) + "</div>" + day_modal_html + invest_modal_html + dividend_modal_html
+    return "<div class=\"fa-kpi-grid\">" + "".join(cards) + "</div>" + day_modal_html + invest_modal_html + dividend_modal_html + refresh_modal_html
 
 
 def _fetch_all_market_history() -> Dict[str, Any]:
@@ -3906,6 +4008,268 @@ html.dark .fa-dashboard,
 .period-tabs .tab-btn.active { background: #3182ce; border-color: #3182ce; color: #ffffff; }
 
 .fa-empty-text { color: var(--fa-text-muted); font-size: 0.9rem; margin: 8px 0; }
+
+/* =========================================================
+   대시보드 갱신 전면 모달 스타일
+   ========================================================= */
+.fa-refresh-overlay {
+  background: rgba(15, 23, 42, 0.72) !important;
+  backdrop-filter: blur(6px) !important;
+}
+.fa-refresh-modal-card {
+  max-width: 520px;
+  background: var(--fa-card-bg);
+  border: 1px solid var(--fa-card-border);
+  border-radius: 18px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+  padding: 0;
+}
+.fa-refresh-modal-header {
+  padding: 20px 24px 18px;
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.08) 0%, rgba(59, 130, 246, 0.04) 100%);
+  border-bottom: 1px solid var(--fa-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.fa-refresh-header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.fa-refresh-pulse-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #4f46e5;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
+  flex-shrink: 0;
+}
+.fa-refresh-icon-spin {
+  display: inline-block;
+  animation: faSpinPulse 2s linear infinite;
+}
+@keyframes faSpinPulse {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+.fa-refresh-modal-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--fa-text-main);
+  margin: 0 0 4px 0;
+  line-height: 1.3;
+}
+.fa-refresh-modal-desc {
+  font-size: 0.82rem;
+  color: var(--fa-text-muted);
+  margin: 0;
+}
+.fa-refresh-modal-body {
+  padding: 22px 24px 24px;
+}
+
+/* 프로그레스 바 */
+.fa-refresh-progress-section {
+  margin-bottom: 20px;
+}
+.fa-refresh-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.fa-refresh-badge {
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  background: var(--fa-accent-bg, #eef2ff);
+  color: var(--fa-accent, #4f46e5);
+}
+.fa-refresh-percent {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--fa-text-main);
+  font-feature-settings: "tnum";
+}
+.fa-refresh-progress-track {
+  width: 100%;
+  height: 8px;
+  background: var(--fa-table-header-bg, #f1f5f9);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+.fa-refresh-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4f46e5 0%, #3b82f6 50%, #06b6d4 100%);
+  border-radius: 9999px;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.4);
+}
+
+/* 스텝 리스트 */
+.fa-refresh-steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.fa-refresh-step-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--fa-kpi-bg, #f8fafc);
+  border: 1px solid var(--fa-border, #e2e8f0);
+  transition: all 0.25s ease;
+  opacity: 0.55;
+}
+.fa-refresh-step-item.active {
+  opacity: 1;
+  background: var(--fa-card-bg);
+  border-color: #4f46e5;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.08);
+}
+.fa-refresh-step-item.done {
+  opacity: 0.9;
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.04);
+}
+.fa-step-indicator {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+  position: relative;
+}
+.fa-step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--fa-text-sub, #94a3b8);
+  display: block;
+}
+.fa-step-spinner {
+  display: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e0e7ff;
+  border-top-color: #4f46e5;
+  border-radius: 50%;
+  animation: faSpinPulse 0.8s linear infinite;
+}
+.fa-step-check {
+  display: none;
+  font-weight: 900;
+  font-size: 0.85rem;
+  color: #10b981;
+}
+.fa-refresh-step-item.active .fa-step-dot { display: none; }
+.fa-refresh-step-item.active .fa-step-spinner { display: block; }
+.fa-refresh-step-item.done .fa-step-dot { display: none; }
+.fa-refresh-step-item.done .fa-step-spinner { display: none; }
+.fa-refresh-step-item.done .fa-step-check { display: block; }
+
+.fa-step-info {
+  flex: 1;
+  min-width: 0;
+}
+.fa-step-name {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--fa-text-main);
+  margin-bottom: 2px;
+}
+.fa-refresh-step-item.active .fa-step-name {
+  color: #4f46e5;
+}
+.fa-refresh-step-item.done .fa-step-name {
+  color: var(--fa-text-main);
+}
+.fa-step-sub {
+  font-size: 0.77rem;
+  color: var(--fa-text-muted);
+  line-height: 1.35;
+}
+
+/* 상태 바 및 타이머 */
+.fa-refresh-status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: var(--fa-table-header-bg, #f1f5f9);
+  border-radius: 10px;
+  font-size: 0.82rem;
+  color: var(--fa-text-muted);
+  gap: 10px;
+}
+.fa-refresh-current-msg {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--fa-text-main);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fa-refresh-timer {
+  font-feature-settings: "tnum";
+  white-space: nowrap;
+  font-size: 0.8rem;
+}
+.fa-refresh-timer b {
+  color: #4f46e5;
+}
+
+/* 완료 / 에러 배너 */
+.fa-refresh-banner {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  animation: faModalPop 0.25s ease-out;
+}
+.fa-refresh-success {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+}
+.fa-refresh-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+.fa-banner-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+.fa-banner-title {
+  font-size: 0.92rem;
+  font-weight: 800;
+  margin-bottom: 2px;
+}
+.fa-banner-desc {
+  font-size: 0.8rem;
+  opacity: 0.9;
+}
 </style>
 
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
@@ -3925,8 +4289,13 @@ window.closeModal = function(id) {
   }
 };
 window.closeAllModals = function() {
-  document.querySelectorAll(".fa-modal-overlay.active").forEach(m => m.classList.remove("active"));
-  document.body.style.overflow = "";
+  document.querySelectorAll(".fa-modal-overlay.active").forEach(m => {
+    if (m.id === "fa-refresh-modal" && !window._canCloseRefreshModal) return;
+    m.classList.remove("active");
+  });
+  if (!document.querySelector(".fa-modal-overlay.active")) {
+    document.body.style.overflow = "";
+  }
 };
 
 window.openDayChangeModal = function() { window.openModal("fa-day-change-modal"); };
@@ -4088,6 +4457,39 @@ window.closeMarketModal = function() {
   window.closeModal('marketChartModal');
 };
 
+window._refreshPollTimer = null;
+window._refreshClockTimer = null;
+window._canCloseRefreshModal = false;
+
+window.openRefreshModal = function() {
+  const modal = document.getElementById("fa-refresh-modal");
+  if (!modal) return;
+  modal.style.display = "flex";
+  modal.classList.add("active");
+  document.body.style.overflow = "hidden";
+  window._canCloseRefreshModal = false;
+  const closeBtn = document.getElementById("fa-refresh-modal-close");
+  if (closeBtn) closeBtn.style.display = "none";
+};
+
+window.closeRefreshModal = function() {
+  const modal = document.getElementById("fa-refresh-modal");
+  if (!modal) return;
+  modal.classList.remove("active");
+  modal.style.display = "none";
+  document.body.style.overflow = "";
+  if (window._refreshPollTimer) {
+    clearInterval(window._refreshPollTimer);
+    window._refreshPollTimer = null;
+  }
+  if (window._refreshClockTimer) {
+    clearInterval(window._refreshClockTimer);
+    window._refreshClockTimer = null;
+  }
+  const btn = document.querySelector(".fa-btn-hero-secondary.loading");
+  if (btn) btn.classList.remove("loading");
+};
+
 document.addEventListener("keydown", function(e) {
   if (e.key === "Escape") {
     window.closeAllModals();
@@ -4095,29 +4497,154 @@ document.addEventListener("keydown", function(e) {
 });
 
 window.triggerDashboardRefresh = async function(btn) {
-  if (!btn || btn.classList.contains("loading")) return;
-  btn.classList.add("loading");
-  const textEl = btn.querySelector(".fa-refresh-text");
-  const iconEl = btn.querySelector(".fa-refresh-icon");
-  if (textEl) textEl.innerText = "시세 갱신 중...";
-  if (iconEl) iconEl.classList.add("fa-spin");
+  if (btn && btn.classList.contains("loading")) return;
+  if (btn) btn.classList.add("loading");
 
-  const url = "https://fa-admin.vividian.net/api/build-dashboard?t=" + Date.now();
-  try {
-    let res = await fetch(url, { method: "POST", mode: "cors" });
-    if (!res.ok) {
-      res = await fetch(url, { method: "GET", mode: "cors" });
+  window.openRefreshModal();
+
+  const badgeEl = document.getElementById("fa-refresh-badge");
+  const percentEl = document.getElementById("fa-refresh-percent");
+  const fillEl = document.getElementById("fa-refresh-progress-fill");
+  const msgTextEl = document.getElementById("fa-refresh-msg-text");
+  const timerSecEl = document.getElementById("fa-refresh-timer-sec");
+  const successBanner = document.getElementById("fa-refresh-success-banner");
+  const errorBanner = document.getElementById("fa-refresh-error-banner");
+  const closeBtn = document.getElementById("fa-refresh-modal-close");
+
+  const step1 = document.getElementById("fa-step-1");
+  const step2 = document.getElementById("fa-step-2");
+  const step3 = document.getElementById("fa-step-3");
+
+  if (successBanner) successBanner.style.display = "none";
+  if (errorBanner) errorBanner.style.display = "none";
+  if (badgeEl) badgeEl.innerText = "1 / 3 단계 진행 중";
+  if (percentEl) percentEl.innerText = "15%";
+  if (fillEl) fillEl.style.width = "15%";
+  if (msgTextEl) msgTextEl.innerText = "야후 파이낸스 실시간 시세 및 환율 수집 중...";
+  if (step1) { step1.className = "fa-refresh-step-item active"; }
+  if (step2) { step2.className = "fa-refresh-step-item"; }
+  if (step3) { step3.className = "fa-refresh-step-item"; }
+
+  let elapsedSeconds = 0;
+  if (window._refreshClockTimer) clearInterval(window._refreshClockTimer);
+  window._refreshClockTimer = setInterval(() => {
+    elapsedSeconds++;
+    if (timerSecEl) timerSecEl.innerText = elapsedSeconds + "초";
+    if (elapsedSeconds >= 40 && closeBtn) {
+      window._canCloseRefreshModal = true;
+      closeBtn.style.display = "inline-block";
     }
+  }, 1000);
+
+  const adminBase = "https://fa-admin.vividian.net";
+
+  // 1. 대시보드 빌드 트리거 요청
+  try {
+    await fetch(`${adminBase}/api/build-dashboard?t=` + Date.now(), {
+      method: "POST",
+      mode: "cors"
+    });
   } catch (err) {
-    try {
-      await fetch(url, { method: "GET", mode: "no-cors" });
-    } catch(e) {}
+    console.warn("Build dashboard trigger fetch error:", err);
   }
 
-  if (textEl) textEl.innerText = "갱신 완료! ✨";
-  setTimeout(() => {
-    window.location.reload();
-  }, 1800);
+  // 2. 상태 실시간 폴링
+  let isDone = false;
+  let failCount = 0;
+
+  const pollStatus = async () => {
+    if (isDone) return;
+    try {
+      const res = await fetch(`${adminBase}/api/dashboard-status?t=` + Date.now(), {
+        method: "GET",
+        mode: "cors"
+      });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+      failCount = 0;
+
+      const step = data.step || 1;
+      const progress = Math.max(15, data.progress || 15);
+      const msg = data.message || "대시보드 생성 작업 진행 중...";
+
+      if (msgTextEl) msgTextEl.innerText = msg;
+      if (percentEl) percentEl.innerText = progress + "%";
+      if (fillEl) fillEl.style.width = progress + "%";
+
+      if (step === 1) {
+        if (badgeEl) badgeEl.innerText = "1 / 3 단계 (시세 수집)";
+        if (step1) step1.className = "fa-refresh-step-item active";
+        if (step2) step2.className = "fa-refresh-step-item";
+        if (step3) step3.className = "fa-refresh-step-item";
+      } else if (step === 2) {
+        if (badgeEl) badgeEl.innerText = "2 / 3 단계 (Hugo 빌드)";
+        if (step1) step1.className = "fa-refresh-step-item done";
+        if (step2) step2.className = "fa-refresh-step-item active";
+        if (step3) step3.className = "fa-refresh-step-item";
+      } else if (step === 3) {
+        if (badgeEl) badgeEl.innerText = "3 / 3 단계 (배포 동기화)";
+        if (step1) step1.className = "fa-refresh-step-item done";
+        if (step2) step2.className = "fa-refresh-step-item done";
+        if (step3) step3.className = "fa-refresh-step-item active";
+      }
+
+      if (data.status === "completed" || step >= 4 || progress >= 100) {
+        isDone = true;
+        clearInterval(window._refreshPollTimer);
+        clearInterval(window._refreshClockTimer);
+
+        if (step1) step1.className = "fa-refresh-step-item done";
+        if (step2) step2.className = "fa-refresh-step-item done";
+        if (step3) step3.className = "fa-refresh-step-item done";
+        if (badgeEl) badgeEl.innerText = "갱신 완료! ✨";
+        if (percentEl) percentEl.innerText = "100%";
+        if (fillEl) fillEl.style.width = "100%";
+        if (msgTextEl) msgTextEl.innerText = "대시보드가 최신으로 갱신되었습니다!";
+        const spinner = document.getElementById("fa-refresh-msg-spinner");
+        if (spinner) spinner.innerText = "✅";
+
+        if (successBanner) successBanner.style.display = "flex";
+
+        setTimeout(() => {
+          window.location.reload(true);
+        }, 1200);
+        return;
+      }
+
+      if (data.status === "error") {
+        isDone = true;
+        clearInterval(window._refreshPollTimer);
+        clearInterval(window._refreshClockTimer);
+        window._canCloseRefreshModal = true;
+        if (closeBtn) closeBtn.style.display = "inline-block";
+        if (errorBanner) {
+          const errDesc = document.getElementById("fa-refresh-error-desc");
+          if (errDesc && data.error) errDesc.innerText = data.error;
+          errorBanner.style.display = "flex";
+        }
+        if (btn) btn.classList.remove("loading");
+        return;
+      }
+    } catch (e) {
+      failCount++;
+      if (failCount > 15) {
+        isDone = true;
+        clearInterval(window._refreshPollTimer);
+        clearInterval(window._refreshClockTimer);
+        window._canCloseRefreshModal = true;
+        if (closeBtn) closeBtn.style.display = "inline-block";
+        if (errorBanner) {
+          const errDesc = document.getElementById("fa-refresh-error-desc");
+          if (errDesc) errDesc.innerText = "서버 통신 연결이 원활하지 않습니다. 잠시 후 페이지를 새로고침해 주세요.";
+          errorBanner.style.display = "flex";
+        }
+        if (btn) btn.classList.remove("loading");
+      }
+    }
+  };
+
+  window._refreshPollTimer = setInterval(pollStatus, 800);
+  setTimeout(pollStatus, 300);
 };
 
 document.addEventListener("DOMContentLoaded", function () {
