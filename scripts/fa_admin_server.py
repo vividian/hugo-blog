@@ -229,13 +229,29 @@ def update_account_allocation(account_code: str, new_formula: str) -> bool:
         return False
 
 
-def get_all_symbols_from_fa_yaml() -> List[Dict[str, str]]:
+def get_all_symbols_from_fa_yaml() -> List[Dict[str, Any]]:
     """config/fa.yaml에 정의된 모든 계좌별 종목 목록을 반환합니다."""
     symbols = []
     if not FA_YAML_PATH.exists():
         return symbols
 
     try:
+        # 계좌별/종목별 현재 잔고(net_qty) 사전 계산
+        net_qty_map: Dict[Tuple[str, str], float] = {}
+        try:
+            conn = get_db_connection()
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT account, symbol, SUM(COALESCE(quantity, 0)) AS net_qty
+                FROM trading_records
+                WHERE symbol != ''
+                GROUP BY account, symbol
+            """)
+            net_qty_map = {(r["account"], r["symbol"]): float(r["net_qty"] or 0) for r in cur.fetchall()}
+            conn.close()
+        except Exception:
+            pass
+
         with open(FA_YAML_PATH, "r", encoding="utf-8") as f:
             cfg = yaml.safe_load(f) or {}
 
@@ -257,6 +273,7 @@ def get_all_symbols_from_fa_yaml() -> List[Dict[str, str]]:
                 region = it[3] if len(it) > 3 else "기타"
                 asset_class = it[4] if len(it) > 4 else "기타"
 
+                s_qty = net_qty_map.get((matched_code, abbrev), 0.0)
                 symbols.append({
                     "account": matched_code,
                     "account_name": acct_title,
@@ -265,6 +282,8 @@ def get_all_symbols_from_fa_yaml() -> List[Dict[str, str]]:
                     "ticker": ticker,
                     "region": region,
                     "asset_class": asset_class,
+                    "net_qty": s_qty,
+                    "is_holding": (s_qty > 0.0001 or matched_code == "sema"),
                 })
     except Exception as e:
         print(f"⚠️ [fa.yaml] 종목 목록 로드 실패: {e}")
@@ -1208,8 +1227,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
           <!-- 종목명 선택 -->
           <div class="fa-field" id="wrap-symbol">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
-              <label class="fa-label" style="margin-bottom:0;">종목명 선택</label>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; flex-wrap:wrap; gap:6px;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <label class="fa-label" style="margin-bottom:0;">종목명 선택</label>
+                <label style="font-size:0.75rem; color:var(--fa-text-muted); display:flex; align-items:center; gap:4px; cursor:pointer; user-select:none;" title="체크 해제 시 현재 계좌에 보유 중인 종목만 표시됩니다.">
+                  <input type="checkbox" id="trade-toggle-unheld" onchange="handleUnheldToggleChange(this.checked)">
+                  <span>미보유 종목 포함</span>
+                </label>
+              </div>
               <button type="button" class="fa-btn-action" style="font-size:0.75rem; padding:2px 7px; color:var(--fa-accent); border-color:var(--fa-accent-bg);" onclick="openNewSymbolModal()">➕ 새 종목 등록</button>
             </div>
             <select id="f-symbol-select" class="fa-select" onchange="handleSymbolSelectChange()">
@@ -1389,7 +1414,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <button type="button" class="fa-modal-close" onclick="closeManageSymbolsModal()">&times;</button>
       </div>
       <div class="fa-modal-body" style="padding:16px;">
-        <div style="display:flex; flex-wrap:wrap; gap:10px; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <div style="display:flex; flex-wrap:wrap; gap:10px; justify-content:space-between; align-items:center; margin-bottom:14px; background:var(--fa-table-header-bg); padding:10px 14px; border-radius:10px; border:1px solid var(--fa-card-border);">
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
             <select id="sm-filter-account" class="fa-select" style="min-width:140px;" onchange="renderSymbolList()">
               <option value="all">전체 계좌</option>
@@ -1403,9 +1428,15 @@ HTML_TEMPLATE = """<!DOCTYPE html>
               <option value="psf2">연금저축2</option>
               <option value="isa2">ISA2</option>
             </select>
-            <input type="text" id="sm-search" class="fa-input" placeholder="종목명/단축명/티커 검색..." style="width:220px; padding:6px 10px;" oninput="renderSymbolList()">
+            <input type="text" id="sm-search" class="fa-input" placeholder="종목명/단축명/티커 검색..." style="width:200px; padding:6px 10px;" oninput="renderSymbolList()">
           </div>
-          <button type="button" class="fa-btn-primary" style="padding:6px 14px; font-size:0.85rem;" onclick="openNewSymbolModalFromManage()">➕ 신규 종목 추가</button>
+          <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+            <label style="font-size:0.83rem; display:flex; align-items:center; gap:6px; cursor:pointer; font-weight:600; color:var(--fa-text-main); user-select:none;" title="체크 해제 시 거래(매수/매도) 등록 드롭다운에 현재 계좌에 있는 보유 종목만 표시됩니다.">
+              <input type="checkbox" id="sm-toggle-unheld" onchange="handleUnheldToggleChange(this.checked)">
+              <span>📌 계좌 미보유 종목도 매수/매도 시 표시</span>
+            </label>
+            <button type="button" class="fa-btn-primary" style="padding:6px 14px; font-size:0.85rem;" onclick="openNewSymbolModalFromManage()">➕ 신규 종목 추가</button>
+          </div>
         </div>
 
         <div class="fa-table-wrap" style="max-height:480px; overflow-y:auto;">
@@ -1414,7 +1445,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
               <tr>
                 <th>계좌</th>
                 <th>종목명 (원문)</th>
-                <th>단축명 (대시보드 표시명)</th>
+                <th>단축명 (대시보드)</th>
+                <th>보유 상태</th>
                 <th>티커</th>
                 <th>지역</th>
                 <th>자산군</th>
@@ -1540,6 +1572,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         dateFormat: "Y-m-d",
         defaultDate: new Date()
       });
+      syncUnheldToggles(getShowUnheldPref());
       loadSymbols();
       loadRecords();
     });
@@ -1584,6 +1617,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         if (evalLabel) evalLabel.innerText = "계좌 평가금 (원)";
         evalInput.placeholder = "0";
       }
+
+      renderSymbolOptions();
     }
 
     function openNewSymbolModal() {
@@ -1650,6 +1685,26 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       }
     }
 
+    // 계좌 미보유 종목 거래 등록 시 표시 여부 설정
+    function getShowUnheldPref() {
+      const val = localStorage.getItem("fa_show_unheld_in_trade");
+      if (val === null) return true; // 기본값: 미보유 종목도 포함
+      return val === "true";
+    }
+
+    function handleUnheldToggleChange(checked) {
+      localStorage.setItem("fa_show_unheld_in_trade", checked ? "true" : "false");
+      syncUnheldToggles(checked);
+      renderSymbolOptions();
+    }
+
+    function syncUnheldToggles(checked) {
+      const t1 = document.getElementById("sm-toggle-unheld");
+      const t2 = document.getElementById("trade-toggle-unheld");
+      if (t1) t1.checked = checked;
+      if (t2) t2.checked = checked;
+    }
+
     let currentAccountSymbols = [];
 
     async function loadSymbols(acct) {
@@ -1657,14 +1712,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       try {
         const res = await fetch("/api/symbols?account=" + encodeURIComponent(acct));
         currentAccountSymbols = await res.json();
-        
-        const sel = document.getElementById("f-symbol-select");
-        let opts = `<option value="">-- 종목 선택 (${currentAccountSymbols.length}개) --</option>`;
-        opts += currentAccountSymbols.map(s => {
-          return `<option value="${s.symbol}" data-price="${s.latest_price || ''}">${s.symbol}</option>`;
-        }).join("");
-        opts += `<option value="__custom__">➕ [직접 입력...]</option>`;
-        sel.innerHTML = opts;
+        renderSymbolOptions();
 
         // 종목 상태 초기화
         document.getElementById("f-symbol-custom").style.display = "none";
@@ -1672,6 +1720,44 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         document.getElementById("symbol-price-hint").innerText = "";
       } catch(e) {
         console.error("종목 로드 실패:", e);
+      }
+    }
+
+    function renderSymbolOptions() {
+      const sel = document.getElementById("f-symbol-select");
+      if (!sel) return;
+
+      const currentVal = sel.value;
+      const showUnheld = getShowUnheldPref();
+      const acct = document.getElementById("f-account") ? document.getElementById("f-account").value : "";
+      const kind = document.getElementById("f-kind") ? document.getElementById("f-kind").value : "매수";
+
+      // 필터링:
+      // showUnheld가 true이면 미보유 종목도 전체 표시
+      // showUnheld가 false이면 현재 잔고가 있는(net_qty > 0.0001) 보유 종목만 표시
+      // (공제회 계좌는 수량 집계가 없으므로 항상 전체 표시)
+      let filtered = currentAccountSymbols;
+      if (!showUnheld && acct !== "sema") {
+        filtered = currentAccountSymbols.filter(s => {
+          return (s.net_qty && s.net_qty > 0.0001);
+        });
+      }
+
+      let opts = `<option value="">-- 종목 선택 (${filtered.length}개) --</option>`;
+      opts += filtered.map(s => {
+        const isHolding = (s.net_qty && s.net_qty > 0.0001);
+        let qtyLabel = "";
+        if (acct !== "sema") {
+          qtyLabel = isHolding ? ` [보유: ${s.net_qty.toLocaleString()}주]` : ` [미보유]`;
+        }
+        return `<option value="${s.symbol}" data-price="${s.latest_price || ''}" data-qty="${s.net_qty || 0}">${s.symbol}${qtyLabel}</option>`;
+      }).join("");
+      opts += `<option value="__custom__">➕ [직접 입력...]</option>`;
+      sel.innerHTML = opts;
+
+      // 이전 선택값 유지 시도
+      if (currentVal && Array.from(sel.options).some(o => o.value === currentVal)) {
+        sel.value = currentVal;
       }
     }
 
@@ -2060,6 +2146,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
     async function openManageSymbolsModal() {
       document.getElementById("modal-manage-symbols").classList.add("open");
+      syncUnheldToggles(getShowUnheldPref());
       await fetchAllSymbols();
     }
 
@@ -2096,18 +2183,29 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--fa-text-muted); padding:20px;">등록된 종목이 없습니다.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--fa-text-muted); padding:20px;">등록된 종목이 없습니다.</td></tr>`;
         return;
       }
 
       tbody.innerHTML = filtered.map(s => {
         const acctLabel = ACCOUNT_MAP[s.account] || s.account_name || s.account;
         const sJson = JSON.stringify(s).replace(/"/g, '&quot;');
+        const isHolding = (s.net_qty && s.net_qty > 0.0001) || (s.account === "sema");
+        let holdingBadge = "";
+        if (s.account === "sema") {
+          holdingBadge = `<span class="badge" style="background:#e6fffa; color:#234e52; font-weight:700;">운용 중</span>`;
+        } else if (isHolding) {
+          holdingBadge = `<span class="badge" style="background:#e6fffa; color:#234e52; font-weight:700;">보유 (${s.net_qty ? s.net_qty.toLocaleString() : 0}주)</span>`;
+        } else {
+          holdingBadge = `<span class="badge" style="background:#f1f5f9; color:#94a3b8;">미보유 (0주)</span>`;
+        }
+
         return `
           <tr>
             <td><span class="badge badge-account">${escapeHtml(acctLabel)}</span></td>
             <td style="font-weight:600; color:var(--fa-text-main);">${escapeHtml(s.name)}</td>
             <td style="font-weight:700; color:var(--fa-accent);"><span style="background:var(--fa-accent-bg); padding:2px 8px; border-radius:4px;">${escapeHtml(s.abbrev)}</span></td>
+            <td>${holdingBadge}</td>
             <td style="font-family:monospace; color:var(--fa-text-muted); font-size:0.8rem;">${escapeHtml(s.ticker || "-")}</td>
             <td><span class="badge" style="background:#f1f5f9; color:#475569;">${escapeHtml(s.region || "-")}</span></td>
             <td><span class="badge" style="background:var(--fa-purple-bg); color:var(--fa-purple);">${escapeHtml(s.asset_class || "-")}</span></td>
