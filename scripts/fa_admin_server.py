@@ -1324,7 +1324,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <div id="toast"></div>
 
   <!-- New Symbol Modal -->
-  <div id="modal-new-symbol" class="fa-modal-overlay">
+  <div id="modal-new-symbol" class="fa-modal-overlay" style="z-index: 2100;">
     <div class="fa-modal-box">
       <div class="fa-modal-header">
         <span>✨ 계좌 신규 종목 설정 등록 (fa.yaml)</span>
