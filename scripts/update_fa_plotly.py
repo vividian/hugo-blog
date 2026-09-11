@@ -28,7 +28,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.67"
+APP_VERSION = "v2.7.68"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -2651,14 +2651,16 @@ def _build_trading_history(
         if has_qty_price:
             trade_amt = update_fa.convert_to_krw(acct_code, float(qty) * float(price), date, fx_series)
             unit_price = update_fa.convert_to_krw(acct_code, float(price), date, fx_series)
-            if qty > 0:
-                buy_total += trade_amt
+            kind_str = str(row.get("구분", "")).strip()
+            is_sell = (kind_str == "매도") or (qty < 0)
+            if not is_sell:
+                buy_total += abs(trade_amt)
                 items.append({
                     "kind": "buy",
                     "date": date_str,
                     "account": account,
                     "symbol": symbol,
-                    "amount_str": f"+{fmt_currency(trade_amt)}",
+                    "amount_str": f"+{fmt_currency(abs(trade_amt))}",
                     "sub_detail": f"단가 {fmt_currency(unit_price)} · {abs(qty):g}주",
                 })
             else:

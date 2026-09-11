@@ -1972,8 +1972,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       }
 
       document.getElementById("f-unit-price").value = r.unit_price || "";
-      document.getElementById("f-quantity").value = r.quantity || "";
-      document.getElementById("f-amount").value = r.amount || "";
+      document.getElementById("f-quantity").value = (r.quantity !== null && r.quantity !== undefined) ? Math.abs(r.quantity) : "";
+      document.getElementById("f-amount").value = (r.amount !== null && r.amount !== undefined) ? Math.abs(r.amount) : "";
       document.getElementById("f-dividend").value = r.dividend || "";
       document.getElementById("f-deposit").value = r.deposit || "";
       document.getElementById("f-evaluation").value = r.evaluation || "";
@@ -2809,6 +2809,12 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
             body = self.rfile.read(length).decode("utf-8")
             data = json.loads(body)
             clean_date = normalize_date_str(data.get("date") or "")
+            kind = data.get("kind", "매수")
+            qty = float(data.get("quantity") or 0)
+            if kind == "매도" and qty > 0:
+                qty = -qty
+            elif kind == "매수" and qty < 0:
+                qty = abs(qty)
 
             conn = get_db_connection()
             cur = conn.cursor()
@@ -2819,8 +2825,8 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """, (
                 clean_date, data.get("account"), data.get("symbol", ""),
-                data.get("kind", "매수"), float(data.get("unit_price") or 0),
-                float(data.get("quantity") or 0), float(data.get("amount") or 0),
+                kind, float(data.get("unit_price") or 0),
+                qty, abs(float(data.get("amount") or 0)),
                 float(data.get("dividend") or 0), float(data.get("deposit") or 0),
                 float(data.get("evaluation") or 0), float(data.get("exchange_rate") or 1.0),
                 data.get("memo", "")
@@ -2844,6 +2850,12 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
             body = self.rfile.read(length).decode("utf-8")
             data = json.loads(body)
             clean_date = normalize_date_str(data.get("date") or "")
+            kind = data.get("kind", "매수")
+            qty = float(data.get("quantity") or 0)
+            if kind == "매도" and qty > 0:
+                qty = -qty
+            elif kind == "매수" and qty < 0:
+                qty = abs(qty)
 
             conn = get_db_connection()
             cur = conn.cursor()
@@ -2855,8 +2867,8 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
                 WHERE id = ?;
             """, (
                 clean_date, data.get("account"), data.get("symbol", ""),
-                data.get("kind", "매수"), float(data.get("unit_price") or 0),
-                float(data.get("quantity") or 0), float(data.get("amount") or 0),
+                kind, float(data.get("unit_price") or 0),
+                qty, abs(float(data.get("amount") or 0)),
                 float(data.get("dividend") or 0), float(data.get("deposit") or 0),
                 float(data.get("evaluation") or 0), float(data.get("exchange_rate") or 1.0),
                 data.get("memo", ""), rec_id

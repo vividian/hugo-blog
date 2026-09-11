@@ -2609,11 +2609,13 @@ def plot_monthly_trading_history(records: pd.DataFrame,
         if has_qty_price:
             trade_amt = convert_to_krw(acct_code, float(qty) * float(price), date, fx_series)
             unit_price = convert_to_krw(acct_code, float(price), date, fx_series)
-            if qty > 0:
-                buy_total += trade_amt
+            kind_str = str(row.get("구분", "")).strip()
+            is_sell = (kind_str == "매도") or (qty < 0)
+            if not is_sell:
+                buy_total += abs(trade_amt)
                 lines.append((
                     "buy",
-                    f"{date_str} - (매수) {account}: {symbol} {fmt_currency(trade_amt)}원 매수 (단가 {fmt_currency(unit_price)}원, {abs(qty):g}주)"
+                    f"{date_str} - (매수) {account}: {symbol} {fmt_currency(abs(trade_amt))}원 매수 (단가 {fmt_currency(unit_price)}원, {abs(qty):g}주)"
                 ))
             else:
                 sell_total += abs(trade_amt)
