@@ -1624,11 +1624,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           showToast(`신규 종목 [${abbrev}]이(가) 등록되었습니다! ✨`);
           closeNewSymbolModal();
           
-          // 현재 선택된 계좌가 모달에서 추가한 계좌라면 종목 목록 즉시 갱신
+          if (document.getElementById("modal-manage-symbols") && document.getElementById("modal-manage-symbols").classList.contains("open")) {
+            await fetchAllSymbols();
+          }
+
+          // 현재 선택된 계좌가 모달에서 추가한 계좌라면 종목 목록 즉시 갱신 및 자동 선택
           if (document.getElementById("f-account").value === acct) {
             await loadSymbols(acct);
             const sel = document.getElementById("f-symbol-select");
-            // 새로 추가된 종목 선택
             for (let i = 0; i < sel.options.length; i++) {
               if (sel.options[i].value === abbrev) {
                 sel.selectedIndex = i;
@@ -1636,6 +1639,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
               }
             }
             handleSymbolSelectChange();
+          } else {
+            loadSymbols(document.getElementById("f-account").value);
           }
         } else {
           alert("종목 등록에 실패했습니다.");
@@ -2549,7 +2554,6 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
                     FROM trading_records t1
                     WHERE symbol != '' AND account = ?
                     GROUP BY symbol
-                    HAVING net_qty > 0.0001 OR account = 'sema'
                     ORDER BY latest_date DESC, symbol ASC;
                 """, (acct,))
             else:
@@ -2563,12 +2567,73 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
                     FROM trading_records t1
                     WHERE symbol != ''
                     GROUP BY symbol
-                    HAVING net_qty > 0.0001 OR account = 'sema'
                     ORDER BY latest_date DESC, symbol ASC;
                 """)
-            rows = [dict(r) for r in cur.fetchall()]
+            db_rows = {r["symbol"]: dict(r) for r in cur.fetchall()}
+
+            # fa.yaml에 설정된 계좌별 종목 목록 불러오기
+            yaml_symbols = get_all_symbols_from_fa_yaml()
+            if acct:
+                yaml_symbols = [s for s in yaml_symbols if s.get("account") == acct]
+
+            result = []
+            seen_symbols = set()
+
+            # 1. fa.yaml에 등록된 종목을 설정 순서대로 먼저 추가 (신규 추가된 종목도 즉시 표시)
+            for s in yaml_symbols:
+                sym_name = s.get("abbrev", "").strip() or s.get("name", "").strip()
+                if not sym_name or sym_name in seen_symbols:
+                    continue
+                seen_symbols.add(sym_name)
+                db_info = db_rows.get(sym_name, {})
+                result.append({
+                    "symbol": sym_name,
+                    "latest_price": db_info.get("latest_price"),
+                    "latest_date": db_info.get("latest_date") or "",
+                    "net_qty": db_info.get("net_qty") or 0,
+                    "is_config": True,
+                })
+
+            # 2. 거래내역(DB)에는 존재하나 fa.yaml에는 없는 종목(과거 거래 종목 등)도 추가
+            for sym_name, r in db_rows.items():
+                if sym_name not in seen_symbols:
+                    seen_symbols.add(sym_name)
+                    result.append({
+                        "symbol": sym_name,
+                        "latest_price": r.get("latest_price"),
+                        "latest_date": r.get("latest_date") or "",
+                        "net_qty": r.get("net_qty") or 0,
+                        "is_config": False,
+                    })
+
+            # 3. 해당 계좌에서 거래된 적이 없어 latest_price가 없는 경우, 동일 통화 계좌의 최근 체결 단가 보조 조회
+            missing_price_syms = [
+                s["symbol"] for s in result if s.get("latest_price") is None
+            ]
+            if missing_price_syms:
+                is_usd_acct = (acct == "usa")
+                for sym_name in missing_price_syms:
+                    if is_usd_acct:
+                        cur.execute("""
+                            SELECT unit_price FROM trading_records
+                            WHERE symbol = ? AND account = 'usa' AND unit_price > 0
+                            ORDER BY date DESC, id DESC LIMIT 1
+                        """, (sym_name,))
+                    else:
+                        cur.execute("""
+                            SELECT unit_price FROM trading_records
+                            WHERE symbol = ? AND account != 'usa' AND unit_price > 0
+                            ORDER BY date DESC, id DESC LIMIT 1
+                        """, (sym_name,))
+                    row = cur.fetchone()
+                    if row and row["unit_price"]:
+                        for item in result:
+                            if item["symbol"] == sym_name:
+                                item["latest_price"] = row["unit_price"]
+                                break
+
             conn.close()
-            self._send_json(rows)
+            self._send_json(result)
             return
 
         if path == "/api/records":
