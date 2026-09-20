@@ -28,7 +28,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.68"
+APP_VERSION = "v2.7.69"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -61,35 +61,40 @@ def _format_korean_amount(val: float) -> str:
     if pd.isna(val) or val == 0:
         return "0"
     sign = "-" if val < 0 else ""
-    val = abs(val)
+    abs_val = abs(val)
 
-    eok = val / 100_000_000
-    if eok >= 0.1:
-        if eok == int(eok):
-            return f"{sign}{int(eok)}억"
+    if abs_val >= 100_000_000:
+        val_100m = abs_val / 100_000_000
+        if val_100m >= 10:
+            return f"{sign}{val_100m:.0f}억"
         else:
-            formatted_eok = f"{eok:.2f}".rstrip("0").rstrip(".")
-            return f"{sign}{formatted_eok}억"
-    elif val >= 10_000:
-        man = val / 10_000
-        if man == int(man):
-            return f"{sign}{int(man):,}만"
-        else:
-            formatted_man = f"{man:.2f}".rstrip("0").rstrip(".")
-            return f"{sign}{formatted_man}만"
+            return f"{sign}{val_100m:.1f}억".replace(".0억", "억")
+    elif abs_val >= 10_000:
+        val_10k = abs_val / 10_000
+        return f"{sign}{val_10k:,.0f}만"
     else:
         return f"{sign}{val:,.0f}"
 
 
-def _get_korean_y_ticks(y_max: float, y_min: float = 0, target_ticks: int = 5):
-    if pd.isna(y_max) or y_max <= 0:
+def _get_korean_y_ticks(
+    y_max: float, y_min: float = 0, target_ticks: int = 5, allow_positive_min: bool = False
+):
+    if pd.isna(y_max) or pd.isna(y_min):
         return [0], ["0"]
+    if y_max <= y_min:
+        y_max = y_min + 10_000_000
 
-    start = 0 if y_min >= 0 else y_min
+    if allow_positive_min:
+        start = max(0, y_min)
+    else:
+        start = 0 if y_min >= 0 else y_min
     span = y_max - start
 
     raw_step = span / target_ticks
     step_candidates = [
+        1_000_000,
+        2_000_000,
+        5_000_000,
         10_000_000,
         20_000_000,
         50_000_000,
@@ -1128,13 +1133,36 @@ def _build_assets_investment_trend(account_df: pd.DataFrame, invest_series: pd.S
         plot_bgcolor=THEME_BG,
     )
     fig.update_xaxes(tickfont=dict(size=13, family=FONT_FAMILY), showgrid=False)
-    y_max = max(np.nanmax(invest_aligned), np.nanmax(total_valuation)) if len(invest_aligned) > 0 else 0
-    tickvals, ticktext = _get_korean_y_ticks(y_max, y_min=0)
+
+    valid_vals = []
+    if len(invest_aligned) > 0:
+        valid_vals.extend(invest_aligned.dropna().tolist())
+    if len(total_valuation) > 0:
+        valid_vals.extend(total_valuation.dropna().tolist())
+
+    if valid_vals:
+        y_data_min = min(valid_vals)
+        y_data_max = max(valid_vals)
+    else:
+        y_data_min, y_data_max = 0, 0
+
+    span = max(y_data_max - y_data_min, 10_000_000)
+    pad_bottom = span * 0.10
+    pad_top = span * 0.15
+    calc_min = max(0, y_data_min - pad_bottom)
+    calc_max = y_data_max + pad_top
+
+    tickvals, ticktext = _get_korean_y_ticks(
+        calc_max, y_min=calc_min, target_ticks=5, allow_positive_min=True
+    )
+    y_range = [tickvals[0], tickvals[-1]] if len(tickvals) >= 2 else None
+
     fig.update_yaxes(
         tickmode="array",
         tickvals=tickvals,
         ticktext=ticktext,
-        rangemode="tozero",
+        range=y_range,
+        rangemode="normal",
         tickfont=dict(size=13, family=FONT_FAMILY),
         showgrid=True,
         gridcolor=THEME_GRID,
@@ -1142,22 +1170,30 @@ def _build_assets_investment_trend(account_df: pd.DataFrame, invest_series: pd.S
     return fig
 
 
-def _render_trend_tab_card(title: str, fig_1y: go.Figure, fig_all: go.Figure, card_id: str) -> str:
-    """직전 1년 / 전체 기간 탭이 포함된 차트 카드 HTML (전체 탭 기본 활성화)"""
+def _render_trend_tab_card(
+    title: str, fig_1y: go.Figure, fig_all: go.Figure, card_id: str, default_tab: str = "1y"
+) -> str:
+    """직전 1년 / 전체 기간 탭이 포함된 차트 카드 HTML"""
+    is_1y = default_tab.lower() == "1y"
+    cls_btn_1y = "fa-tab-btn active" if is_1y else "fa-tab-btn"
+    cls_btn_all = "fa-tab-btn" if is_1y else "fa-tab-btn active"
+    cls_pane_1y = "fa-tab-pane active" if is_1y else "fa-tab-pane"
+    cls_pane_all = "fa-tab-pane" if is_1y else "fa-tab-pane active"
+
     return f"""
 <section class="fa-card fa-card-wide fa-card-tabs" id="{card_id}">
   <header class="fa-card-head" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
     <h2>{title}</h2>
     <div class="fa-holdings-tab-nav" style="display: flex; margin-bottom: 0;">
-      <button type="button" class="fa-tab-btn" data-target="{card_id}-1y">직전 1년</button>
-      <button type="button" class="fa-tab-btn active" data-target="{card_id}-all">전체</button>
+      <button type="button" class="{cls_btn_1y}" data-target="{card_id}-1y">직전 1년</button>
+      <button type="button" class="{cls_btn_all}" data-target="{card_id}-all">전체</button>
     </div>
   </header>
   <div class="fa-card-body">
-    <div id="{card_id}-1y" class="fa-tab-pane">
+    <div id="{card_id}-1y" class="{cls_pane_1y}">
       {_render_figure_html(fig_1y)}
     </div>
-    <div id="{card_id}-all" class="fa-tab-pane active">
+    <div id="{card_id}-all" class="{cls_pane_all}">
       {_render_figure_html(fig_all)}
     </div>
   </div>
@@ -2876,6 +2912,7 @@ def _build_dashboard_fragment(data: ReportData) -> str:
         fig_invest_1y,
         fig_invest_all,
         "fa-invest-trend-tabs",
+        default_tab="1y",
     )
 
     fig_assets_1y = _build_assets_trend(data.account_df, period="1Y")
@@ -2885,6 +2922,7 @@ def _build_dashboard_fragment(data: ReportData) -> str:
         fig_assets_1y,
         fig_assets_all,
         "fa-assets-trend-tabs",
+        default_tab="all",
     )
 
     portfolio_alloc_html = _build_portfolio_allocation_section(data.holdings_df, data.symbol_map, fig_html)
