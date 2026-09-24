@@ -28,7 +28,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.73"
+APP_VERSION = "v2.7.74"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -1625,23 +1625,39 @@ def _build_portfolio_allocation_section(
     html_parts = [
         '<div class="fa-card fa-card-tabs fa-card-wide fa-alloc-card">',
         '  <div class="fa-card-head">',
-        '    <h2 style="margin-bottom:12px;">전체 포트폴리오 비중</h2>',
+        '    <h2 style="margin-bottom:12px;">포트폴리오 비중</h2>',
         '    <div class="fa-tab-nav-wrapper fa-alloc-tab-nav" style="margin-bottom:4px;">',
         '      <div class="fa-tab-nav">',
-        '        <button type="button" class="fa-tab-btn active" data-target="alloc-tab-group">자산군 비중</button>',
-        '        <button type="button" class="fa-tab-btn" data-target="alloc-tab-region">지역 비중</button>',
-        '        <button type="button" class="fa-tab-btn" data-target="alloc-tab-class">대표 자산 비중</button>',
-        '        <button type="button" class="fa-tab-btn" data-target="alloc-tab-port1">포트폴리오 1</button>',
-        '        <button type="button" class="fa-tab-btn" data-target="alloc-tab-port2">포트폴리오 2</button>',
+        '        <button type="button" class="fa-tab-btn active" data-target="alloc-tab-total">전체</button>',
+        '        <button type="button" class="fa-tab-btn" data-target="alloc-tab-port">포트별</button>',
         '      </div>',
         '    </div>',
         '  </div>',
         '  <div class="fa-card-body fa-alloc-body">',
-        f'    <div id="alloc-tab-group" class="fa-tab-pane active">{fig_renderer(fig_group)}</div>',
-        f'    <div id="alloc-tab-region" class="fa-tab-pane">{fig_renderer(fig_region)}</div>',
-        f'    <div id="alloc-tab-class" class="fa-tab-pane">{fig_renderer(fig_class)}</div>',
-        f'    <div id="alloc-tab-port1" class="fa-tab-pane">{fig_renderer(fig_port1)}</div>',
-        f'    <div id="alloc-tab-port2" class="fa-tab-pane">{fig_renderer(fig_port2)}</div>',
+        '    <!-- 1. 전체 탭 패널 -->',
+        '    <div id="alloc-tab-total" class="fa-tab-pane active">',
+        '      <div class="fa-tab-nav fa-tab-nav-sub" style="margin-bottom:12px;">',
+        '        <button type="button" class="fa-subtab-btn active" data-target="alloc-sub-group">자산군 비중</button>',
+        '        <button type="button" class="fa-subtab-btn" data-target="alloc-sub-region">지역 비중</button>',
+        '        <button type="button" class="fa-subtab-btn" data-target="alloc-sub-class">대표 자산 비중</button>',
+        '      </div>',
+        '      <div class="fa-subtab-content">',
+        f'        <div id="alloc-sub-group" class="fa-subtab-pane active">{fig_renderer(fig_group)}</div>',
+        f'        <div id="alloc-sub-region" class="fa-subtab-pane">{fig_renderer(fig_region)}</div>',
+        f'        <div id="alloc-sub-class" class="fa-subtab-pane">{fig_renderer(fig_class)}</div>',
+        '      </div>',
+        '    </div>',
+        '    <!-- 2. 포트별 탭 패널 -->',
+        '    <div id="alloc-tab-port" class="fa-tab-pane">',
+        '      <div class="fa-tab-nav fa-tab-nav-sub" style="margin-bottom:12px;">',
+        '        <button type="button" class="fa-subtab-btn active" data-target="alloc-sub-port1">포트폴리오 1</button>',
+        '        <button type="button" class="fa-subtab-btn" data-target="alloc-sub-port2">포트폴리오 2</button>',
+        '      </div>',
+        '      <div class="fa-subtab-content">',
+        f'        <div id="alloc-sub-port1" class="fa-subtab-pane active">{fig_renderer(fig_port1)}</div>',
+        f'        <div id="alloc-sub-port2" class="fa-subtab-pane">{fig_renderer(fig_port2)}</div>',
+        '      </div>',
+        '    </div>',
         '  </div>',
         '</div>',
     ]
@@ -3893,7 +3909,7 @@ html.dark .fa-dashboard,
   gap: 8px;
   min-width: max-content;
 }
-.fa-tab-btn {
+.fa-tab-btn, .fa-subtab-btn {
   background: var(--fa-table-header-bg);
   border: 1px solid var(--fa-card-border);
   color: var(--fa-text-muted);
@@ -3905,22 +3921,33 @@ html.dark .fa-dashboard,
   transition: all 0.2s ease;
   white-space: nowrap;
 }
-.fa-tab-btn:hover {
+.fa-tab-btn:hover, .fa-subtab-btn:hover {
   background: var(--fa-border);
   color: var(--fa-text-main);
 }
-.fa-tab-btn.active {
+.fa-tab-btn.active, .fa-subtab-btn.active {
   background: var(--fa-accent);
   color: #ffffff;
   border-color: var(--fa-accent);
   box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
 }
 
-.fa-tab-pane {
+.fa-tab-nav-sub .fa-subtab-btn {
+  padding: 6px 14px;
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+.fa-tab-nav-sub .fa-subtab-btn.active {
+  background: #6366f1;
+  border-color: #6366f1;
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.25);
+}
+
+.fa-tab-pane, .fa-subtab-pane {
   display: none;
   animation: faFadeIn 0.25s ease-in-out;
 }
-.fa-tab-pane.active {
+.fa-tab-pane.active, .fa-subtab-pane.active {
   display: block;
 }
 @keyframes faFadeIn {
@@ -4422,27 +4449,14 @@ html.dark .fa-dashboard,
 /* =========================================================
    Responsive Overrides for Desktop vs Mobile
    ========================================================= */
-/* 1. 전체 포트폴리오 비중: PC 3열 나란히 표시 (탭 제거), 모바일 탭 분기 */
-@media (min-width: 769px) {
-  .fa-alloc-card .fa-alloc-tab-nav {
-    display: none !important;
-  }
-  .fa-alloc-card .fa-alloc-body {
-    display: grid !important;
-    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-    gap: 16px !important;
-  }
-  .fa-alloc-card .fa-tab-pane {
-    display: block !important;
-  }
+/* 1. 포트폴리오 비중: 전체 탭 / 포트별 탭 및 서브탭 */
+.fa-alloc-card .fa-alloc-tab-nav {
+  display: block;
 }
-@media (max-width: 768px) {
-  .fa-alloc-card .fa-tab-pane {
-    display: none;
-  }
-  .fa-alloc-card .fa-tab-pane.active {
-    display: block;
-  }
+.fa-alloc-card .fa-tab-nav-sub {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 /* 2. 계좌별 자산 현황: PC 전체 요약 테이블 표시 (탭 제거), 모바일 탭 분기 */
@@ -5428,8 +5442,9 @@ document.addEventListener("DOMContentLoaded", function () {
       const targetPane = document.getElementById(targetId);
       if (targetPane) {
         targetPane.classList.add("active");
-        // 해당 패널 내부의 Plotly 차트 리사이즈
-        const chartDiv = targetPane.querySelector(".plotly-graph-div");
+        // 해당 패널 내부의 Plotly 차트 리사이즈 (서브탭 활성 차트 포함)
+        const subChartDiv = targetPane.querySelector(".fa-subtab-pane.active .plotly-graph-div");
+        const chartDiv = subChartDiv || targetPane.querySelector(".plotly-graph-div");
         if (chartDiv && window.Plotly) {
           window.Plotly.Plots.resize(chartDiv);
         }
@@ -5447,6 +5462,34 @@ document.addEventListener("DOMContentLoaded", function () {
       setTimeout(() => {
         window.dispatchEvent(new Event("resize"));
         initDividendBarClickEvents();
+      }, 50);
+    });
+  });
+
+  // 서브 탭 전환 이벤트 리스너
+  const subTabBtns = document.querySelectorAll(".fa-subtab-btn");
+  subTabBtns.forEach(btn => {
+    btn.addEventListener("click", function () {
+      const targetId = this.getAttribute("data-target");
+      const navWrap = this.closest(".fa-tab-nav-sub");
+      const parentPane = this.closest(".fa-tab-pane");
+      if (!navWrap || !parentPane) return;
+
+      navWrap.querySelectorAll(".fa-subtab-btn").forEach(b => b.classList.remove("active"));
+      this.classList.add("active");
+
+      parentPane.querySelectorAll(".fa-subtab-pane").forEach(p => p.classList.remove("active"));
+      const targetPane = document.getElementById(targetId);
+      if (targetPane) {
+        targetPane.classList.add("active");
+        const chartDiv = targetPane.querySelector(".plotly-graph-div");
+        if (chartDiv && window.Plotly) {
+          window.Plotly.Plots.resize(chartDiv);
+        }
+      }
+
+      setTimeout(() => {
+        window.dispatchEvent(new Event("resize"));
       }, 50);
     });
   });
