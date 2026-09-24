@@ -28,7 +28,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.69"
+APP_VERSION = "v2.7.70"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -47,12 +47,12 @@ THEME_TEXT = "#64748b"
 THEME_GRID = "rgba(148, 163, 184, 0.15)"
 
 MARKET_KPI_CONFIG = [
+    {"label": "USD/KRW", "ticker": "USDKRW=X", "decimals": 2},
     {"label": "S&P 500", "ticker": "^GSPC", "decimals": 2},
     {"label": "나스닥 100", "ticker": "^NDX", "decimals": 2},
     {"label": "SCHD", "ticker": "SCHD", "decimals": 2},
     {"label": "미국 7-10년 국채(IEF)", "ticker": "IEF", "decimals": 2},
     {"label": "코스피", "ticker": "^KS11", "decimals": 2},
-    {"label": "코스닥", "ticker": "^KQ11", "decimals": 2},
 ]
 
 
@@ -903,24 +903,60 @@ def _build_kpi_row(data: ReportData) -> str:
     dividend_modal_html = _build_dividend_change_modal(data, cur_div_val, prev_div_val, div_month_change)
     refresh_modal_html = _build_refresh_modal()
 
-    cards = [
+    # 포트폴리오 1, 포트폴리오 2 계산 (포트2: ISA2, 연금저축2, 국내주식2 / 포트1: 제외된 나머지 계좌)
+    port2_accounts = {"isa2", "psf2", "kor2"}
+    port1_eval = 0.0
+    port1_profit = 0.0
+    port2_eval = 0.0
+    port2_profit = 0.0
+
+    if not data.summary_df.empty and "계좌" in data.summary_df.columns:
+        for _, row in data.summary_df.iterrows():
+            acct = str(row["계좌"]).strip()
+            if acct == "합계":
+                continue
+            e_val = _as_float(row.get("평가금")) or 0.0
+            p_val = _as_float(row.get("수익금")) or 0.0
+            if acct in port2_accounts:
+                port2_eval += e_val
+                port2_profit += p_val
+            else:
+                port1_eval += e_val
+                port1_profit += p_val
+
+    p1_profit_state = "positive" if port1_profit > 0 else "negative" if port1_profit < 0 else ""
+    p2_profit_state = "positive" if port2_profit > 0 else "negative" if port2_profit < 0 else ""
+    p1_profit_str = _fmt_krw(port1_profit)
+    p2_profit_str = _fmt_krw(port2_profit)
+
+    cards_row1 = [
         _kpi_card("총 평가금", _fmt_krw(valuation), eval_sub, sub_state=eval_state, sub_onclick="openEvalChangeModal()", sub_title="클릭하여 최근 12개월 전월대비 변동 추세 보기"),
         _kpi_card("총 투자금", _fmt_krw(invest), inv_sub, sub_state=inv_state, sub_onclick="openInvestChangeModal()"),
         _kpi_card("총 수익금", f"<span class='fa-num-{profit_state}'>{profit_str}</span>", profit_sub, state=profit_state, sub_state=profit_day_state, sub_onclick="openDayChangeModal()"),
         _kpi_card("총 수익률", f"<span class='fa-num-{return_state}'>{return_str}</span>", rate_sub, state=return_state, sub_state=rate_day_state, sub_onclick="openDayChangeModal()"),
         _kpi_card("월 배당금", _fmt_krw(monthly_div), div_sub, sub_state=div_state, sub_onclick="openDividendChangeModal()"),
-        _kpi_card("USD/KRW", _fmt_number(fx, 2, ""), fx_change_text, fx_state, sub_onclick="openMarketModal('USDKRW=X', 'USD/KRW 원/달러 환율')"),
     ]
-    return "<div class=\"fa-kpi-grid\">" + "".join(cards) + "</div>" + eval_modal_html + day_modal_html + invest_modal_html + dividend_modal_html + refresh_modal_html
+
+    cards_row2 = [
+        _kpi_card("포트1 평가금", _fmt_krw(port1_eval), "기존 계좌"),
+        _kpi_card("포트1 수익금", f"<span class='fa-num-{p1_profit_state}'>{p1_profit_str}</span>", "기존 계좌", state=p1_profit_state),
+        _kpi_card("포트2 평가금", _fmt_krw(port2_eval), "ISA2 · 연금2 · 국내2"),
+        _kpi_card("포트2 수익금", f"<span class='fa-num-{p2_profit_state}'>{p2_profit_str}</span>", "ISA2 · 연금2 · 국내2", state=p2_profit_state),
+    ]
+
+    grid_row1 = "<div class=\"fa-kpi-grid fa-kpi-grid-5\">" + "".join(cards_row1) + "</div>"
+    grid_row2 = "<div class=\"fa-kpi-grid fa-kpi-grid-4\">" + "".join(cards_row2) + "</div>"
+
+    return grid_row1 + grid_row2 + eval_modal_html + day_modal_html + invest_modal_html + dividend_modal_html + refresh_modal_html
 
 
 def _fetch_all_market_history() -> Dict[str, Any]:
-    """7대 시장 지표(환율/지수)의 10년 일별 종가 시계열 데이터를 스마트 수집"""
+    """6대 시장 지표(환율/지수)의 10년 일별 종가 시계열 데이터를 스마트 수집"""
     import urllib.request
     import urllib.parse
     from datetime import datetime
 
-    symbols = ["USDKRW=X", "^GSPC", "^NDX", "SCHD", "IEF", "^KS11", "^KQ11"]
+    symbols = ["USDKRW=X", "^GSPC", "^NDX", "SCHD", "IEF", "^KS11"]
     result_data = {}
 
     for sym in symbols:
@@ -3179,10 +3215,30 @@ html.dark .fa-dashboard,
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 12px;
+  margin-bottom: 12px;
+}
+.fa-kpi-grid-5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.fa-kpi-grid-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.fa-kpi-grid-market {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   margin-bottom: 20px;
 }
-@media (max-width: 1100px) { .fa-kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (max-width: 640px) { .fa-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } }
+@media (max-width: 1100px) {
+  .fa-kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .fa-kpi-grid-5 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .fa-kpi-grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fa-kpi-grid-market { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .fa-kpi-grid, .fa-kpi-grid-5, .fa-kpi-grid-4, .fa-kpi-grid-market {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+}
 
 .fa-kpi-card {
   background: var(--fa-card-bg);
