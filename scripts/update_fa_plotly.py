@@ -28,7 +28,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.72"
+APP_VERSION = "v2.7.73"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -1503,7 +1503,7 @@ def _build_single_allocation_pie(df_in: pd.DataFrame, label_col: str, title_text
                 hole=0.46,
                 showlegend=True,
                 marker=dict(colors=[_palette_color(i) for i in range(len(df_in))]),
-                hovertemplate="<b>%{label}</b><br>평가금: %{value:,.0f}<br>비중: %{percent}<extra></extra>",
+                hovertemplate="<b>%{label}</b><br>평가금: %{value:,.0f}원<br>비중: %{percent}<extra></extra>",
             )
         ]
     )
@@ -1525,11 +1525,11 @@ def _build_single_allocation_pie(df_in: pd.DataFrame, label_col: str, title_text
     return fig
 
 
-def _build_portfolio_allocation_section(
+def _enrich_holdings_with_categories(
     holdings_df: pd.DataFrame,
     symbol_map: Dict[str, update_fa.AssetConfig],
-    fig_renderer: Callable[[go.Figure], str],
-) -> str:
+) -> pd.DataFrame:
+    """종목별 메타데이터를 기반으로 지역(region), 대표자산(asset_class), 자산군(asset_group)을 부여합니다."""
     df = holdings_df.copy()
     regions = []
     asset_classes = []
@@ -1562,40 +1562,65 @@ def _build_portfolio_allocation_section(
     df["region"] = regions
     df["asset_class"] = asset_classes
     df["asset_group"] = asset_groups
+    return df
 
-    group_df = df.groupby("asset_group")["평가금"].sum().reset_index()
-    region_df = df.groupby("region")["평가금"].sum().reset_index()
-    class_df = df.groupby("asset_class")["평가금"].sum().reset_index()
 
-    def group_minor_df(df_in: pd.DataFrame, col_name: str, threshold_pct: float = 2.5) -> pd.DataFrame:
-        if len(df_in) <= 5:
-            return df_in
-        total = df_in["평가금"].sum()
-        if total == 0:
-            return df_in
-        df_sorted = df_in.sort_values(by="평가금", ascending=False).copy()
-        df_sorted["pct"] = df_sorted["평가금"] / total * 100
+def _group_minor_allocation_df(df_in: pd.DataFrame, col_name: str, threshold_pct: float = 2.5) -> pd.DataFrame:
+    """비중이 작은 항목들을 '기타'로 합산합니다."""
+    if len(df_in) <= 5:
+        return df_in
+    total = df_in["평가금"].sum()
+    if total == 0:
+        return df_in
+    df_sorted = df_in.sort_values(by="평가금", ascending=False).copy()
+    df_sorted["pct"] = df_sorted["평가금"] / total * 100
 
-        major_df = df_sorted[df_sorted["pct"] >= threshold_pct].copy()
-        minor_df = df_sorted[df_sorted["pct"] < threshold_pct].copy()
+    major_df = df_sorted[df_sorted["pct"] >= threshold_pct].copy()
+    minor_df = df_sorted[df_sorted["pct"] < threshold_pct].copy()
 
-        if not minor_df.empty:
-            minor_sum = minor_df["평가금"].sum()
-            etc_mask = major_df[col_name] == "기타"
-            if etc_mask.any():
-                major_df.loc[etc_mask, "평가금"] += minor_sum
-            else:
-                new_row = pd.DataFrame([{col_name: "기타", "평가금": minor_sum}])
-                major_df = pd.concat([major_df, new_row], ignore_index=True)
-        return major_df.drop(columns=["pct"], errors="ignore").sort_values(by="평가금", ascending=False)
+    if not minor_df.empty:
+        minor_sum = minor_df["평가금"].sum()
+        etc_mask = major_df[col_name] == "기타"
+        if etc_mask.any():
+            major_df.loc[etc_mask, "평가금"] += minor_sum
+        else:
+            new_row = pd.DataFrame([{col_name: "기타", "평가금": minor_sum}])
+            major_df = pd.concat([major_df, new_row], ignore_index=True)
+    return major_df.drop(columns=["pct"], errors="ignore").sort_values(by="평가금", ascending=False)
 
-    group_df = group_minor_df(group_df, "asset_group")
-    region_df = group_minor_df(region_df, "region")
-    class_df = group_minor_df(class_df, "asset_class")
+
+def _build_portfolio_allocation_section(
+    holdings_df: pd.DataFrame,
+    symbol_map: Dict[str, update_fa.AssetConfig],
+    fig_renderer: Callable[[go.Figure], str],
+) -> str:
+    df_all = _enrich_holdings_with_categories(holdings_df, symbol_map)
+    port2_accounts = {"isa2", "psf2", "kor2"}
+
+    # 전체 포트폴리오
+    group_df = df_all.groupby("asset_group")["평가금"].sum().reset_index()
+    region_df = df_all.groupby("region")["평가금"].sum().reset_index()
+    class_df = df_all.groupby("asset_class")["평가금"].sum().reset_index()
+
+    group_df = _group_minor_allocation_df(group_df, "asset_group")
+    region_df = _group_minor_allocation_df(region_df, "region")
+    class_df = _group_minor_allocation_df(class_df, "asset_class")
 
     fig_group = _build_single_allocation_pie(group_df, "asset_group", "자산군 비중")
     fig_region = _build_single_allocation_pie(region_df, "region", "지역 비중")
     fig_class = _build_single_allocation_pie(class_df, "asset_class", "대표 자산 비중")
+
+    # 포트폴리오 1 (기존 계좌: usa, kor1, sema, irp, psf1, isa1)
+    df_p1 = df_all[~df_all["계좌"].isin(port2_accounts)]
+    p1_class_df = df_p1.groupby("asset_class")["평가금"].sum().reset_index()
+    p1_class_df = _group_minor_allocation_df(p1_class_df, "asset_class", threshold_pct=1.5)
+    fig_port1 = _build_single_allocation_pie(p1_class_df, "asset_class", "포트폴리오 1 자산 비중")
+
+    # 포트폴리오 2 (신규 계좌: isa2, psf2, kor2)
+    df_p2 = df_all[df_all["계좌"].isin(port2_accounts)]
+    p2_class_df = df_p2.groupby("asset_class")["평가금"].sum().reset_index()
+    p2_class_df = _group_minor_allocation_df(p2_class_df, "asset_class", threshold_pct=1.5)
+    fig_port2 = _build_single_allocation_pie(p2_class_df, "asset_class", "포트폴리오 2 자산 비중")
 
     html_parts = [
         '<div class="fa-card fa-card-tabs fa-card-wide fa-alloc-card">',
@@ -1606,6 +1631,8 @@ def _build_portfolio_allocation_section(
         '        <button type="button" class="fa-tab-btn active" data-target="alloc-tab-group">자산군 비중</button>',
         '        <button type="button" class="fa-tab-btn" data-target="alloc-tab-region">지역 비중</button>',
         '        <button type="button" class="fa-tab-btn" data-target="alloc-tab-class">대표 자산 비중</button>',
+        '        <button type="button" class="fa-tab-btn" data-target="alloc-tab-port1">포트폴리오 1</button>',
+        '        <button type="button" class="fa-tab-btn" data-target="alloc-tab-port2">포트폴리오 2</button>',
         '      </div>',
         '    </div>',
         '  </div>',
@@ -1613,6 +1640,8 @@ def _build_portfolio_allocation_section(
         f'    <div id="alloc-tab-group" class="fa-tab-pane active">{fig_renderer(fig_group)}</div>',
         f'    <div id="alloc-tab-region" class="fa-tab-pane">{fig_renderer(fig_region)}</div>',
         f'    <div id="alloc-tab-class" class="fa-tab-pane">{fig_renderer(fig_class)}</div>',
+        f'    <div id="alloc-tab-port1" class="fa-tab-pane">{fig_renderer(fig_port1)}</div>',
+        f'    <div id="alloc-tab-port2" class="fa-tab-pane">{fig_renderer(fig_port2)}</div>',
         '  </div>',
         '</div>',
     ]
@@ -1927,7 +1956,7 @@ def _build_monthly_dividend_bar_chart(monthly_series: pd.Series) -> go.Figure:
     return fig
 
 
-def _build_last12m_dividend_bar_chart(monthly_series: pd.Series) -> go.Figure:
+def _build_last12m_dividend_bar_chart(monthly_series: pd.Series, bar_color: str = "#8B5CF6") -> go.Figure:
     """최근 12개월의 월별 배당금을 보여주는 막대 그래프"""
     fig = go.Figure()
     if monthly_series.empty:
@@ -1951,7 +1980,7 @@ def _build_last12m_dividend_bar_chart(monthly_series: pd.Series) -> go.Figure:
             text=bar_texts,
             textposition="outside",
             textfont=dict(size=11, family=FONT_FAMILY, color="#475569"),
-            marker=dict(color="#8B5CF6", opacity=0.9),
+            marker=dict(color=bar_color, opacity=0.9),
             customdata=customdata,
             hovertemplate="<b>%{customdata[0]}</b><br>월 배당금: <b>%{y:,.0f}원</b><br><span style='font-size:11px; color:#cbd5e1;'>👆 클릭하여 배당 재원 보기</span><extra></extra>",
             cliponaxis=False,
@@ -2096,15 +2125,24 @@ def _build_dividends_tabbed_section(
     fx_series: pd.Series,
     fig_renderer: Callable[[go.Figure], str],
 ) -> Optional[str]:
-    """배당금 현황을 5개 탭(최근 12개월, 연도별, 분기별, 월별, 상세)으로 렌더링하는 통합 컴포넌트"""
+    """배당금 현황을 7개 탭(최근 12개월, 연도별, 분기별, 월별, 상세, 포트폴리오 1, 포트폴리오 2)으로 렌더링하는 통합 컴포넌트"""
     yearly_series, quarterly_agg, monthly_series, yearly_detail_df, monthly_details = _extract_dividend_data(records, fx_series)
     if yearly_series.empty:
         return None
+
+    port2_accounts = {"isa2", "psf2", "kor2"}
+    p1_records = records[~records["계좌"].isin(port2_accounts)]
+    p2_records = records[records["계좌"].isin(port2_accounts)]
+
+    _, _, monthly_series_p1, _, _ = _extract_dividend_data(p1_records, fx_series)
+    _, _, monthly_series_p2, _, _ = _extract_dividend_data(p2_records, fx_series)
 
     fig_last12m = _build_last12m_dividend_bar_chart(monthly_series)
     fig_yearly = _build_yearly_dividend_bar_chart(yearly_series)
     fig_quarterly = _build_quarterly_dividend_bar_chart(quarterly_agg)
     fig_monthly = _build_monthly_dividend_bar_chart(monthly_series)
+    fig_port1 = _build_last12m_dividend_bar_chart(monthly_series_p1, bar_color="#4F46E5")
+    fig_port2 = _build_last12m_dividend_bar_chart(monthly_series_p2, bar_color="#06B6D4")
     month_modal_html = _build_month_dividend_modal(monthly_details)
 
     # 상세 탭 연도별 목록 (내림차순)
@@ -2155,6 +2193,8 @@ def _build_dividends_tabbed_section(
         "        <button class='fa-tab-btn' data-target='fa-div-tab-quarterly'>분기별</button>",
         "        <button class='fa-tab-btn' data-target='fa-div-tab-monthly'>월별</button>",
         "        <button class='fa-tab-btn' data-target='fa-div-tab-detail'>상세</button>",
+        "        <button class='fa-tab-btn' data-target='fa-div-tab-port1'>포트폴리오 1</button>",
+        "        <button class='fa-tab-btn' data-target='fa-div-tab-port2'>포트폴리오 2</button>",
         "      </div>",
         "      <div class='fa-tab-content'>",
         f"        <div id='fa-div-tab-last12m' class='fa-tab-pane active'>{fig_renderer(fig_last12m)}</div>",
@@ -2162,6 +2202,8 @@ def _build_dividends_tabbed_section(
         f"        <div id='fa-div-tab-quarterly' class='fa-tab-pane'>{fig_renderer(fig_quarterly)}</div>",
         f"        <div id='fa-div-tab-monthly' class='fa-tab-pane'>{fig_renderer(fig_monthly)}</div>",
         f"        <div id='fa-div-tab-detail' class='fa-tab-pane'>{detail_html}</div>",
+        f"        <div id='fa-div-tab-port1' class='fa-tab-pane'>{fig_renderer(fig_port1)}</div>",
+        f"        <div id='fa-div-tab-port2' class='fa-tab-pane'>{fig_renderer(fig_port2)}</div>",
         "      </div>",
         "    </div>",
         "  </div>",
@@ -5350,7 +5392,7 @@ window.triggerDashboardRefresh = async function(btn) {
 
 document.addEventListener("DOMContentLoaded", function () {
   function initDividendBarClickEvents() {
-    const panes = ["fa-div-tab-last12m", "fa-div-tab-monthly"];
+    const panes = ["fa-div-tab-last12m", "fa-div-tab-monthly", "fa-div-tab-port1", "fa-div-tab-port2"];
     panes.forEach(paneId => {
       const pane = document.getElementById(paneId);
       if (!pane) return;
