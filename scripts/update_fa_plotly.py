@@ -28,7 +28,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.71"
+APP_VERSION = "v2.7.72"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -1331,35 +1331,55 @@ def _build_assets_investment_trend(account_df: pd.DataFrame, invest_series: pd.S
     return fig
 
 
-def _render_trend_tab_card(
-    title: str, fig_1y: go.Figure, fig_all: go.Figure, card_id: str, default_tab: str = "1y"
+def _render_multi_tab_card(
+    title: str,
+    tabs: List[Tuple[str, str, go.Figure]],
+    card_id: str,
+    default_tab: str = "1y",
 ) -> str:
-    """직전 1년 / 전체 기간 탭이 포함된 차트 카드 HTML"""
-    is_1y = default_tab.lower() == "1y"
-    cls_btn_1y = "fa-tab-btn active" if is_1y else "fa-tab-btn"
-    cls_btn_all = "fa-tab-btn" if is_1y else "fa-tab-btn active"
-    cls_pane_1y = "fa-tab-pane active" if is_1y else "fa-tab-pane"
-    cls_pane_all = "fa-tab-pane" if is_1y else "fa-tab-pane active"
+    """다양한 탭(직전 1년, 전체, 포트1, 포트2 등)을 지원하는 Plotly 차트 카드 HTML"""
+    nav_btns = []
+    panes = []
+    for tab_key, tab_label, fig in tabs:
+        is_active = (tab_key.lower() == default_tab.lower())
+        btn_cls = "fa-tab-btn active" if is_active else "fa-tab-btn"
+        pane_cls = "fa-tab-pane active" if is_active else "fa-tab-pane"
+        pane_id = f"{card_id}-{tab_key}"
+
+        nav_btns.append(
+            f'<button type="button" class="{btn_cls}" data-target="{pane_id}">{html.escape(tab_label)}</button>'
+        )
+        panes.append(
+            f'<div id="{pane_id}" class="{pane_cls}">'
+            f'{_render_figure_html(fig)}'
+            f'</div>'
+        )
 
     return f"""
 <section class="fa-card fa-card-wide fa-card-tabs" id="{card_id}">
   <header class="fa-card-head" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
     <h2>{title}</h2>
     <div class="fa-holdings-tab-nav" style="display: flex; margin-bottom: 0;">
-      <button type="button" class="{cls_btn_1y}" data-target="{card_id}-1y">직전 1년</button>
-      <button type="button" class="{cls_btn_all}" data-target="{card_id}-all">전체</button>
+      {''.join(nav_btns)}
     </div>
   </header>
   <div class="fa-card-body">
-    <div id="{card_id}-1y" class="{cls_pane_1y}">
-      {_render_figure_html(fig_1y)}
-    </div>
-    <div id="{card_id}-all" class="{cls_pane_all}">
-      {_render_figure_html(fig_all)}
-    </div>
+    {''.join(panes)}
   </div>
 </section>
 """
+
+
+def _render_trend_tab_card(
+    title: str, fig_1y: go.Figure, fig_all: go.Figure, card_id: str, default_tab: str = "1y"
+) -> str:
+    """직전 1년 / 전체 기간 탭이 포함된 차트 카드 HTML (하위 호환)"""
+    return _render_multi_tab_card(
+        title,
+        [("1y", "직전 1년", fig_1y), ("all", "전체", fig_all)],
+        card_id,
+        default_tab=default_tab,
+    )
 
 
 def _collect_rebalancing_alerts(data: ReportData, threshold_pct: float = 3.0) -> List[Dict[str, Any]]:
@@ -3066,22 +3086,43 @@ def _build_dashboard_fragment(data: ReportData) -> str:
     def fig_html(fig: go.Figure) -> str:
         return _render_figure_html(fig)
 
+    port2_accounts = {"isa2", "psf2", "kor2"}
+    p1_cols = [c for c in update_fa.ACCOUNT_ORDER if c in data.account_df.columns and c not in port2_accounts]
+    p2_cols = [c for c in update_fa.ACCOUNT_ORDER if c in data.account_df.columns and c in port2_accounts]
+
+    p1_records = data.records[~data.records["계좌"].isin(port2_accounts)]
+    p2_records = data.records[data.records["계좌"].isin(port2_accounts)]
+    p1_invest_series = update_fa._build_investment_series(p1_records, data.fx_series_month)
+    p2_invest_series = update_fa._build_investment_series(p2_records, data.fx_series_month)
+
     fig_invest_1y = _build_assets_investment_trend(data.account_df, data.invest_series, period="1Y")
     fig_invest_all = _build_assets_investment_trend(data.account_df, data.invest_series, period="ALL")
-    invest_trend_card_html = _render_trend_tab_card(
+    fig_invest_p1 = _build_assets_investment_trend(data.account_df[p1_cols], p1_invest_series, period="ALL")
+    fig_invest_p2 = _build_assets_investment_trend(data.account_df[p2_cols], p2_invest_series, period="ALL")
+    invest_trend_card_html = _render_multi_tab_card(
         update_fa.ACCOUNT_TITLES.get("title_assets_investment_trend", "누적 투자금 vs 평가금 추세"),
-        fig_invest_1y,
-        fig_invest_all,
+        [
+            ("1y", "직전 1년", fig_invest_1y),
+            ("all", "전체", fig_invest_all),
+            ("port1", "포트폴리오 1", fig_invest_p1),
+            ("port2", "포트폴리오 2", fig_invest_p2),
+        ],
         "fa-invest-trend-tabs",
         default_tab="1y",
     )
 
     fig_assets_1y = _build_assets_trend(data.account_df, period="1Y")
     fig_assets_all = _build_assets_trend(data.account_df, period="ALL")
-    assets_trend_card_html = _render_trend_tab_card(
+    fig_assets_p1 = _build_assets_trend(data.account_df[p1_cols], period="ALL")
+    fig_assets_p2 = _build_assets_trend(data.account_df[p2_cols], period="ALL")
+    assets_trend_card_html = _render_multi_tab_card(
         update_fa.ACCOUNT_TITLES.get("title_assets_trend", "전체 금융자산 추이"),
-        fig_assets_1y,
-        fig_assets_all,
+        [
+            ("1y", "직전 1년", fig_assets_1y),
+            ("all", "전체", fig_assets_all),
+            ("port1", "포트폴리오 1", fig_assets_p1),
+            ("port2", "포트폴리오 2", fig_assets_p2),
+        ],
         "fa-assets-trend-tabs",
         default_tab="all",
     )
