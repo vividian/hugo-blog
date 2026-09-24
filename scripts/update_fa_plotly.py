@@ -28,7 +28,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.70"
+APP_VERSION = "v2.7.71"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -233,12 +233,27 @@ def _kpi_card(label: str, value: str, sub: str = "", state: str = "", sub_state:
     )
 
 
-def _build_eval_change_modal(data: ReportData, cur_eval_val: float, prev_eval_val: float, eval_month_change: float) -> str:
-    """총 평가금의 최근 12개월 전월대비 변동 추세를 보여주는 Plotly 막대 그래프 팝업 모달"""
+def _build_eval_change_modal(
+    data: ReportData,
+    cur_eval_val: float,
+    prev_eval_val: float,
+    eval_month_change: float,
+    modal_id: str = "fa-eval-change-modal",
+    modal_title: str = "📈 최근 12개월 전월대비 자산 평가금 변동 추세",
+    close_fn: str = "closeEvalChangeModal",
+    eval_series: Optional[pd.Series] = None,
+) -> str:
+    """평가금의 최근 12개월 전월대비 변동 추세를 보여주는 Plotly 막대 그래프 팝업 모달"""
     monthly_data_list = []
 
-    if data.account_df is not None and not data.account_df.empty:
+    if eval_series is not None and not eval_series.empty:
+        total_eval_s = eval_series
+    elif data.account_df is not None and not data.account_df.empty:
         total_eval_s = data.account_df.sum(axis=1)
+    else:
+        total_eval_s = None
+
+    if total_eval_s is not None and not total_eval_s.empty:
         monthly_eval = total_eval_s.groupby(total_eval_s.index.to_period("M")).last()
 
         # 최근 12개월 period 추출
@@ -367,11 +382,11 @@ def _build_eval_change_modal(data: ReportData, cur_eval_val: float, prev_eval_va
     cur_cls = "fa-num-positive" if eval_month_change > 0 else "fa-num-negative" if eval_month_change < 0 else ""
 
     return f"""
-<div id="fa-eval-change-modal" class="fa-modal-overlay" onclick="if(event.target===this)closeEvalChangeModal()">
+<div id="{modal_id}" class="fa-modal-overlay" onclick="if(event.target===this){close_fn}()">
   <div class="fa-modal-card" style="max-width:780px; width:95%;">
     <div class="fa-modal-header">
-      <h3 class="fa-modal-title">📈 최근 12개월 전월대비 자산 평가금 변동 추세</h3>
-      <button type="button" class="fa-modal-close" onclick="closeEvalChangeModal()" aria-label="닫기">✕</button>
+      <h3 class="fa-modal-title">{modal_title}</h3>
+      <button type="button" class="fa-modal-close" onclick="{close_fn}()" aria-label="닫기">✕</button>
     </div>
     <div class="fa-modal-body">
       <div class="fa-modal-summary-grid" style="grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));">
@@ -403,7 +418,7 @@ def _build_eval_change_modal(data: ReportData, cur_eval_val: float, prev_eval_va
           <thead>
             <tr>
               <th>기준월</th>
-              <th class="text-right">총 평가금</th>
+              <th class="text-right">평가금</th>
               <th class="text-right">전월대비 변동액</th>
               <th class="text-right">전월대비 증감률</th>
             </tr>
@@ -419,8 +434,16 @@ def _build_eval_change_modal(data: ReportData, cur_eval_val: float, prev_eval_va
 """
 
 
-def _build_day_change_modal(data: ReportData, eval_day_change: float) -> str:
-    """총 평가금/수익금의 전일대비 증감액을 종목별로 상세히 분해하여 보여주는 팝업 모달"""
+def _build_day_change_modal(
+    data: ReportData,
+    eval_day_change: float,
+    modal_id: str = "fa-day-change-modal",
+    modal_title: str = "📊 전일대비 종목별 손익 변동 상세",
+    close_fn: str = "closeDayChangeModal",
+    account_filter: Optional[Set[str]] = None,
+    filter_is_exclude: bool = False,
+) -> str:
+    """평가금/수익금의 전일대비 증감액을 종목별로 상세히 분해하여 보여주는 팝업 모달"""
     items = []
     total_gain = 0.0
     total_loss = 0.0
@@ -429,8 +452,13 @@ def _build_day_change_modal(data: ReportData, eval_day_change: float) -> str:
 
     if not data.holdings_df.empty:
         for _, hrow in data.holdings_df.iterrows():
-            sym = str(hrow.get("종목", "")).strip()
             acct = str(hrow.get("계좌", "")).strip()
+            if account_filter is not None:
+                if filter_is_exclude and acct in account_filter:
+                    continue
+                elif not filter_is_exclude and acct not in account_filter:
+                    continue
+            sym = str(hrow.get("종목", "")).strip()
             acct_label = update_fa.account_label(acct)
             qty = _as_float(hrow.get("수량")) or 0.0
             cur_price = _as_float(hrow.get("현재가")) or 0.0
@@ -486,11 +514,11 @@ def _build_day_change_modal(data: ReportData, eval_day_change: float) -> str:
     net_cls = "fa-num-positive" if eval_day_change > 0 else "fa-num-negative" if eval_day_change < 0 else ""
 
     return f"""
-<div id="fa-day-change-modal" class="fa-modal-overlay" onclick="if(event.target===this)closeDayChangeModal()">
+<div id="{modal_id}" class="fa-modal-overlay" onclick="if(event.target===this){close_fn}()">
   <div class="fa-modal-card">
     <div class="fa-modal-header">
-      <h3 class="fa-modal-title">📊 전일대비 종목별 손익 변동 상세</h3>
-      <button type="button" class="fa-modal-close" onclick="closeDayChangeModal()" aria-label="닫기">✕</button>
+      <h3 class="fa-modal-title">{modal_title}</h3>
+      <button type="button" class="fa-modal-close" onclick="{close_fn}()" aria-label="닫기">✕</button>
     </div>
     <div class="fa-modal-body">
       <div class="fa-modal-summary-grid">
@@ -929,6 +957,67 @@ def _build_kpi_row(data: ReportData) -> str:
     p1_profit_str = _fmt_krw(port1_profit)
     p2_profit_str = _fmt_krw(port2_profit)
 
+    # 포트1 / 포트2 전월대비 평가금 변동액 계산
+    p1_eval_s = None
+    p2_eval_s = None
+    p1_eval_month_change = 0.0
+    p2_eval_month_change = 0.0
+    cur_p1_eval = port1_eval
+    prev_p1_eval = cur_p1_eval
+    cur_p2_eval = port2_eval
+    prev_p2_eval = cur_p2_eval
+
+    if data.account_df is not None and not data.account_df.empty:
+        p1_cols = [c for c in data.account_df.columns if c not in port2_accounts]
+        p2_cols = [c for c in data.account_df.columns if c in port2_accounts]
+        if p1_cols:
+            p1_eval_s = data.account_df[p1_cols].sum(axis=1)
+            m_p1 = p1_eval_s.groupby(p1_eval_s.index.to_period("M")).last()
+            if len(m_p1) >= 2:
+                cur_p1_eval = port1_eval if port1_eval else float(m_p1.iloc[-1])
+                prev_p1_eval = float(m_p1.iloc[-2])
+                p1_eval_month_change = cur_p1_eval - prev_p1_eval
+            elif len(m_p1) == 1:
+                cur_p1_eval = port1_eval if port1_eval else float(m_p1.iloc[-1])
+                prev_p1_eval = 0.0
+                p1_eval_month_change = cur_p1_eval
+        if p2_cols:
+            p2_eval_s = data.account_df[p2_cols].sum(axis=1)
+            m_p2 = p2_eval_s.groupby(p2_eval_s.index.to_period("M")).last()
+            if len(m_p2) >= 2:
+                cur_p2_eval = port2_eval if port2_eval else float(m_p2.iloc[-1])
+                prev_p2_eval = float(m_p2.iloc[-2])
+                p2_eval_month_change = cur_p2_eval - prev_p2_eval
+            elif len(m_p2) == 1:
+                cur_p2_eval = port2_eval if port2_eval else float(m_p2.iloc[-1])
+                prev_p2_eval = 0.0
+                p2_eval_month_change = cur_p2_eval
+
+    # 포트1 / 포트2 전일대비 손익 변동액 계산
+    p1_day_change = 0.0
+    p2_day_change = 0.0
+    if not data.holdings_df.empty:
+        for _, hrow in data.holdings_df.iterrows():
+            acct = str(hrow.get("계좌", "")).strip()
+            r = _as_float(hrow.get("등락률"))
+            val = _as_float(hrow.get("평가금")) or 0.0
+            if r is not None and (1.0 + r) != 0:
+                c_amt = (val * r / (1.0 + r))
+                if acct in port2_accounts:
+                    p2_day_change += c_amt
+                else:
+                    p1_day_change += c_amt
+
+    p1_eval_sub = f"전월대비 {p1_eval_month_change:+,.0f}" if p1_eval_month_change != 0 else "전월대비 0"
+    p1_eval_state = "positive" if p1_eval_month_change > 0 else "negative" if p1_eval_month_change < 0 else ""
+    p1_day_sub = f"전일대비 {p1_day_change:+,.0f}" if p1_day_change != 0 else "전일대비 0"
+    p1_day_state = "positive" if p1_day_change > 0 else "negative" if p1_day_change < 0 else ""
+
+    p2_eval_sub = f"전월대비 {p2_eval_month_change:+,.0f}" if p2_eval_month_change != 0 else "전월대비 0"
+    p2_eval_state = "positive" if p2_eval_month_change > 0 else "negative" if p2_eval_month_change < 0 else ""
+    p2_day_sub = f"전일대비 {p2_day_change:+,.0f}" if p2_day_change != 0 else "전일대비 0"
+    p2_day_state = "positive" if p2_day_change > 0 else "negative" if p2_day_change < 0 else ""
+
     cards_row1 = [
         _kpi_card("총 평가금", _fmt_krw(valuation), eval_sub, sub_state=eval_state, sub_onclick="openEvalChangeModal()", sub_title="클릭하여 최근 12개월 전월대비 변동 추세 보기"),
         _kpi_card("총 투자금", _fmt_krw(invest), inv_sub, sub_state=inv_state, sub_onclick="openInvestChangeModal()"),
@@ -938,16 +1027,52 @@ def _build_kpi_row(data: ReportData) -> str:
     ]
 
     cards_row2 = [
-        _kpi_card("포트1 평가금", _fmt_krw(port1_eval), "기존 계좌"),
-        _kpi_card("포트1 수익금", f"<span class='fa-num-{p1_profit_state}'>{p1_profit_str}</span>", "기존 계좌", state=p1_profit_state),
-        _kpi_card("포트2 평가금", _fmt_krw(port2_eval), "ISA2 · 연금2 · 국내2"),
-        _kpi_card("포트2 수익금", f"<span class='fa-num-{p2_profit_state}'>{p2_profit_str}</span>", "ISA2 · 연금2 · 국내2", state=p2_profit_state),
+        _kpi_card("포트1 평가금", _fmt_krw(port1_eval), p1_eval_sub, sub_state=p1_eval_state, sub_onclick="openPort1EvalChangeModal()", sub_title="클릭하여 포트폴리오 1 최근 12개월 전월대비 변동 추세 보기"),
+        _kpi_card("포트1 수익금", f"<span class='fa-num-{p1_profit_state}'>{p1_profit_str}</span>", p1_day_sub, state=p1_profit_state, sub_state=p1_day_state, sub_onclick="openPort1DayChangeModal()", sub_title="클릭하여 포트폴리오 1 종목별 전일대비 변동 상세 보기"),
+        _kpi_card("포트2 평가금", _fmt_krw(port2_eval), p2_eval_sub, sub_state=p2_eval_state, sub_onclick="openPort2EvalChangeModal()", sub_title="클릭하여 포트폴리오 2 최근 12개월 전월대비 변동 추세 보기"),
+        _kpi_card("포트2 수익금", f"<span class='fa-num-{p2_profit_state}'>{p2_profit_str}</span>", p2_day_sub, state=p2_profit_state, sub_state=p2_day_state, sub_onclick="openPort2DayChangeModal()", sub_title="클릭하여 포트폴리오 2 종목별 전일대비 변동 상세 보기"),
     ]
 
     grid_row1 = "<div class=\"fa-kpi-grid fa-kpi-grid-5\">" + "".join(cards_row1) + "</div>"
     grid_row2 = "<div class=\"fa-kpi-grid fa-kpi-grid-4\">" + "".join(cards_row2) + "</div>"
 
-    return grid_row1 + grid_row2 + eval_modal_html + day_modal_html + invest_modal_html + dividend_modal_html + refresh_modal_html
+    # 포트1 / 포트2 모달 HTML 생성
+    p1_eval_modal_html = _build_eval_change_modal(
+        data, cur_p1_eval, prev_p1_eval, p1_eval_month_change,
+        modal_id="fa-port1-eval-change-modal",
+        modal_title="📈 최근 12개월 전월대비 포트폴리오 1 평가금 변동 추세",
+        close_fn="closePort1EvalChangeModal",
+        eval_series=p1_eval_s,
+    )
+    p2_eval_modal_html = _build_eval_change_modal(
+        data, cur_p2_eval, prev_p2_eval, p2_eval_month_change,
+        modal_id="fa-port2-eval-change-modal",
+        modal_title="📈 최근 12개월 전월대비 포트폴리오 2 평가금 변동 추세",
+        close_fn="closePort2EvalChangeModal",
+        eval_series=p2_eval_s,
+    )
+    p1_day_modal_html = _build_day_change_modal(
+        data, p1_day_change,
+        modal_id="fa-port1-day-change-modal",
+        modal_title="📊 전일대비 포트폴리오 1 종목별 손익 변동 상세",
+        close_fn="closePort1DayChangeModal",
+        account_filter=port2_accounts,
+        filter_is_exclude=True,
+    )
+    p2_day_modal_html = _build_day_change_modal(
+        data, p2_day_change,
+        modal_id="fa-port2-day-change-modal",
+        modal_title="📊 전일대비 포트폴리오 2 종목별 손익 변동 상세",
+        close_fn="closePort2DayChangeModal",
+        account_filter=port2_accounts,
+        filter_is_exclude=False,
+    )
+
+    return (
+        grid_row1 + grid_row2
+        + eval_modal_html + day_modal_html + invest_modal_html + dividend_modal_html + refresh_modal_html
+        + p1_eval_modal_html + p2_eval_modal_html + p1_day_modal_html + p2_day_modal_html
+    )
 
 
 def _fetch_all_market_history() -> Dict[str, Any]:
@@ -4756,6 +4881,36 @@ window.closeEvalChangeModal = function() { window.closeModal("fa-eval-change-mod
 
 window.openDayChangeModal = function() { window.openModal("fa-day-change-modal"); };
 window.closeDayChangeModal = function() { window.closeModal("fa-day-change-modal"); };
+
+window.openPort1EvalChangeModal = function() {
+  window.openModal("fa-port1-eval-change-modal");
+  setTimeout(() => {
+    const modal = document.getElementById("fa-port1-eval-change-modal");
+    if (modal) {
+      const plots = modal.querySelectorAll(".js-plotly-plot");
+      plots.forEach(p => { if (window.Plotly) window.Plotly.Plots.resize(p); });
+    }
+  }, 60);
+};
+window.closePort1EvalChangeModal = function() { window.closeModal("fa-port1-eval-change-modal"); };
+
+window.openPort1DayChangeModal = function() { window.openModal("fa-port1-day-change-modal"); };
+window.closePort1DayChangeModal = function() { window.closeModal("fa-port1-day-change-modal"); };
+
+window.openPort2EvalChangeModal = function() {
+  window.openModal("fa-port2-eval-change-modal");
+  setTimeout(() => {
+    const modal = document.getElementById("fa-port2-eval-change-modal");
+    if (modal) {
+      const plots = modal.querySelectorAll(".js-plotly-plot");
+      plots.forEach(p => { if (window.Plotly) window.Plotly.Plots.resize(p); });
+    }
+  }, 60);
+};
+window.closePort2EvalChangeModal = function() { window.closeModal("fa-port2-eval-change-modal"); };
+
+window.openPort2DayChangeModal = function() { window.openModal("fa-port2-day-change-modal"); };
+window.closePort2DayChangeModal = function() { window.closeModal("fa-port2-day-change-modal"); };
 
 window.openInvestChangeModal = function() { window.openModal("fa-invest-change-modal"); };
 window.closeInvestChangeModal = function() { window.closeModal("fa-invest-change-modal"); };
