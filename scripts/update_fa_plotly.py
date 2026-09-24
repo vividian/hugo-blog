@@ -28,7 +28,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.74"
+APP_VERSION = "v2.7.75"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -1634,28 +1634,34 @@ def _build_portfolio_allocation_section(
         '    </div>',
         '  </div>',
         '  <div class="fa-card-body fa-alloc-body">',
-        '    <!-- 1. 전체 탭 패널 -->',
+        '    <!-- 1. 전체 탭: 자산군 비중, 지역 비중, 대표 자산 비중 동시 표시 -->',
         '    <div id="alloc-tab-total" class="fa-tab-pane active">',
-        '      <div class="fa-tab-nav fa-tab-nav-sub" style="margin-bottom:12px;">',
-        '        <button type="button" class="fa-subtab-btn active" data-target="alloc-sub-group">자산군 비중</button>',
-        '        <button type="button" class="fa-subtab-btn" data-target="alloc-sub-region">지역 비중</button>',
-        '        <button type="button" class="fa-subtab-btn" data-target="alloc-sub-class">대표 자산 비중</button>',
-        '      </div>',
-        '      <div class="fa-subtab-content">',
-        f'        <div id="alloc-sub-group" class="fa-subtab-pane active">{fig_renderer(fig_group)}</div>',
-        f'        <div id="alloc-sub-region" class="fa-subtab-pane">{fig_renderer(fig_region)}</div>',
-        f'        <div id="alloc-sub-class" class="fa-subtab-pane">{fig_renderer(fig_class)}</div>',
+        '      <div class="fa-alloc-grid fa-alloc-grid-3">',
+        '        <div class="fa-alloc-col">',
+        '          <div class="fa-alloc-col-title">자산군 비중</div>',
+        f'          <div class="fa-alloc-chart-box">{fig_renderer(fig_group)}</div>',
+        '        </div>',
+        '        <div class="fa-alloc-col">',
+        '          <div class="fa-alloc-col-title">지역 비중</div>',
+        f'          <div class="fa-alloc-chart-box">{fig_renderer(fig_region)}</div>',
+        '        </div>',
+        '        <div class="fa-alloc-col">',
+        '          <div class="fa-alloc-col-title">대표 자산 비중</div>',
+        f'          <div class="fa-alloc-chart-box">{fig_renderer(fig_class)}</div>',
+        '        </div>',
         '      </div>',
         '    </div>',
-        '    <!-- 2. 포트별 탭 패널 -->',
+        '    <!-- 2. 포트별 탭: 포트폴리오 1, 포트폴리오 2 동시 표시 -->',
         '    <div id="alloc-tab-port" class="fa-tab-pane">',
-        '      <div class="fa-tab-nav fa-tab-nav-sub" style="margin-bottom:12px;">',
-        '        <button type="button" class="fa-subtab-btn active" data-target="alloc-sub-port1">포트폴리오 1</button>',
-        '        <button type="button" class="fa-subtab-btn" data-target="alloc-sub-port2">포트폴리오 2</button>',
-        '      </div>',
-        '      <div class="fa-subtab-content">',
-        f'        <div id="alloc-sub-port1" class="fa-subtab-pane active">{fig_renderer(fig_port1)}</div>',
-        f'        <div id="alloc-sub-port2" class="fa-subtab-pane">{fig_renderer(fig_port2)}</div>',
+        '      <div class="fa-alloc-grid fa-alloc-grid-2">',
+        '        <div class="fa-alloc-col">',
+        '          <div class="fa-alloc-col-title">포트폴리오 1 (기존 계좌군)</div>',
+        f'          <div class="fa-alloc-chart-box">{fig_renderer(fig_port1)}</div>',
+        '        </div>',
+        '        <div class="fa-alloc-col">',
+        '          <div class="fa-alloc-col-title">포트폴리오 2 (신규 계좌군)</div>',
+        f'          <div class="fa-alloc-chart-box">{fig_renderer(fig_port2)}</div>',
+        '        </div>',
         '      </div>',
         '    </div>',
         '  </div>',
@@ -4449,14 +4455,51 @@ html.dark .fa-dashboard,
 /* =========================================================
    Responsive Overrides for Desktop vs Mobile
    ========================================================= */
-/* 1. 포트폴리오 비중: 전체 탭 / 포트별 탭 및 서브탭 */
+/* 1. 포트폴리오 비중: 전체 탭 / 포트별 탭 및 동시 표시 그리드 레이아웃 */
 .fa-alloc-card .fa-alloc-tab-nav {
   display: block;
 }
-.fa-alloc-card .fa-tab-nav-sub {
+.fa-alloc-grid {
+  display: grid;
+  gap: 20px;
+  width: 100%;
+}
+.fa-alloc-grid-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.fa-alloc-grid-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.fa-alloc-col {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-direction: column;
+  background: var(--fa-kpi-bg);
+  border: 1px solid var(--fa-border);
+  border-radius: 12px;
+  padding: 14px 8px 6px 8px;
+  min-width: 0;
+}
+.fa-alloc-col-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--fa-text-main);
+  text-align: center;
+  margin-bottom: 2px;
+}
+.fa-alloc-chart-box {
+  width: 100%;
+}
+@media (max-width: 1024px) {
+  .fa-alloc-grid-3 {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+    gap: 16px;
+  }
+}
+@media (max-width: 768px) {
+  .fa-alloc-grid-2 {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+    gap: 16px;
+  }
 }
 
 /* 2. 계좌별 자산 현황: PC 전체 요약 테이블 표시 (탭 제거), 모바일 탭 분기 */
@@ -5442,12 +5485,12 @@ document.addEventListener("DOMContentLoaded", function () {
       const targetPane = document.getElementById(targetId);
       if (targetPane) {
         targetPane.classList.add("active");
-        // 해당 패널 내부의 Plotly 차트 리사이즈 (서브탭 활성 차트 포함)
-        const subChartDiv = targetPane.querySelector(".fa-subtab-pane.active .plotly-graph-div");
-        const chartDiv = subChartDiv || targetPane.querySelector(".plotly-graph-div");
-        if (chartDiv && window.Plotly) {
-          window.Plotly.Plots.resize(chartDiv);
-        }
+        // 해당 패널 내부의 모든 Plotly 차트 리사이즈 (동시 표시 차트 포함)
+        targetPane.querySelectorAll(".plotly-graph-div").forEach(chartDiv => {
+          if (chartDiv && window.Plotly) {
+            window.Plotly.Plots.resize(chartDiv);
+          }
+        });
         // 만약 활성화된 패널이 상세 탭이면 내부의 활성 연도 차트도 리사이즈
         const activeYearPane = targetPane.querySelector(".fa-div-year-pane.active");
         if (activeYearPane) {
