@@ -2592,8 +2592,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       }
     }
 
-    let accountAllocationsList = [];
-
     async function openManageAllocationsModal() {
       document.getElementById("modal-manage-allocations").classList.add("open");
       await fetchAccountAllocations();
@@ -2830,7 +2828,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }
 
     function promptCustomAllocKey(acctCode) {
-      const customKey = prompt("추가할 종목명(약칭) 또는 자산군을 입력하세요:\n(예: ACE 미국배당, TLT, 금)");
+      const customKey = prompt("추가할 종목명(약칭) 또는 자산군을 입력하세요 (예: ACE 미국배당, TLT, 금):");
       if (!customKey || !customKey.trim()) return;
       const cleanKey = customKey.trim();
       
