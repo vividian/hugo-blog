@@ -1131,7 +1131,291 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       border-bottom: 1px solid #f1f5f9;
     }
     .fa-modal .fa-table tr:hover td {
-      background: #f8fafc !important;
+    /* Account Allocations UI */
+    .alloc-card {
+      background: #ffffff;
+      border: 1px solid var(--fa-border);
+      border-radius: 14px;
+      padding: 16px 18px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      transition: border-color 0.2s;
+    }
+    .alloc-card:hover {
+      border-color: #cbd5e1;
+    }
+    .alloc-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      border-bottom: 1px solid #f1f5f9;
+      padding-bottom: 10px;
+    }
+    .alloc-title-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .alloc-editor-box {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .alloc-items-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .alloc-empty-notice {
+      color: var(--fa-text-muted);
+      font-size: 0.82rem;
+      padding: 8px 4px;
+    }
+    .alloc-item-pill {
+      display: inline-flex;
+      align-items: center;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 4px 8px;
+      gap: 8px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+    .alloc-item-name {
+      font-weight: 700;
+      font-size: 0.85rem;
+      color: #1e293b;
+      white-space: nowrap;
+    }
+    .alloc-item-stepper {
+      display: inline-flex;
+      align-items: center;
+      background: #f1f5f9;
+      border-radius: 6px;
+      padding: 2px;
+      gap: 2px;
+    }
+    .stepper-btn {
+      width: 28px;
+      height: 28px;
+      border: none;
+      background: #ffffff;
+      border-radius: 4px;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #334155;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+      transition: background 0.1s;
+      user-select: none;
+    }
+    .stepper-btn:hover { background: #e2e8f0; }
+    .stepper-btn:active { background: #cbd5e1; }
+    .stepper-input {
+      width: 52px;
+      height: 28px;
+      border: 1px solid transparent;
+      background: transparent;
+      text-align: center;
+      font-weight: 800;
+      font-size: 0.95rem;
+      color: var(--fa-accent);
+      padding: 0;
+      font-variant-numeric: tabular-nums;
+    }
+    .stepper-input:focus {
+      background: #ffffff;
+      border-color: var(--fa-accent);
+      border-radius: 4px;
+      outline: none;
+    }
+    .stepper-unit {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--fa-text-muted);
+      margin-right: 4px;
+    }
+    .alloc-del-btn {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      font-size: 0.85rem;
+      cursor: pointer;
+      padding: 2px 4px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+    .alloc-del-btn:hover {
+      color: #ef4444;
+      background: #fee2e2;
+    }
+    .alloc-summary-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding-top: 6px;
+      border-top: 1px dashed #e2e8f0;
+    }
+    .alloc-total-badge {
+      font-size: 0.82rem;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .alloc-total-badge.ok { background: #dcfce7; color: #15803d; }
+    .alloc-total-badge.warn { background: #fef3c7; color: #b45309; }
+    .alloc-total-badge.err { background: #fee2e2; color: #b91c1c; }
+    .btn-quick {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #475569;
+      padding: 4px 9px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-quick:hover {
+      background: #f1f5f9;
+      border-color: #94a3b8;
+      color: #1e293b;
+    }
+    .alloc-keywords-box {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .alloc-keywords-label {
+      font-size: 0.76rem;
+      font-weight: 600;
+      color: var(--fa-text-muted);
+    }
+    .alloc-chips-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .alloc-chip-btn {
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--fa-border);
+      background: #ffffff;
+      color: var(--fa-text-main);
+      cursor: pointer;
+      transition: all 0.15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .alloc-chip-btn:hover {
+      background: #f1f5f9;
+      border-color: #94a3b8;
+    }
+    .alloc-chip-btn.selected {
+      background: #ede9fe;
+      border-color: #c4b5fd;
+      color: #6d28d9;
+      font-weight: 700;
+    }
+    .alloc-raw-toggle-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .alloc-raw-toggle-btn {
+      background: transparent;
+      border: none;
+      color: var(--fa-text-muted);
+      font-size: 0.76rem;
+      cursor: pointer;
+      text-align: left;
+      padding: 2px 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      width: fit-content;
+    }
+    .alloc-raw-toggle-btn:hover {
+      color: var(--fa-accent);
+      text-decoration: underline;
+    }
+    .alloc-raw-box {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      background: #f8fafc;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+    }
+    .alloc-raw-input {
+      width: 100%;
+      font-family: monospace;
+      font-weight: 600;
+      font-size: 0.88rem;
+      padding: 8px 10px;
+      box-sizing: border-box;
+    }
+    .alloc-raw-hint {
+      font-size: 0.72rem;
+      color: var(--fa-text-muted);
+    }
+    .alloc-footer-bar {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 8px;
+      padding-top: 4px;
+    }
+    .alloc-save-btn {
+      padding: 8px 20px;
+      font-size: 0.88rem;
+      font-weight: 700;
+      border-radius: 8px;
+    }
+    .alloc-clear-btn {
+      padding: 8px 14px;
+      font-size: 0.82rem;
+      color: var(--fa-loss);
+      border-color: #fed7aa;
+      border-radius: 8px;
+    }
+    @media (max-width: 640px) {
+      .alloc-item-pill {
+        width: 100%;
+        justify-content: space-between;
+      }
+      .alloc-item-name {
+        max-width: 160px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .alloc-save-btn {
+        flex: 1;
+      }
     }
   </style>
 </head>
@@ -1545,7 +1829,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       </div>
       <div class="fa-modal-body" style="padding:16px;">
         <div style="background:#faf5ff; border:1px solid #e9d5ff; border-radius:10px; padding:12px 16px; margin-bottom:14px; font-size:0.84rem; color:#6b21a8; line-height:1.5;">
-          💡 <strong>안내:</strong> 계좌별 목표 비중(예: <code>SCHD:QQQ:MMA = 5:4:1</code> 또는 <code>SPYM:SGOV = 9:1</code>)을 설정하면, 대시보드에서 비중이 <strong>±3%p 이상 격차</strong> 발생 시 상단 리밸런싱 알림이 자동 생성됩니다.
+          💡 <strong>안내:</strong> 계좌별 목표 비중(예: <code>SCHD:QQQ:MMA = 5:4:1</code> 또는 <code>SPYM:SGOV = 9:1</code>)을 설정하면, 대시보드에서 비중이 <strong>±5%p 이상 격차</strong> 발생 시 상단 리밸런싱 알림이 자동 생성됩니다.
         </div>
 
         <div id="alloc-accounts-list" style="display:flex; flex-direction:column; gap:12px; max-height:520px; overflow-y:auto; padding-right:4px;">
@@ -2319,10 +2603,58 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       document.getElementById("modal-manage-allocations").classList.remove("open");
     }
 
+    let accountAllocationsList = [];
+    let allocEditStates = {};   // { [acctCode]: [ { key: 'KODEX SCHD', pct: 30 }, ... ] }
+    let allocManualStates = {}; // { [acctCode]: boolean }
+
+    function parseFormulaToItems(formula) {
+      if (!formula || !formula.includes("=")) return [];
+      const parts = formula.split("=");
+      const keys = parts[0].split(":").map(k => k.trim()).filter(Boolean);
+      const ratios = parts[1].split(":").map(r => parseFloat(r.trim())).filter(r => !isNaN(r));
+      if (keys.length === 0 || keys.length !== ratios.length) return [];
+      
+      const total = ratios.reduce((a, b) => a + b, 0);
+      return keys.map((k, i) => {
+        let pctVal = ratios[i];
+        if (Math.abs(total - 100) > 1 && total > 0) {
+          pctVal = Math.round((ratios[i] / total) * 100);
+        }
+        return { key: k, pct: pctVal };
+      });
+    }
+
+    function buildFormulaFromItems(items) {
+      if (!items || items.length === 0) return "";
+      const validItems = items.filter(it => it.key && it.key.trim());
+      if (validItems.length === 0) return "";
+      const keys = validItems.map(it => it.key.trim()).join(":");
+      const ratios = validItems.map(it => {
+        const n = parseFloat(it.pct);
+        return isNaN(n) ? 0 : Math.round(n * 10) / 10;
+      }).join(":");
+      return `${keys} = ${ratios}`;
+    }
+
     async function fetchAccountAllocations() {
       try {
         const res = await fetch("/api/accounts/allocations");
         accountAllocationsList = await res.json();
+        
+        // 각 계좌별 슬롯 상태 초기화
+        accountAllocationsList.forEach(acct => {
+          if (acct.allocations && acct.allocations.length > 0) {
+            allocEditStates[acct.account] = acct.allocations.map(a => ({
+              key: a.key,
+              pct: a.pct
+            }));
+          } else if (acct.formula && acct.formula.includes("=")) {
+            allocEditStates[acct.account] = parseFormulaToItems(acct.formula);
+          } else {
+            allocEditStates[acct.account] = [];
+          }
+        });
+
         renderAccountAllocations();
       } catch(e) {
         alert("목표 비중 불러오기 실패");
@@ -2336,119 +2668,329 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         return;
       }
 
-      container.innerHTML = accountAllocationsList.map(acct => {
-        const acctLabel = ACCOUNT_MAP[acct.account] || acct.base_name;
-        
-        let allocBadges = "";
-        if (acct.has_target && acct.allocations.length > 0) {
-          allocBadges = acct.allocations.map(a => `
-            <span class="badge" style="background:#e0e7ff; color:#3730a3; font-weight:700; font-size:0.8rem; padding:3px 8px;">
-              ${escapeHtml(a.key)}: ${a.pct}%
-            </span>
-          `).join(" ");
-        } else {
-          allocBadges = `<span class="badge" style="background:#f1f5f9; color:#94a3b8; font-size:0.75rem;">목표 비중 미설정</span>`;
-        }
+      container.innerHTML = accountAllocationsList.map(acct => renderSingleAccountCard(acct)).join("");
+    }
 
-        // 추천 키워드 칩
-        let chipHtml = "";
-        if (acct.available_keys && acct.available_keys.length > 0) {
-          chipHtml = `
-            <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:6px;">
-              <span style="font-size:0.75rem; color:var(--fa-text-muted);">추천 키워드:</span>
-              ${acct.available_keys.map(k => `
-                <button type="button" class="fa-btn-action" style="font-size:0.72rem; padding:1px 6px; border-radius:4px;" onclick="insertKeyToFormula('${acct.account}', '${escapeHtml(k)}')">+${escapeHtml(k)}</button>
-              `).join("")}
-            </div>
-          `;
-        }
+    function renderSingleAccountCard(acct) {
+      const acctCode = acct.account;
+      const acctLabel = ACCOUNT_MAP[acctCode] || acct.base_name;
+      const items = allocEditStates[acctCode] || [];
+      const isManual = allocManualStates[acctCode] || false;
+      
+      let savedBadges = "";
+      if (acct.has_target && acct.allocations && acct.allocations.length > 0) {
+        savedBadges = acct.allocations.map(a => `
+          <span class="badge" style="background:#e0e7ff; color:#3730a3; font-weight:700; font-size:0.78rem; padding:2px 7px;">
+            ${escapeHtml(a.key)}: ${a.pct}%
+          </span>
+        `).join(" ");
+      } else {
+        savedBadges = `<span class="badge" style="background:#f1f5f9; color:#94a3b8; font-size:0.75rem;">목표 비중 미설정</span>`;
+      }
 
-        return `
-          <div style="background:#ffffff; border:1px solid var(--fa-border); border-radius:12px; padding:14px 16px; box-shadow:0 1px 4px rgba(0,0,0,0.03);">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
-              <div style="display:flex; align-items:center; gap:8px;">
-                <span class="badge badge-account" style="font-size:0.82rem; padding:3px 8px;">${escapeHtml(acctLabel)}</span>
-                <strong style="font-size:0.95rem; color:var(--fa-text-main);">${escapeHtml(acct.base_name)}</strong>
-              </div>
-              <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                ${allocBadges}
-              </div>
-            </div>
+      const totalPct = items.reduce((sum, it) => sum + (parseFloat(it.pct) || 0), 0);
+      const roundedTotal = Math.round(totalPct * 10) / 10;
 
-            <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
-              <div style="flex:1; position:relative;">
-                <input type="text" id="alloc-formula-${acct.account}" class="fa-input" 
-                       placeholder="예: SCHD:QQQ:MMA = 5:4:1 또는 SPYM:SGOV = 9:1" 
-                       value="${escapeHtml(acct.formula)}" 
-                       style="font-family:monospace; font-weight:600; font-size:0.9rem;"
-                       oninput="previewFormulaCalc('${acct.account}')">
-              </div>
-              <button type="button" class="fa-btn-primary" style="padding:6px 14px; font-size:0.85rem; white-space:nowrap;" onclick="saveAccountAllocation('${acct.account}')">💾 저장</button>
-              ${acct.has_target ? `<button type="button" class="fa-btn-action" style="color:var(--fa-loss); border-color:#fed7aa; padding:6px 10px; font-size:0.8rem; white-space:nowrap;" onclick="clearAccountAllocation('${acct.account}')">해제</button>` : ''}
-            </div>
-            ${chipHtml}
-            <div id="alloc-preview-${acct.account}" style="margin-top:6px; font-size:0.78rem; color:var(--fa-text-muted);"></div>
+      let totalBadgeClass = "ok";
+      let totalBadgeText = `✅ 합계: ${roundedTotal}% (완벽)`;
+      if (items.length === 0) {
+        totalBadgeClass = "warn";
+        totalBadgeText = "비중을 설정할 종목을 추가하세요";
+      } else if (roundedTotal < 100) {
+        totalBadgeClass = "warn";
+        const diff = Math.round((100 - roundedTotal) * 10) / 10;
+        totalBadgeText = `⚠️ 합계: ${roundedTotal}% (${diff}% 부족)`;
+      } else if (roundedTotal > 100) {
+        totalBadgeClass = "err";
+        const diff = Math.round((roundedTotal - 100) * 10) / 10;
+        totalBadgeText = `❌ 합계: ${roundedTotal}% (${diff}% 초과)`;
+      }
+
+      let slotsHtml = "";
+      if (items.length === 0) {
+        slotsHtml = `
+          <div class="alloc-empty-notice">
+            📌 아래 <strong>추천 ETF</strong> 버튼을 누르면 종목이 추가되고 비중을 바로 조절할 수 있습니다.
           </div>
         `;
-      }).join("");
-    }
-
-    function insertKeyToFormula(acctCode, key) {
-      const input = document.getElementById(`alloc-formula-${acctCode}`);
-      if (!input) return;
-      let val = input.value.trim();
-      if (!val) {
-        input.value = `${key} = 1`;
-      } else if (val.includes("=")) {
-        const parts = val.split("=");
-        const keys = parts[0].trim().split(":").map(k => k.trim()).filter(Boolean);
-        const ratios = parts[1].trim().split(":").map(r => r.trim()).filter(Boolean);
-        if (!keys.includes(key)) {
-          keys.push(key);
-          ratios.push("1");
-          input.value = `${keys.join(":")} = ${ratios.join(":")}`;
-        }
       } else {
-        input.value = `${val}:${key} = 1:1`;
+        slotsHtml = items.map((it, idx) => `
+          <div class="alloc-item-pill">
+            <span class="alloc-item-name" title="${escapeHtml(it.key)}">${escapeHtml(it.key)}</span>
+            <div class="alloc-item-stepper">
+              <button type="button" class="stepper-btn" onclick="stepAllocPct('${acctCode}', ${idx}, -5)" title="-5%">−</button>
+              <input type="number" inputmode="numeric" class="stepper-input" value="${it.pct}" min="0" max="100" step="1"
+                     oninput="handleAllocInput('${acctCode}', ${idx}, this.value)"
+                     onchange="handleAllocChange('${acctCode}', ${idx}, this.value)">
+              <span class="stepper-unit">%</span>
+              <button type="button" class="stepper-btn" onclick="stepAllocPct('${acctCode}', ${idx}, +5)" title="+5%">+</button>
+            </div>
+            <button type="button" class="alloc-del-btn" onclick="removeAllocItem('${acctCode}', ${idx})" title="삭제">✕</button>
+          </div>
+        `).join("");
       }
-      previewFormulaCalc(acctCode);
+
+      const selectedKeySet = new Set(items.map(it => it.key));
+      let chipsHtml = "";
+      if (acct.available_keys && acct.available_keys.length > 0) {
+        chipsHtml = acct.available_keys.map(k => {
+          const isSelected = selectedKeySet.has(k);
+          return `
+            <button type="button" 
+                    class="alloc-chip-btn ${isSelected ? 'selected' : ''}" 
+                    onclick="toggleAllocKey('${acctCode}', '${escapeHtml(k)}')">
+              ${isSelected ? '✓ ' : '+ '}${escapeHtml(k)}
+            </button>
+          `;
+        }).join("");
+      }
+
+      const currentFormula = buildFormulaFromItems(items);
+
+      return `
+        <div class="alloc-card" id="alloc-card-${acctCode}">
+          <div class="alloc-header">
+            <div class="alloc-title-group">
+              <span class="badge badge-account">${escapeHtml(acctLabel)}</span>
+              <strong style="font-size:0.95rem; color:var(--fa-text-main);">${escapeHtml(acct.base_name)}</strong>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+              ${savedBadges}
+            </div>
+          </div>
+
+          <div class="alloc-editor-box">
+            <div class="alloc-items-container" id="alloc-slots-${acctCode}">
+              ${slotsHtml}
+            </div>
+
+            <div class="alloc-summary-bar">
+              <div class="alloc-total-badge ${totalBadgeClass}" id="alloc-total-${acctCode}">
+                ${totalBadgeText}
+              </div>
+              <div class="alloc-quick-actions" style="display:flex; gap:6px; align-items:center;">
+                ${items.length > 0 ? `
+                  <button type="button" class="btn-quick" onclick="equalizeAllocations('${acctCode}')" title="선택된 모든 종목의 비중을 100% 기준으로 균등하게 배분합니다">⚖️ 균등 분할</button>
+                  ${roundedTotal < 100 ? `<button type="button" class="btn-quick" onclick="autoFillRemaining('${acctCode}')" title="부족한 비중을 첫 번째 종목에 자동 추가합니다">🎯 100% 맞춤</button>` : ''}
+                ` : ''}
+              </div>
+            </div>
+          </div>
+
+          <div class="alloc-keywords-box">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span class="alloc-keywords-label">💡 추천 ETF (클릭하여 추가 / 제외):</span>
+              <button type="button" class="btn-quick" style="font-size:0.72rem; padding:1px 6px;" onclick="promptCustomAllocKey('${acctCode}')">직접 ETF 추가 +</button>
+            </div>
+            <div class="alloc-chips-wrap">
+              ${chipsHtml || `<span style="font-size:0.75rem; color:var(--fa-text-muted);">등록된 추천 종목이 없습니다.</span>`}
+            </div>
+          </div>
+
+          <div class="alloc-raw-toggle-wrap">
+            <button type="button" class="alloc-raw-toggle-btn" onclick="toggleManualMode('${acctCode}')">
+              <span>${isManual ? '▾' : '▸'} 수식 텍스트로 확인 / 직접 입력</span>
+            </button>
+            <div class="alloc-raw-box" id="alloc-raw-box-${acctCode}" style="${isManual ? '' : 'display:none;'}">
+              <input type="text" id="alloc-formula-${acctCode}" class="fa-input alloc-raw-input"
+                     value="${escapeHtml(currentFormula)}" 
+                     placeholder="예: KODEX SCHD:KODEX SCHD-A:KODEX QQQ:KODEX MMA = 30:20:40:10"
+                     oninput="handleFormulaInput('${acctCode}', this.value)">
+              <div class="alloc-raw-hint">자산명1:자산명2 = 비율1:비율2 형태로 직접 수정하시면 위의 비중 슬롯에 즉시 반영됩니다.</div>
+            </div>
+          </div>
+
+          <div class="alloc-footer-bar">
+            ${acct.has_target ? `<button type="button" class="fa-btn-action alloc-clear-btn" onclick="clearAccountAllocation('${acctCode}')">설정 해제</button>` : ''}
+            <button type="button" class="fa-btn-primary alloc-save-btn" onclick="saveAccountAllocation('${acctCode}')">
+              💾 ${escapeHtml(acct.base_name)} 목표 비중 저장
+            </button>
+          </div>
+        </div>
+      `;
     }
 
-    function previewFormulaCalc(acctCode) {
-      const input = document.getElementById(`alloc-formula-${acctCode}`);
-      const previewEl = document.getElementById(`alloc-preview-${acctCode}`);
-      if (!input || !previewEl) return;
-      const val = input.value.trim();
-      if (!val) {
-        previewEl.innerHTML = "";
-        return;
+    function toggleAllocKey(acctCode, key) {
+      if (!allocEditStates[acctCode]) allocEditStates[acctCode] = [];
+      const items = allocEditStates[acctCode];
+      const existingIdx = items.findIndex(it => it.key === key);
+
+      if (existingIdx >= 0) {
+        items.splice(existingIdx, 1);
+      } else {
+        const currentTotal = items.reduce((sum, it) => sum + (parseFloat(it.pct) || 0), 0);
+        let defaultPct = 20;
+        if (currentTotal < 100) {
+          defaultPct = Math.max(5, Math.round((100 - currentTotal) * 10) / 10);
+        }
+        items.push({ key: key, pct: defaultPct });
       }
 
-      const match = val.match(/^(.*?)=(.*?)$/);
-      if (!match) {
-        previewEl.innerHTML = `<span style="color:var(--fa-loss);">형식: [자산1:자산2 = 비율1:비율2] 형태로 입력해주세요.</span>`;
+      refreshSingleCard(acctCode);
+    }
+
+    function promptCustomAllocKey(acctCode) {
+      const customKey = prompt("추가할 종목명(약칭) 또는 자산군을 입력하세요:\n(예: ACE 미국배당, TLT, 금)");
+      if (!customKey || !customKey.trim()) return;
+      const cleanKey = customKey.trim();
+      
+      if (!allocEditStates[acctCode]) allocEditStates[acctCode] = [];
+      const items = allocEditStates[acctCode];
+      if (items.some(it => it.key === cleanKey)) {
+        alert("이미 추가된 종목입니다.");
         return;
       }
+      
+      const currentTotal = items.reduce((sum, it) => sum + (parseFloat(it.pct) || 0), 0);
+      const defaultPct = currentTotal < 100 ? Math.max(5, Math.round((100 - currentTotal) * 10) / 10) : 10;
+      items.push({ key: cleanKey, pct: defaultPct });
+      refreshSingleCard(acctCode);
+    }
 
-      const keys = match[1].split(":").map(k => k.trim()).filter(Boolean);
-      const ratios = match[2].split(":").map(r => parseFloat(r.trim())).filter(r => !isNaN(r));
+    function stepAllocPct(acctCode, idx, delta) {
+      const items = allocEditStates[acctCode];
+      if (!items || !items[idx]) return;
+      let val = (parseFloat(items[idx].pct) || 0) + delta;
+      val = Math.max(0, Math.min(100, Math.round(val * 10) / 10));
+      items[idx].pct = val;
+      refreshSingleCard(acctCode);
+    }
 
-      if (keys.length !== ratios.length || keys.length === 0) {
-        previewEl.innerHTML = `<span style="color:var(--fa-loss);">자산군 개수(${keys.length}개)와 비율 개수(${ratios.length}개)가 일치해야 합니다.</span>`;
-        return;
+    function handleAllocInput(acctCode, idx, rawVal) {
+      const items = allocEditStates[acctCode];
+      if (!items || !items[idx]) return;
+      const num = parseFloat(rawVal);
+      items[idx].pct = isNaN(num) ? 0 : Math.max(0, Math.min(100, num));
+      updateSummaryAndFormulaOnly(acctCode);
+    }
+
+    function handleAllocChange(acctCode, idx, rawVal) {
+      const items = allocEditStates[acctCode];
+      if (!items || !items[idx]) return;
+      const num = parseFloat(rawVal);
+      items[idx].pct = isNaN(num) ? 0 : Math.max(0, Math.min(100, num));
+      refreshSingleCard(acctCode);
+    }
+
+    function removeAllocItem(acctCode, idx) {
+      const items = allocEditStates[acctCode];
+      if (!items || !items[idx]) return;
+      items.splice(idx, 1);
+      refreshSingleCard(acctCode);
+    }
+
+    function equalizeAllocations(acctCode) {
+      const items = allocEditStates[acctCode];
+      if (!items || items.length === 0) return;
+      const n = items.length;
+      const base = Math.floor(100 / n);
+      const remainder = 100 - (base * n);
+      
+      items.forEach((it, i) => {
+        it.pct = base + (i < remainder ? 1 : 0);
+      });
+      refreshSingleCard(acctCode);
+    }
+
+    function autoFillRemaining(acctCode) {
+      const items = allocEditStates[acctCode];
+      if (!items || items.length === 0) return;
+      const currentTotal = items.reduce((sum, it) => sum + (parseFloat(it.pct) || 0), 0);
+      if (currentTotal < 100) {
+        const diff = Math.round((100 - currentTotal) * 10) / 10;
+        items[0].pct = Math.round((items[0].pct + diff) * 10) / 10;
+        refreshSingleCard(acctCode);
+      }
+    }
+
+    function toggleManualMode(acctCode) {
+      allocManualStates[acctCode] = !allocManualStates[acctCode];
+      const box = document.getElementById(`alloc-raw-box-${acctCode}`);
+      if (box) {
+        box.style.display = allocManualStates[acctCode] ? "flex" : "none";
+      }
+    }
+
+    function handleFormulaInput(acctCode, formulaText) {
+      const parsed = parseFormulaToItems(formulaText);
+      if (parsed.length > 0) {
+        allocEditStates[acctCode] = parsed;
+        refreshSingleCardSlotsOnly(acctCode);
+      }
+    }
+
+    function refreshSingleCard(acctCode) {
+      const acct = accountAllocationsList.find(a => a.account === acctCode);
+      if (!acct) return;
+      const cardEl = document.getElementById(`alloc-card-${acctCode}`);
+      if (cardEl) {
+        cardEl.outerHTML = renderSingleAccountCard(acct);
+      }
+    }
+
+    function updateSummaryAndFormulaOnly(acctCode) {
+      const items = allocEditStates[acctCode] || [];
+      const totalPct = items.reduce((sum, it) => sum + (parseFloat(it.pct) || 0), 0);
+      const roundedTotal = Math.round(totalPct * 10) / 10;
+
+      const totalEl = document.getElementById(`alloc-total-${acctCode}`);
+      if (totalEl) {
+        totalEl.className = "alloc-total-badge " + (roundedTotal === 100 ? "ok" : (roundedTotal < 100 ? "warn" : "err"));
+        if (items.length === 0) {
+          totalEl.innerText = "비중을 설정할 종목을 추가하세요";
+        } else if (roundedTotal === 100) {
+          totalEl.innerText = `✅ 합계: 100% (완벽)`;
+        } else if (roundedTotal < 100) {
+          totalEl.innerText = `⚠️ 합계: ${roundedTotal}% (${Math.round((100 - roundedTotal) * 10) / 10}% 부족)`;
+        } else {
+          totalEl.innerText = `❌ 합계: ${roundedTotal}% (${Math.round((roundedTotal - 100) * 10) / 10}% 초과)`;
+        }
       }
 
-      const total = ratios.reduce((a, b) => a + b, 0);
-      if (total <= 0) return;
+      const formulaInput = document.getElementById(`alloc-formula-${acctCode}`);
+      if (formulaInput) {
+        formulaInput.value = buildFormulaFromItems(items);
+      }
+    }
 
-      const pcts = keys.map((k, i) => `${k} <strong>${((ratios[i] / total) * 100).toFixed(1)}%</strong>`).join(" · ");
-      previewEl.innerHTML = `✨ 계산된 비중: <span style="color:var(--fa-accent);">${pcts}</span>`;
+    function refreshSingleCardSlotsOnly(acctCode) {
+      const acct = accountAllocationsList.find(a => a.account === acctCode);
+      if (!acct) return;
+      const items = allocEditStates[acctCode] || [];
+      const slotsContainer = document.getElementById(`alloc-slots-${acctCode}`);
+      if (slotsContainer) {
+        if (items.length === 0) {
+          slotsContainer.innerHTML = `<div class="alloc-empty-notice">📌 아래 추천 ETF 버튼을 누르면 종목이 추가됩니다.</div>`;
+        } else {
+          slotsContainer.innerHTML = items.map((it, idx) => `
+            <div class="alloc-item-pill">
+              <span class="alloc-item-name" title="${escapeHtml(it.key)}">${escapeHtml(it.key)}</span>
+              <div class="alloc-item-stepper">
+                <button type="button" class="stepper-btn" onclick="stepAllocPct('${acctCode}', ${idx}, -5)" title="-5%">−</button>
+                <input type="number" inputmode="numeric" class="stepper-input" value="${it.pct}" min="0" max="100" step="1"
+                       oninput="handleAllocInput('${acctCode}', ${idx}, this.value)"
+                       onchange="handleAllocChange('${acctCode}', ${idx}, this.value)">
+                <span class="stepper-unit">%</span>
+                <button type="button" class="stepper-btn" onclick="stepAllocPct('${acctCode}', ${idx}, +5)" title="+5%">+</button>
+              </div>
+              <button type="button" class="alloc-del-btn" onclick="removeAllocItem('${acctCode}', ${idx})" title="삭제">✕</button>
+            </div>
+          `).join("");
+        }
+      }
+      updateSummaryAndFormulaOnly(acctCode);
     }
 
     async function saveAccountAllocation(acctCode) {
-      const input = document.getElementById(`alloc-formula-${acctCode}`);
-      if (!input) return;
-      const formula = input.value.trim();
+      const items = allocEditStates[acctCode] || [];
+      let formula = "";
+      
+      if (items.length > 0) {
+        formula = buildFormulaFromItems(items);
+      } else {
+        const input = document.getElementById(`alloc-formula-${acctCode}`);
+        if (input) formula = input.value.trim();
+      }
 
       try {
         const res = await fetch("/api/accounts/allocations", {
