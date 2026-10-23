@@ -2736,15 +2736,10 @@ def _build_account_detail_section(
                 f"  <div class='fa-stock-card-head'>"
                 f"    <div class='fa-stock-card-title'>{html.escape(sym)}</div>"
                 f"    <div class='fa-stock-card-badges'>"
-                f"      <span class='fa-badge' style='background:#e0e7ff; color:#3730a3; font-weight:700;'>{weight_pct:.1f}%</span>"
                 f"      <span class='fa-badge {buy_p_bdg}'>{buy_r_str}%</span>"
                 f"    </div>"
                 f"  </div>"
                 f"  <div class='fa-stock-card-body'>"
-                f"    <div class='fa-stock-field'>"
-                f"      <span class='fa-stock-lbl'>보유 비중</span>"
-                f"      <span class='fa-stock-val fa-font-bold' style='color: var(--fa-accent);'>{weight_pct:.1f}%</span>"
-                f"    </div>"
                 f"    <div class='fa-stock-field'>"
                 f"      <span class='fa-stock-lbl'>평가금</span>"
                 f"      <span class='fa-stock-val fa-font-bold'>{e_str}</span>"
@@ -2851,6 +2846,23 @@ def _build_account_detail_section(
                 f"</div>"
             )
 
+        # 자산 비중에 표기할 목표 비중 바 생성
+        target_alloc = update_fa.parse_target_allocation(raw_account_name) if raw_account_name else None
+        target_alloc_bar_html = ""
+        if target_alloc:
+            pills = []
+            for t_key, t_ratio in target_alloc.items():
+                t_pct = t_ratio * 100.0
+                pills.append(
+                    f"<span class='fa-target-pill'><span class='fa-target-pill-sym'>{html.escape(t_key)}</span> <strong class='fa-target-pill-pct'>{t_pct:.1f}%</strong></span>"
+                )
+            target_alloc_bar_html = (
+                f"<div class='fa-target-alloc-bar'>"
+                f"  <div class='fa-target-bar-head'><span class='fa-target-bar-lbl'>🎯 목표 비중</span></div>"
+                f"  <div class='fa-target-bar-pills'>{''.join(pills)}</div>"
+                f"</div>"
+            )
+
         # 탭 패널 완성
         pane_html = (
             f"<div id='{tab_id}' class='fa-tab-pane{active_cls}'>"
@@ -2858,7 +2870,10 @@ def _build_account_detail_section(
             f"<div class='fa-account-split-grid'>"
             f"  <div class='fa-account-chart-col'>"
             f"    <div class='fa-subcard-title'>자산 비중</div>"
-            f"    <div class='fa-account-chart-card'>{chart_html}</div>"
+            f"    <div class='fa-account-chart-card'>"
+            f"      {chart_html}"
+            f"      {target_alloc_bar_html}"
+            f"    </div>"
             f"  </div>"
             f"  <div class='fa-account-table-col'>"
             f"    <div class='fa-subcard-title'>보유 종목 현황</div>"
@@ -4034,6 +4049,50 @@ html.dark .fa-dashboard,
 .fa-account-chart-card .plotly-graph-div {
   width: 100% !important;
   margin: 0 auto;
+}
+.fa-target-alloc-bar {
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: var(--fa-card-bg);
+  border: 1px solid var(--fa-border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.fa-target-bar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.fa-target-bar-lbl {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--fa-text-muted);
+}
+.fa-target-bar-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.fa-target-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--fa-accent-bg);
+  border: 1px solid rgba(79, 70, 229, 0.2);
+  border-radius: 9999px;
+  padding: 2px 7px;
+  font-size: 0.73rem;
+  color: var(--fa-text-main);
+}
+.fa-target-pill-sym {
+  font-weight: 700;
+  color: var(--fa-accent);
+}
+.fa-target-pill-pct {
+  font-weight: 800;
+  color: var(--fa-text-main);
 }
 .fa-account-table-col {
   background: transparent;

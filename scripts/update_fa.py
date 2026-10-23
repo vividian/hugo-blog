@@ -1806,9 +1806,7 @@ def plot_account_detail(account: str,
 
     # 종목별 데이터 테이블 가공
     table_df = account_holdings.copy()
-    total_eval = table_df["평가금"].sum()
-    table_df["비중"] = table_df["평가금"].apply(lambda x: f"{(x / total_eval * 100):.1f}%" if total_eval > 0 else "0.0%")
-    main_data = table_df[["종목", "비중", "매수금", "평가금", "수익금", "수익률"]].copy()
+    main_data = table_df[["종목", "매수금", "평가금", "수익금", "수익률"]].copy()
     main_data["매수금"] = main_data["매수금"].apply(lambda x: f"{x:,.0f}")
     main_data["평가금"] = main_data["평가금"].apply(lambda x: f"{x:,.0f}")
     main_data["수익금"] = main_data["수익금"].apply(lambda x: f"{x:,.0f}")
@@ -1856,6 +1854,24 @@ def plot_account_detail(account: str,
     target_pie_top_y = fig_height - pad_top - extra_pad - pie_pad_top
     pie_center_y = target_pie_top_y - pie_radius
 
+    # 자산 비중에 목표 비중 표기
+    target_alloc = parse_target_allocation(raw_account_name)
+    target_label = "자산 비중"
+    if target_alloc:
+        target_sub = " · ".join([f"{k} {r*100:.1f}%" for k, r in target_alloc.items()])
+        target_label = f"자산 비중 (목표: {target_sub})"
+
+    ax_pie.text(
+        0,
+        target_pie_top_y + 0.12,
+        target_label,
+        ha="center",
+        va="bottom",
+        fontsize=subtitle_fs * 0.88,
+        fontweight="bold",
+        color="#2c3e50",
+    )
+
     wedges, _, autotexts = ax_pie.pie(
         account_holdings["평가금"],
         labels=None,
@@ -1899,7 +1915,7 @@ def plot_account_detail(account: str,
     # Top-Down 상대 좌표 계산
     curr_y = fig_height - pad_top - extra_pad
 
-    header_colors = ["#2d3436"] * 6
+    header_colors = ["#2d3436", "#2d3436", "#2d3436", "#2d3436", "#2d3436"]
     neutral_header = "#2d3436"
 
     # 1) 전체 요약 서브타이틀
@@ -2033,9 +2049,6 @@ def plot_account_detail(account: str,
                             cell.get_text().set_color("#2c3e50")
                     except ValueError:
                         cell.get_text().set_color("#2c3e50")
-                elif col_name == "비중":
-                    cell.get_text().set_color("#2c3e50")
-                    cell.set_text_props(weight="bold")
                 else:
                     cell.get_text().set_color("#2c3e50")
             cell.set_facecolor(shade)
