@@ -1131,215 +1131,375 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       border-bottom: 1px solid #f1f5f9;
     }
     .fa-modal .fa-table tr:hover td {
-    /* Account Allocations UI */
+      background: #f8fafc !important;
+    }
+
+    /* ==========================================================================
+       Account Target Allocations Modern Tag UI
+       ========================================================================== */
     .alloc-card {
       background: #ffffff;
-      border: 1px solid var(--fa-border);
-      border-radius: 14px;
-      padding: 16px 18px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      padding: 18px 20px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03), 0 1px 3px rgba(0, 0, 0, 0.02);
       display: flex;
       flex-direction: column;
-      gap: 12px;
-      transition: border-color 0.2s;
+      gap: 14px;
+      transition: all 0.2s ease;
     }
     .alloc-card:hover {
       border-color: #cbd5e1;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.05);
     }
     .alloc-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
       flex-wrap: wrap;
-      gap: 8px;
+      gap: 10px;
+      padding-bottom: 12px;
       border-bottom: 1px solid #f1f5f9;
-      padding-bottom: 10px;
     }
     .alloc-title-group {
       display: flex;
       align-items: center;
       gap: 8px;
     }
-    .alloc-editor-box {
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 10px;
-      padding: 12px 14px;
+    .alloc-account-name {
+      font-size: 1rem;
+      font-weight: 800;
+      color: #0f172a;
+    }
+    .alloc-saved-badges {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    /* 상단: 목표 비중 설정 태그 박스 */
+    .alloc-target-box {
+      background: linear-gradient(180deg, #f8faff 0%, #ffffff 100%);
+      border: 1.5px solid #e0e7ff;
+      border-radius: 14px;
+      padding: 14px 16px;
       display: flex;
       flex-direction: column;
       gap: 10px;
+      box-shadow: inset 0 1px 3px rgba(99, 102, 241, 0.03);
     }
-    .alloc-items-container {
+    .alloc-section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .alloc-section-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #4338ca;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .alloc-count-hint {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #6366f1;
+      background: #eef2ff;
+      padding: 2px 8px;
+      border-radius: 9999px;
+    }
+
+    /* 설정된 비중 태그 목록 */
+    .alloc-tag-list {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
       align-items: center;
+      min-height: 48px;
+      padding: 4px 0;
     }
-    .alloc-empty-notice {
-      color: var(--fa-text-muted);
-      font-size: 0.82rem;
-      padding: 8px 4px;
-    }
-    .alloc-item-pill {
-      display: inline-flex;
-      align-items: center;
-      background: #ffffff;
-      border: 1px solid #cbd5e1;
-      border-radius: 8px;
-      padding: 4px 8px;
-      gap: 8px;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
-    }
-    .alloc-item-name {
-      font-weight: 700;
-      font-size: 0.85rem;
-      color: #1e293b;
-      white-space: nowrap;
-    }
-    .alloc-item-stepper {
-      display: inline-flex;
-      align-items: center;
+    .alloc-empty-tag-guide {
+      width: 100%;
+      text-align: center;
+      color: #64748b;
+      font-size: 0.83rem;
+      padding: 14px 8px;
       background: #f1f5f9;
-      border-radius: 6px;
-      padding: 2px;
-      gap: 2px;
+      border: 1.5px dashed #cbd5e1;
+      border-radius: 10px;
     }
-    .stepper-btn {
-      width: 28px;
-      height: 28px;
-      border: none;
-      background: #ffffff;
-      border-radius: 4px;
-      font-size: 1rem;
-      font-weight: 700;
-      color: #334155;
-      cursor: pointer;
-      display: flex;
+
+    /* 알약형 비중 설정 태그 */
+    .alloc-tag-pill {
+      display: inline-flex;
       align-items: center;
-      justify-content: center;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.06);
-      transition: background 0.1s;
+      gap: 6px;
+      background: #ffffff;
+      border: 1.5px solid #6366f1;
+      border-radius: 9999px;
+      padding: 3px 6px 3px 12px;
+      box-shadow: 0 2px 6px rgba(99, 102, 241, 0.12);
+      transition: all 0.15s ease;
       user-select: none;
     }
-    .stepper-btn:hover { background: #e2e8f0; }
-    .stepper-btn:active { background: #cbd5e1; }
-    .stepper-input {
-      width: 52px;
-      height: 28px;
-      border: 1px solid transparent;
-      background: transparent;
-      text-align: center;
+    .alloc-tag-pill:hover {
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+      border-color: #4f46e5;
+    }
+    .alloc-tag-name {
+      font-size: 0.88rem;
       font-weight: 800;
-      font-size: 0.95rem;
-      color: var(--fa-accent);
+      color: #1e1b4b;
+      letter-spacing: -0.2px;
+      white-space: nowrap;
+    }
+    .alloc-tag-val-wrap {
+      display: inline-flex;
+      align-items: center;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 1px 4px;
+    }
+    .alloc-tag-input {
+      width: 44px;
+      height: 22px;
+      border: none;
+      background: transparent;
+      text-align: right;
+      font-weight: 800;
+      font-size: 0.92rem;
+      color: #4338ca;
       padding: 0;
       font-variant-numeric: tabular-nums;
     }
-    .stepper-input:focus {
-      background: #ffffff;
-      border-color: var(--fa-accent);
-      border-radius: 4px;
+    .alloc-tag-input:focus {
       outline: none;
     }
-    .stepper-unit {
-      font-size: 0.78rem;
-      font-weight: 600;
-      color: var(--fa-text-muted);
-      margin-right: 4px;
+    .alloc-tag-input::-webkit-outer-spin-button,
+    .alloc-tag-input::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
     }
-    .alloc-del-btn {
-      background: transparent;
-      border: none;
-      color: #94a3b8;
-      font-size: 0.85rem;
-      cursor: pointer;
-      padding: 2px 4px;
-      border-radius: 4px;
+    .alloc-tag-unit {
+      font-size: 0.74rem;
+      font-weight: 700;
+      color: #64748b;
+      margin-left: 2px;
+    }
+
+    /* 증감 화살표 (0.5% 스텝) */
+    .alloc-tag-arrows {
+      display: inline-flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 1px;
+    }
+    .tag-arrow-btn {
+      width: 18px;
+      height: 11px;
+      background: #eef2ff;
+      border: 1px solid #c7d2fe;
+      border-radius: 3px;
+      color: #4338ca;
+      font-size: 7px;
+      line-height: 1;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: all 0.15s;
+      cursor: pointer;
+      padding: 0;
+      transition: all 0.1s ease;
+      user-select: none;
     }
-    .alloc-del-btn:hover {
-      color: #ef4444;
+    .tag-arrow-btn:hover {
+      background: #6366f1;
+      border-color: #6366f1;
+      color: #ffffff;
+    }
+    .tag-arrow-btn:active {
+      background: #4338ca;
+      transform: scale(0.92);
+    }
+
+    /* 태그 삭제 닫기 버튼 */
+    .alloc-tag-close {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: none;
+      background: #f1f5f9;
+      color: #94a3b8;
+      font-size: 10px;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      margin-left: 2px;
+    }
+    .alloc-tag-close:hover {
       background: #fee2e2;
+      color: #ef4444;
+      transform: scale(1.1);
     }
-    .alloc-summary-bar {
+
+    /* 비중 합계 진행률 바 */
+    .alloc-progress-wrap {
+      width: 100%;
+      height: 7px;
+      background: #e2e8f0;
+      border-radius: 9999px;
+      overflow: hidden;
+      margin-top: 4px;
+    }
+    .alloc-progress-bar {
+      height: 100%;
+      border-radius: 9999px;
+      transition: width 0.3s ease, background-color 0.3s ease;
+    }
+    .alloc-progress-bar.ok {
+      background: linear-gradient(90deg, #10b981, #059669);
+    }
+    .alloc-progress-bar.warn {
+      background: linear-gradient(90deg, #6366f1, #4f46e5);
+    }
+    .alloc-progress-bar.err {
+      background: linear-gradient(90deg, #ef4444, #dc2626);
+    }
+
+    /* 합계 상태 바 */
+    .alloc-status-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
       flex-wrap: wrap;
       gap: 8px;
-      padding-top: 6px;
-      border-top: 1px dashed #e2e8f0;
+      padding-top: 2px;
     }
     .alloc-total-badge {
       font-size: 0.82rem;
-      font-weight: 700;
+      font-weight: 800;
       padding: 4px 10px;
-      border-radius: 6px;
+      border-radius: 8px;
       display: inline-flex;
       align-items: center;
-      gap: 4px;
+      gap: 5px;
     }
-    .alloc-total-badge.ok { background: #dcfce7; color: #15803d; }
-    .alloc-total-badge.warn { background: #fef3c7; color: #b45309; }
-    .alloc-total-badge.err { background: #fee2e2; color: #b91c1c; }
+    .alloc-total-badge.ok { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+    .alloc-total-badge.warn { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+    .alloc-total-badge.err { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+    
+    .alloc-quick-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
     .btn-quick {
       background: #ffffff;
       border: 1px solid #cbd5e1;
-      border-radius: 6px;
-      font-size: 0.75rem;
-      font-weight: 600;
-      color: #475569;
-      padding: 4px 9px;
+      border-radius: 8px;
+      font-size: 0.76rem;
+      font-weight: 700;
+      color: #334155;
+      padding: 4px 10px;
       cursor: pointer;
-      transition: all 0.15s;
+      transition: all 0.15s ease;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
     }
     .btn-quick:hover {
-      background: #f1f5f9;
+      background: #f8fafc;
       border-color: #94a3b8;
-      color: #1e293b;
+      color: #0f172a;
     }
-    .alloc-keywords-box {
+    .btn-quick-outline {
+      background: transparent;
+      border: 1px dashed #94a3b8;
+      border-radius: 6px;
+      font-size: 0.73rem;
+      font-weight: 700;
+      color: #64748b;
+      padding: 3px 8px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .btn-quick-outline:hover {
+      background: #f1f5f9;
+      color: #334155;
+      border-color: #64748b;
+    }
+
+    /* 하단: 계좌 보유 종목 태그 영역 */
+    .alloc-source-box {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 12px 14px;
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 8px;
     }
-    .alloc-keywords-label {
-      font-size: 0.76rem;
-      font-weight: 600;
-      color: var(--fa-text-muted);
+    .alloc-source-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
-    .alloc-chips-wrap {
+    .alloc-source-title {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #334155;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .alloc-source-sub {
+      font-size: 0.72rem;
+      font-weight: 500;
+      color: #64748b;
+    }
+    .alloc-source-tags {
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
+      align-items: center;
     }
-    .alloc-chip-btn {
-      font-size: 0.75rem;
-      font-weight: 600;
-      padding: 4px 10px;
-      border-radius: 6px;
-      border: 1px solid var(--fa-border);
+    .alloc-source-tag {
       background: #ffffff;
-      color: var(--fa-text-main);
+      border: 1.5px dashed #cbd5e1;
+      border-radius: 9999px;
+      padding: 4px 12px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #475569;
       cursor: pointer;
-      transition: all 0.15s;
+      transition: all 0.18s ease;
       display: inline-flex;
       align-items: center;
       gap: 4px;
+      user-select: none;
     }
-    .alloc-chip-btn:hover {
+    .alloc-source-tag:hover {
+      background: #eef2ff;
+      border: 1.5px solid #6366f1;
+      color: #4338ca;
+      transform: translateY(-2px);
+      box-shadow: 0 3px 8px rgba(99, 102, 241, 0.18);
+    }
+    .alloc-source-tag:active {
+      transform: translateY(0);
+    }
+    .alloc-source-tag.disabled {
       background: #f1f5f9;
-      border-color: #94a3b8;
+      border: 1px solid #e2e8f0;
+      color: #94a3b8;
+      cursor: not-allowed;
+      opacity: 0.6;
     }
-    .alloc-chip-btn.selected {
-      background: #ede9fe;
-      border-color: #c4b5fd;
-      color: #6d28d9;
-      font-weight: 700;
-    }
+
+    /* 수식 확인 아코디언 */
     .alloc-raw-toggle-wrap {
       display: flex;
       flex-direction: column;
@@ -1348,8 +1508,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     .alloc-raw-toggle-btn {
       background: transparent;
       border: none;
-      color: var(--fa-text-muted);
+      color: #64748b;
       font-size: 0.76rem;
+      font-weight: 600;
       cursor: pointer;
       text-align: left;
       padding: 2px 0;
@@ -1359,7 +1520,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       width: fit-content;
     }
     .alloc-raw-toggle-btn:hover {
-      color: var(--fa-accent);
+      color: #4338ca;
       text-decoration: underline;
     }
     .alloc-raw-box {
@@ -1381,8 +1542,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }
     .alloc-raw-hint {
       font-size: 0.72rem;
-      color: var(--fa-text-muted);
+      color: #64748b;
     }
+
+    /* 푸터 액션 */
     .alloc-footer-bar {
       display: flex;
       justify-content: flex-end;
@@ -1391,27 +1554,38 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       padding-top: 4px;
     }
     .alloc-save-btn {
-      padding: 8px 20px;
+      padding: 8px 22px;
       font-size: 0.88rem;
-      font-weight: 700;
+      font-weight: 800;
       border-radius: 8px;
+      background: #4f46e5;
+      border-color: #4f46e5;
+      color: #ffffff;
+      box-shadow: 0 2px 6px rgba(79, 70, 229, 0.25);
+    }
+    .alloc-save-btn:hover {
+      background: #4338ca;
     }
     .alloc-clear-btn {
       padding: 8px 14px;
       font-size: 0.82rem;
-      color: var(--fa-loss);
-      border-color: #fed7aa;
+      color: #ef4444;
+      border: 1px solid #fecaca;
+      background: #ffffff;
       border-radius: 8px;
     }
+    .alloc-clear-btn:hover {
+      background: #fee2e2;
+    }
+
     @media (max-width: 640px) {
-      .alloc-item-pill {
-        width: 100%;
-        justify-content: space-between;
+      .alloc-tag-pill {
+        padding: 3px 6px 3px 10px;
       }
-      .alloc-item-name {
-        max-width: 160px;
-        overflow: hidden;
-        text-overflow: ellipsis;
+      .tag-arrow-btn {
+        width: 22px;
+        height: 14px;
+        font-size: 8px;
       }
       .alloc-save-btn {
         flex: 1;
@@ -2678,69 +2852,76 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       let savedBadges = "";
       if (acct.has_target && acct.allocations && acct.allocations.length > 0) {
         savedBadges = acct.allocations.map(a => `
-          <span class="badge" style="background:#e0e7ff; color:#3730a3; font-weight:700; font-size:0.78rem; padding:2px 7px;">
+          <span class="badge" style="background:#e0e7ff; color:#3730a3; font-weight:700; font-size:0.75rem; padding:2px 7px;">
             ${escapeHtml(a.key)}: ${a.pct}%
           </span>
         `).join(" ");
       } else {
-        savedBadges = `<span class="badge" style="background:#f1f5f9; color:#94a3b8; font-size:0.75rem;">목표 비중 미설정</span>`;
+        savedBadges = `<span class="badge" style="background:#f1f5f9; color:#94a3b8; font-size:0.74rem;">목표 비중 미설정</span>`;
       }
 
       const totalPct = items.reduce((sum, it) => sum + (parseFloat(it.pct) || 0), 0);
       const roundedTotal = Math.round(totalPct * 10) / 10;
 
       let totalBadgeClass = "ok";
-      let totalBadgeText = `✅ 합계: ${roundedTotal}% (완벽)`;
+      let totalBadgeText = `✅ 합계: 100.0% (완벽 일치 ✨)`;
       if (items.length === 0) {
         totalBadgeClass = "warn";
-        totalBadgeText = "비중을 설정할 종목을 추가하세요";
+        totalBadgeText = "비중을 설정할 종목을 아래에서 클릭하세요";
       } else if (roundedTotal < 100) {
         totalBadgeClass = "warn";
-        const diff = Math.round((100 - roundedTotal) * 10) / 10;
-        totalBadgeText = `⚠️ 합계: ${roundedTotal}% (${diff}% 부족)`;
+        const diff = (Math.round((100 - roundedTotal) * 10) / 10).toFixed(1);
+        totalBadgeText = `⚠️ 합계: ${roundedTotal.toFixed(1)}% (${diff}% 부족)`;
       } else if (roundedTotal > 100) {
         totalBadgeClass = "err";
-        const diff = Math.round((roundedTotal - 100) * 10) / 10;
-        totalBadgeText = `❌ 합계: ${roundedTotal}% (${diff}% 초과)`;
+        const diff = (Math.round((roundedTotal - 100) * 10) / 10).toFixed(1);
+        totalBadgeText = `❌ 합계: ${roundedTotal.toFixed(1)}% (${diff}% 초과)`;
       }
 
-      let slotsHtml = "";
+      // 상단: 설정된 비중 태그 목록
+      let tagsHtml = "";
       if (items.length === 0) {
-        slotsHtml = `
-          <div class="alloc-empty-notice">
-            📌 아래 <strong>추천 ETF</strong> 버튼을 누르면 종목이 추가되고 비중을 바로 조절할 수 있습니다.
+        tagsHtml = `
+          <div class="alloc-empty-tag-guide">
+            👇 아래 <strong>계좌 보유 종목</strong> 태그를 클릭하면 이곳으로 올라와 비중을 설정할 수 있습니다.
           </div>
         `;
       } else {
-        slotsHtml = items.map((it, idx) => `
-          <div class="alloc-item-pill">
-            <span class="alloc-item-name" title="${escapeHtml(it.key)}">${escapeHtml(it.key)}</span>
-            <div class="alloc-item-stepper">
-              <button type="button" class="stepper-btn" onclick="stepAllocPct('${acctCode}', ${idx}, -5)" title="-5%">−</button>
-              <input type="number" inputmode="numeric" class="stepper-input" value="${it.pct}" min="0" max="100" step="1"
-                     oninput="handleAllocInput('${acctCode}', ${idx}, this.value)"
-                     onchange="handleAllocChange('${acctCode}', ${idx}, this.value)">
-              <span class="stepper-unit">%</span>
-              <button type="button" class="stepper-btn" onclick="stepAllocPct('${acctCode}', ${idx}, +5)" title="+5%">+</button>
-            </div>
-            <button type="button" class="alloc-del-btn" onclick="removeAllocItem('${acctCode}', ${idx})" title="삭제">✕</button>
-          </div>
-        `).join("");
-      }
-
-      const selectedKeySet = new Set(items.map(it => it.key));
-      let chipsHtml = "";
-      if (acct.available_keys && acct.available_keys.length > 0) {
-        chipsHtml = acct.available_keys.map(k => {
-          const isSelected = selectedKeySet.has(k);
+        tagsHtml = items.map((it, idx) => {
+          const formattedVal = (parseFloat(it.pct) || 0).toFixed(1).replace(/\.0$/, "");
           return `
-            <button type="button" 
-                    class="alloc-chip-btn ${isSelected ? 'selected' : ''}" 
-                    onclick="toggleAllocKey('${acctCode}', '${escapeHtml(k)}')">
-              ${isSelected ? '✓ ' : '+ '}${escapeHtml(k)}
-            </button>
+            <div class="alloc-tag-pill">
+              <span class="alloc-tag-name" title="${escapeHtml(it.key)}">${escapeHtml(it.key)}</span>
+              <div class="alloc-tag-val-wrap">
+                <input type="number" inputmode="decimal" class="alloc-tag-input" 
+                       value="${formattedVal}" min="0" max="100" step="0.5"
+                       oninput="handleAllocInput('${acctCode}', ${idx}, this.value)"
+                       onchange="handleAllocChange('${acctCode}', ${idx}, this.value)">
+                <span class="alloc-tag-unit">%</span>
+              </div>
+              <div class="alloc-tag-arrows">
+                <button type="button" class="tag-arrow-btn up" onclick="stepAllocPct('${acctCode}', ${idx}, 0.5)" title="+0.5%">▲</button>
+                <button type="button" class="tag-arrow-btn down" onclick="stepAllocPct('${acctCode}', ${idx}, -0.5)" title="-0.5%">▼</button>
+              </div>
+              <button type="button" class="alloc-tag-close" onclick="removeAllocItem('${acctCode}', ${idx})" title="제외하고 아래로 내리기">✕</button>
+            </div>
           `;
         }).join("");
+      }
+
+      // 하단: 계좌 보유 종목 태그 목록 (상단에 올라간 종목은 제외하여 '위로 이동' 효과 극대화)
+      const selectedKeySet = new Set(items.map(it => it.key));
+      const availableList = (acct.available_keys || []).filter(k => !selectedKeySet.has(k));
+      
+      let sourceTagsHtml = "";
+      if (availableList.length > 0) {
+        sourceTagsHtml = availableList.map(k => `
+          <button type="button" class="alloc-source-tag" onclick="addAllocKey('${acctCode}', '${escapeHtml(k)}')">
+            + ${escapeHtml(k)}
+          </button>
+        `).join("");
+      } else {
+        sourceTagsHtml = `<span style="font-size:0.75rem; color:#94a3b8; padding:4px 0;">모든 보유 종목이 상단에 추가되었습니다.</span>`;
       }
 
       const currentFormula = buildFormulaFromItems(items);
@@ -2750,41 +2931,54 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           <div class="alloc-header">
             <div class="alloc-title-group">
               <span class="badge badge-account">${escapeHtml(acctLabel)}</span>
-              <strong style="font-size:0.95rem; color:var(--fa-text-main);">${escapeHtml(acct.base_name)}</strong>
+              <span class="alloc-account-name">${escapeHtml(acct.base_name)}</span>
             </div>
-            <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+            <div class="alloc-saved-badges">
               ${savedBadges}
             </div>
           </div>
 
-          <div class="alloc-editor-box">
-            <div class="alloc-items-container" id="alloc-slots-${acctCode}">
-              ${slotsHtml}
+          <!-- 상단: 목표 비중 설정 태그 박스 -->
+          <div class="alloc-target-box">
+            <div class="alloc-section-header">
+              <span class="alloc-section-title">🎯 설정된 목표 비중</span>
+              <span class="alloc-count-hint">${items.length}개 종목</span>
             </div>
 
-            <div class="alloc-summary-bar">
+            <div class="alloc-tag-list" id="alloc-slots-${acctCode}">
+              ${tagsHtml}
+            </div>
+
+            <!-- 비중 합계 프로그레스 바 -->
+            <div class="alloc-progress-wrap">
+              <div class="alloc-progress-bar ${totalBadgeClass}" style="width: ${Math.min(100, Math.max(0, roundedTotal))}%;"></div>
+            </div>
+
+            <div class="alloc-status-row">
               <div class="alloc-total-badge ${totalBadgeClass}" id="alloc-total-${acctCode}">
                 ${totalBadgeText}
               </div>
-              <div class="alloc-quick-actions" style="display:flex; gap:6px; align-items:center;">
+              <div class="alloc-quick-actions">
                 ${items.length > 0 ? `
-                  <button type="button" class="btn-quick" onclick="equalizeAllocations('${acctCode}')" title="선택된 모든 종목의 비중을 100% 기준으로 균등하게 배분합니다">⚖️ 균등 분할</button>
-                  ${roundedTotal < 100 ? `<button type="button" class="btn-quick" onclick="autoFillRemaining('${acctCode}')" title="부족한 비중을 첫 번째 종목에 자동 추가합니다">🎯 100% 맞춤</button>` : ''}
+                  <button type="button" class="btn-quick" onclick="equalizeAllocations('${acctCode}')" title="선택된 종목들의 비중을 100% 기준으로 균등하게 배분합니다">⚖️ 균등 분할</button>
+                  ${roundedTotal < 100 ? `<button type="button" class="btn-quick" onclick="autoFillRemaining('${acctCode}')" title="부족한 비중을 첫 번째 종목에 자동 추가하여 100%로 맞춥니다">🎯 100% 맞춤</button>` : ''}
                 ` : ''}
               </div>
             </div>
           </div>
 
-          <div class="alloc-keywords-box">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <span class="alloc-keywords-label">💡 추천 ETF (클릭하여 추가 / 제외):</span>
-              <button type="button" class="btn-quick" style="font-size:0.72rem; padding:1px 6px;" onclick="promptCustomAllocKey('${acctCode}')">직접 ETF 추가 +</button>
+          <!-- 하단: 계좌 보유 종목 태그 영역 (클릭하면 위로 이동) -->
+          <div class="alloc-source-box">
+            <div class="alloc-source-header">
+              <span class="alloc-source-title">📦 계좌 보유 종목 <span class="alloc-source-sub">(클릭 시 위로 이동)</span></span>
+              <button type="button" class="btn-quick-outline" onclick="promptCustomAllocKey('${acctCode}')">+ 직접 종목 추가</button>
             </div>
-            <div class="alloc-chips-wrap">
-              ${chipsHtml || `<span style="font-size:0.75rem; color:var(--fa-text-muted);">등록된 추천 종목이 없습니다.</span>`}
+            <div class="alloc-source-tags">
+              ${sourceTagsHtml}
             </div>
           </div>
 
+          <!-- 고급: 수식 확인 / 직접 입력 아코디언 -->
           <div class="alloc-raw-toggle-wrap">
             <button type="button" class="alloc-raw-toggle-btn" onclick="toggleManualMode('${acctCode}')">
               <span>${isManual ? '▾' : '▸'} 수식 텍스트로 확인 / 직접 입력</span>
@@ -2792,12 +2986,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <div class="alloc-raw-box" id="alloc-raw-box-${acctCode}" style="${isManual ? '' : 'display:none;'}">
               <input type="text" id="alloc-formula-${acctCode}" class="fa-input alloc-raw-input"
                      value="${escapeHtml(currentFormula)}" 
-                     placeholder="예: KODEX SCHD:KODEX SCHD-A:KODEX QQQ:KODEX MMA = 30:20:40:10"
+                     placeholder="예: SCHD:SPYM:QQQM:SGOV = 4:2:2:1"
                      oninput="handleFormulaInput('${acctCode}', this.value)">
-              <div class="alloc-raw-hint">자산명1:자산명2 = 비율1:비율2 형태로 직접 수정하시면 위의 비중 슬롯에 즉시 반영됩니다.</div>
+              <div class="alloc-raw-hint">자산명1:자산명2 = 비율1:비율2 형태로 직접 수정하시면 위의 비중 태그에 즉시 반영됩니다.</div>
             </div>
           </div>
 
+          <!-- 푸터 바 -->
           <div class="alloc-footer-bar">
             ${acct.has_target ? `<button type="button" class="fa-btn-action alloc-clear-btn" onclick="clearAccountAllocation('${acctCode}')">설정 해제</button>` : ''}
             <button type="button" class="fa-btn-primary alloc-save-btn" onclick="saveAccountAllocation('${acctCode}')">
@@ -2808,23 +3003,23 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       `;
     }
 
-    function toggleAllocKey(acctCode, key) {
+    function addAllocKey(acctCode, key) {
       if (!allocEditStates[acctCode]) allocEditStates[acctCode] = [];
       const items = allocEditStates[acctCode];
-      const existingIdx = items.findIndex(it => it.key === key);
+      if (items.some(it => it.key === key)) return;
 
-      if (existingIdx >= 0) {
-        items.splice(existingIdx, 1);
-      } else {
-        const currentTotal = items.reduce((sum, it) => sum + (parseFloat(it.pct) || 0), 0);
-        let defaultPct = 20;
-        if (currentTotal < 100) {
-          defaultPct = Math.max(5, Math.round((100 - currentTotal) * 10) / 10);
-        }
-        items.push({ key: key, pct: defaultPct });
+      const currentTotal = items.reduce((sum, it) => sum + (parseFloat(it.pct) || 0), 0);
+      let defaultPct = 10;
+      if (currentTotal < 100) {
+        const remaining = Math.round((100 - currentTotal) * 10) / 10;
+        defaultPct = Math.min(20, Math.max(0.5, remaining));
       }
-
+      items.push({ key: key, pct: defaultPct });
       refreshSingleCard(acctCode);
+    }
+
+    function toggleAllocKey(acctCode, key) {
+      addAllocKey(acctCode, key);
     }
 
     function promptCustomAllocKey(acctCode) {
@@ -2840,16 +3035,18 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       }
       
       const currentTotal = items.reduce((sum, it) => sum + (parseFloat(it.pct) || 0), 0);
-      const defaultPct = currentTotal < 100 ? Math.max(5, Math.round((100 - currentTotal) * 10) / 10) : 10;
+      const defaultPct = currentTotal < 100 ? Math.min(20, Math.max(0.5, Math.round((100 - currentTotal) * 10) / 10)) : 10;
       items.push({ key: cleanKey, pct: defaultPct });
       refreshSingleCard(acctCode);
     }
 
+    // 0.5% 스텝 증감 화살표 핸들러
     function stepAllocPct(acctCode, idx, delta) {
       const items = allocEditStates[acctCode];
       if (!items || !items[idx]) return;
       let val = (parseFloat(items[idx].pct) || 0) + delta;
-      val = Math.max(0, Math.min(100, Math.round(val * 10) / 10));
+      val = Math.round(val * 10) / 10;
+      val = Math.max(0, Math.min(100, val));
       items[idx].pct = val;
       refreshSingleCard(acctCode);
     }
@@ -2866,10 +3063,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       const items = allocEditStates[acctCode];
       if (!items || !items[idx]) return;
       const num = parseFloat(rawVal);
-      items[idx].pct = isNaN(num) ? 0 : Math.max(0, Math.min(100, num));
+      items[idx].pct = isNaN(num) ? 0 : Math.max(0, Math.min(100, Math.round(num * 10) / 10));
       refreshSingleCard(acctCode);
     }
 
+    // 상단 태그 삭제 (클릭 시 하단 보유 목록으로 복귀)
     function removeAllocItem(acctCode, idx) {
       const items = allocEditStates[acctCode];
       if (!items || !items[idx]) return;
@@ -2877,26 +3075,32 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       refreshSingleCard(acctCode);
     }
 
+    // 0.5% 단위로 남김없이 100% 균등 분할
     function equalizeAllocations(acctCode) {
       const items = allocEditStates[acctCode];
       if (!items || items.length === 0) return;
       const n = items.length;
-      const base = Math.floor(100 / n);
-      const remainder = 100 - (base * n);
       
+      // 0.5 단위의 스텝 수 계산 (총 200 스텝 = 100%)
+      const totalSteps = 200;
+      const baseSteps = Math.floor(totalSteps / n);
+      const remainderSteps = totalSteps % n;
+
       items.forEach((it, i) => {
-        it.pct = base + (i < remainder ? 1 : 0);
+        const steps = baseSteps + (i < remainderSteps ? 1 : 0);
+        it.pct = Math.round((steps * 0.5) * 10) / 10;
       });
       refreshSingleCard(acctCode);
     }
 
+    // 부족분 100% 자동 맞춤
     function autoFillRemaining(acctCode) {
       const items = allocEditStates[acctCode];
       if (!items || items.length === 0) return;
       const currentTotal = items.reduce((sum, it) => sum + (parseFloat(it.pct) || 0), 0);
       if (currentTotal < 100) {
         const diff = Math.round((100 - currentTotal) * 10) / 10;
-        items[0].pct = Math.round((items[0].pct + diff) * 10) / 10;
+        items[0].pct = Math.round(((parseFloat(items[0].pct) || 0) + diff) * 10) / 10;
         refreshSingleCard(acctCode);
       }
     }
@@ -2913,7 +3117,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       const parsed = parseFormulaToItems(formulaText);
       if (parsed.length > 0) {
         allocEditStates[acctCode] = parsed;
-        refreshSingleCardSlotsOnly(acctCode);
+        refreshSingleCard(acctCode);
       }
     }
 
@@ -2935,13 +3139,15 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       if (totalEl) {
         totalEl.className = "alloc-total-badge " + (roundedTotal === 100 ? "ok" : (roundedTotal < 100 ? "warn" : "err"));
         if (items.length === 0) {
-          totalEl.innerText = "비중을 설정할 종목을 추가하세요";
+          totalEl.innerText = "비중을 설정할 종목을 아래에서 클릭하세요";
         } else if (roundedTotal === 100) {
-          totalEl.innerText = `✅ 합계: 100% (완벽)`;
+          totalEl.innerText = `✅ 합계: 100.0% (완벽 일치 ✨)`;
         } else if (roundedTotal < 100) {
-          totalEl.innerText = `⚠️ 합계: ${roundedTotal}% (${Math.round((100 - roundedTotal) * 10) / 10}% 부족)`;
+          const diff = (Math.round((100 - roundedTotal) * 10) / 10).toFixed(1);
+          totalEl.innerText = `⚠️ 합계: ${roundedTotal.toFixed(1)}% (${diff}% 부족)`;
         } else {
-          totalEl.innerText = `❌ 합계: ${roundedTotal}% (${Math.round((roundedTotal - 100) * 10) / 10}% 초과)`;
+          const diff = (Math.round((roundedTotal - 100) * 10) / 10).toFixed(1);
+          totalEl.innerText = `❌ 합계: ${roundedTotal.toFixed(1)}% (${diff}% 초과)`;
         }
       }
 
@@ -2952,31 +3158,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }
 
     function refreshSingleCardSlotsOnly(acctCode) {
-      const acct = accountAllocationsList.find(a => a.account === acctCode);
-      if (!acct) return;
-      const items = allocEditStates[acctCode] || [];
-      const slotsContainer = document.getElementById(`alloc-slots-${acctCode}`);
-      if (slotsContainer) {
-        if (items.length === 0) {
-          slotsContainer.innerHTML = `<div class="alloc-empty-notice">📌 아래 추천 ETF 버튼을 누르면 종목이 추가됩니다.</div>`;
-        } else {
-          slotsContainer.innerHTML = items.map((it, idx) => `
-            <div class="alloc-item-pill">
-              <span class="alloc-item-name" title="${escapeHtml(it.key)}">${escapeHtml(it.key)}</span>
-              <div class="alloc-item-stepper">
-                <button type="button" class="stepper-btn" onclick="stepAllocPct('${acctCode}', ${idx}, -5)" title="-5%">−</button>
-                <input type="number" inputmode="numeric" class="stepper-input" value="${it.pct}" min="0" max="100" step="1"
-                       oninput="handleAllocInput('${acctCode}', ${idx}, this.value)"
-                       onchange="handleAllocChange('${acctCode}', ${idx}, this.value)">
-                <span class="stepper-unit">%</span>
-                <button type="button" class="stepper-btn" onclick="stepAllocPct('${acctCode}', ${idx}, +5)" title="+5%">+</button>
-              </div>
-              <button type="button" class="alloc-del-btn" onclick="removeAllocItem('${acctCode}', ${idx})" title="삭제">✕</button>
-            </div>
-          `).join("");
-        }
-      }
-      updateSummaryAndFormulaOnly(acctCode);
+      refreshSingleCard(acctCode);
     }
 
     async function saveAccountAllocation(acctCode) {
