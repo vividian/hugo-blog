@@ -283,12 +283,20 @@ def parse_target_allocation(account_name: str) -> Optional[Dict[str, float]]:
 def match_target_key(symbol: str, abbrev: str, asset_class: str, target_keys: List[str]) -> str:
     """
     종목의 정보(symbol, abbrev, asset_class)를 바탕으로 target_keys 중 가장 적절한 키에 매핑한다.
+    - 1순위: 약칭(abbrev), 종목명(symbol), 자산군(asset_class)과 target_key의 완전 일치(Exact Match)
+    - 2순위: 접두사 오매칭 방지를 위해 길이가 긴 키부터(Longest Match First) 부분 일치 (예: 'KODEX SCHD-A' vs 'KODEX SCHD')
+    - 3순위: 타겟 키에 약칭이 포함되는지 긴 키 우선 검사
+    - 4순위: 별칭(Alias) 매핑 검사
+    - 5순위: 자산군(asset_class) 부분 일치 검사
     """
-    symbol_str = str(symbol or "").upper()
-    abbrev_str = str(abbrev or "").upper()
-    ac_str = str(asset_class or "").upper()
+    if not target_keys:
+        return "기타"
+
+    symbol_str = str(symbol or "").strip().upper()
+    abbrev_str = str(abbrev or "").strip().upper()
+    ac_str = str(asset_class or "").strip().upper()
     combined = f"{symbol_str} {abbrev_str} {ac_str}"
-    
+
     alias_dict = {
         "SPYM": ["SPYM", "S&P500", "SP500"],
         "SGOV": ["SGOV", "현금", "CASH"],
@@ -302,27 +310,54 @@ def match_target_key(symbol: str, abbrev: str, asset_class: str, target_keys: Li
         "GOLD-FD": ["GOLD", "골드", "금"],
         "SAVING": ["SAVING", "저축", "현금", "MMA"],
     }
-    
-    # 1. 정확히 대소문자 무관하게 타겟 키명이 포함되어 있는지 검사
+
+    # 1. 완전 일치 (Exact Match) 최우선 검사 (약칭 -> 종목명 -> 자산군 순)
     for key in target_keys:
-        key_upper = key.upper()
-        if key_upper in symbol_str or key_upper in abbrev_str or key_upper in ac_str:
+        ku = key.strip().upper()
+        if abbrev_str and ku == abbrev_str:
             return key
-            
-    # 2. 별칭 맵을 통한 키워드 매칭 검사
     for key in target_keys:
-        key_upper = key.upper()
-        aliases = alias_dict.get(key_upper, [key_upper])
+        ku = key.strip().upper()
+        if symbol_str and ku == symbol_str:
+            return key
+    for key in target_keys:
+        ku = key.strip().upper()
+        if ac_str and ku == ac_str:
+            return key
+
+    # 2. 접두사 오매칭 방지: 길이가 긴 키부터(Longest Match First) 부분 일치 검사
+    sorted_keys = sorted(target_keys, key=lambda k: len(k.strip()), reverse=True)
+    for key in sorted_keys:
+        ku = key.strip().upper()
+        if (abbrev_str and ku in abbrev_str) or (symbol_str and ku in symbol_str):
+            return key
+
+    # 3. 타겟 키에 약칭이 포함되는지 검사 (긴 키 우선)
+    for key in sorted_keys:
+        ku = key.strip().upper()
+        if abbrev_str and abbrev_str in ku:
+            return key
+
+    # 4. 별칭 맵을 통한 키워드 매칭 검사
+    for key in sorted_keys:
+        ku = key.strip().upper()
+        aliases = alias_dict.get(ku, [ku])
         for alias in aliases:
             if alias.upper() in combined:
                 return key
-                
-    return target_keys[0] if target_keys else "기타"
+
+    # 5. 자산군(asset_class) 기반 부분 매칭 검사
+    for key in sorted_keys:
+        ku = key.strip().upper()
+        if ac_str and (ku in ac_str or ac_str in ku):
+            return key
+
+    return target_keys[0]
 
 
 def calculate_rebalancing_df(account_name: str, account_holdings: pd.DataFrame, symbol_map: Optional[Dict[str, AssetConfig]] = None) -> Optional[pd.DataFrame]:
     """
-    계좌별 보유종목 현황을 기반으로 목표 비중에 맞추기 위한 매도/매수 필요 금액을 계산한다.
+    계좌별 보유종목 현황을 기반으로 목표 비중에 맞추기 위한 매도/매수 필요 금액 및 수량을 계산한다.
     """
     target_alloc = parse_target_allocation(account_name)
     if not target_alloc or account_holdings is None or account_holdings.empty:
@@ -349,6 +384,19 @@ def calculate_rebalancing_df(account_name: str, account_holdings: pd.DataFrame, 
     
     curr_by_key = holdings.groupby("target_key")["평가금"].sum().to_dict()
     
+    # 대표 단가 계산
+    key_qty_price = {}
+    for key in keys:
+        sub_df = holdings[holdings["target_key"] == key]
+        if not sub_df.empty:
+            if "수량" in sub_df.columns and "평가금" in sub_df.columns:
+                total_q = sub_df["수량"].fillna(0).sum()
+                total_e = sub_df["평가금"].sum()
+                if total_q > 0 and total_e > 0:
+                    key_qty_price[key] = total_e / total_q
+            elif "현재가" in sub_df.columns:
+                key_qty_price[key] = sub_df["현재가"].iloc[0]
+
     rows = []
     for key, target_ratio in target_alloc.items():
         curr_amt = curr_by_key.get(key, 0.0)
@@ -357,6 +405,11 @@ def calculate_rebalancing_df(account_name: str, account_holdings: pd.DataFrame, 
         target_amt = total_val * target_ratio
         diff_amt = target_amt - curr_amt  # 양수: 매수 필요, 음수: 매도 필요
         
+        avg_p = key_qty_price.get(key, 0.0)
+        diff_qty = 0
+        if avg_p > 0:
+            diff_qty = int(round(diff_amt / avg_p))
+        
         rows.append({
             "자산군": key,
             "현재평가금": curr_amt,
@@ -364,6 +417,8 @@ def calculate_rebalancing_df(account_name: str, account_holdings: pd.DataFrame, 
             "목표비중": target_pct,
             "목표평가금": target_amt,
             "조정금액": diff_amt,
+            "단가": avg_p,
+            "조정주수": diff_qty,
         })
         
     return pd.DataFrame(rows)

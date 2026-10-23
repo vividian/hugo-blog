@@ -1382,8 +1382,8 @@ def _render_trend_tab_card(
     )
 
 
-def _collect_rebalancing_alerts(data: ReportData, threshold_pct: float = 3.0) -> List[Dict[str, Any]]:
-    """모든 계좌에서 목표 비중과 threshold_pct(기본 3.0%p) 이상 격차가 발생한 리밸런싱 필요 항목을 수집합니다."""
+def _collect_rebalancing_alerts(data: ReportData, threshold_pct: float = 5.0) -> List[Dict[str, Any]]:
+    """모든 계좌에서 목표 비중과 threshold_pct(기본 5.0%p) 이상 격차가 발생한 리밸런싱 필요 항목을 수집합니다."""
     alerts = []
     for account in update_fa.ACCOUNT_ORDER:
         account_holdings = data.holdings_df[data.holdings_df["계좌"] == account].copy()
@@ -1437,8 +1437,8 @@ def _collect_rebalancing_alerts(data: ReportData, threshold_pct: float = 3.0) ->
     return alerts
 
 
-def _build_rebalancing_alert_banner(data: ReportData, threshold_pct: float = 3.0) -> Optional[str]:
-    """목표 비중 대비 3%p 이상 격차가 발생한 항목들을 상단 알림 배너로 렌더링"""
+def _build_rebalancing_alert_banner(data: ReportData, threshold_pct: float = 5.0) -> Optional[str]:
+    """목표 비중 대비 threshold_pct%p 이상 격차가 발생한 항목들을 상단 알림 배너로 렌더링"""
     alerts = _collect_rebalancing_alerts(data, threshold_pct)
     if not alerts:
         return None
@@ -1481,7 +1481,7 @@ def _build_rebalancing_alert_banner(data: ReportData, threshold_pct: float = 3.0
         "      <span class='fa-rebal-alert-icon'>⚖️</span>"
         "      <div>"
         f"        <div class='fa-rebal-alert-main-title'>포트폴리오 리밸런싱 알림 <span class='fa-badge fa-badge-negative' style='font-size:0.75rem; vertical-align:middle; margin-left:6px;'>{len(alerts)}건 조정 필요</span></div>"
-        "        <div class='fa-rebal-alert-sub-title'>계좌별 목표 비중 대비 ±3%p 이상 벗어난 자산군 현황입니다.</div>"
+        f"        <div class='fa-rebal-alert-sub-title'>계좌별 목표 비중 대비 ±{threshold_pct:.0f}%p 이상 벗어난 자산군 현황입니다.</div>"
         "      </div>"
         "    </div>"
         "  </div>"
@@ -3195,7 +3195,7 @@ def _build_dashboard_fragment(data: ReportData) -> str:
     account_summary_html = _build_account_assets_html_table(data.summary_df)
     holdings_section_html = _build_total_holdings_section(data.holdings_df)
 
-    rebal_alert_html = _build_rebalancing_alert_banner(data, threshold_pct=3.0)
+    rebal_alert_html = _build_rebalancing_alert_banner(data, threshold_pct=5.0)
     dividends_section_html = _build_dividends_tabbed_section(data.records, data.fx_series_full, fig_html)
     trading_summary, trading_items = _build_trading_history(data.records, data.fx_series_month, data.month_end)
     account_detail_section_html = _build_account_detail_section(data, fig_html)

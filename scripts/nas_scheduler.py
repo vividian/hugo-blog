@@ -66,10 +66,25 @@ def fetch(repo_dir: Path, remote: str, run_as: str) -> None:
 def has_remote_update(repo_dir: Path, remote: str, branch: str, run_as: str) -> bool:
     local_head = git_head(repo_dir, "HEAD", run_as)
     remote_head = git_head(repo_dir, f"{remote}/{branch}", run_as)
-    changed = local_head != remote_head
-    status = "changed" if changed else "unchanged"
-    print(f"[git] {repo_dir}: {status} ({local_head[:7]} -> {remote_head[:7]})")
-    return changed
+    if local_head == remote_head:
+        print(f"[git] {repo_dir}: unchanged ({local_head[:7]})")
+        return False
+
+    # 로컬 커밋이 원격보다 앞서 있는 경우(로컬 작업 보호) 원격 리셋 방지
+    try:
+        check_ancestor = run(
+            ["git", "merge-base", "--is-ancestor", remote_head, local_head],
+            cwd=repo_dir,
+            run_as=run_as,
+        )
+        if check_ancestor.returncode == 0:
+            print(f"[git] {repo_dir}: local ahead ({local_head[:7]} ahead of {remote_head[:7]}), skip reset")
+            return False
+    except Exception:
+        pass
+
+    print(f"[git] {repo_dir}: changed ({local_head[:7]} -> {remote_head[:7]})")
+    return True
 
 
 def hard_reset(repo_dir: Path, remote: str, branch: str, run_as: str) -> None:

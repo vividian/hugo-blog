@@ -115,10 +115,26 @@ def watch() -> None:
 
         local_head = get_local_head(CONTENT_DIR)
         if remote_head != local_head:
-            print(f"[{now()}] [변경 감지] 로컬({local_head[:7]}) != 원격({remote_head[:7]})")
-            success = sync_and_build(CONTENT_DIR)
-            if success:
-                last_checked_head = remote_head
+            # 로컬 커밋이 원격보다 앞서 있는 경우(로컬 작업 보호) 원격 롤백 방지
+            is_local_ahead = False
+            try:
+                check_res = subprocess.run(
+                    ["git", "merge-base", "--is-ancestor", remote_head, local_head],
+                    cwd=CONTENT_DIR,
+                    capture_output=True,
+                )
+                if check_res.returncode == 0:
+                    is_local_ahead = True
+            except Exception:
+                pass
+
+            if is_local_ahead:
+                pass  # 로컬이 원격보다 앞서 있음 (작업 보존)
+            else:
+                print(f"[{now()}] [변경 감지] 로컬({local_head[:7]}) != 원격({remote_head[:7]})")
+                success = sync_and_build(CONTENT_DIR)
+                if success:
+                    last_checked_head = remote_head
         else:
             # 변경 없음: 불필요한 로그는 생략하고 대기 (원할 경우 디버그용 출력 가능)
             pass
