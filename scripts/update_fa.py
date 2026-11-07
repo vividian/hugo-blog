@@ -1477,16 +1477,108 @@ def fetch_latest_prices(tickers: List[str]) -> Dict[str, Tuple[float, float]]:
     return result
 
 
+def fetch_holdings_price_info(tickers: List[str]) -> Dict[str, Dict[str, Optional[float]]]:
+    """보유 종목 티커들의 최신 가격, 전일 가격, 52주(1년) 최고가 및 고점대비 하락률을 조회한다."""
+    if not tickers:
+        return {}
+    result: Dict[str, Dict[str, Optional[float]]] = {}
+    try:
+        data = yf.download(
+            tickers,
+            period="1y",
+            interval="1d",
+            progress=False,
+            auto_adjust=False,
+        )
+        if not data.empty:
+            close_data = data["Adj Close"] if "Adj Close" in data.columns else data.get("Close", data)
+            high_data = data["High"] if "High" in data.columns else close_data
+
+            if close_data.index.tz is not None:
+                close_data.index = close_data.index.tz_localize(None)
+            close_data.index = close_data.index.normalize()
+
+            if isinstance(close_data, pd.Series):
+                s_close = close_data[~close_data.index.duplicated(keep="last")].ffill().dropna()
+                s_high = high_data[~high_data.index.duplicated(keep="last")].dropna() if isinstance(high_data, pd.Series) else s_close
+                if not s_close.empty:
+                    last_price = float(s_close.iloc[-1])
+                    prev_price = float(s_close.iloc[-2]) if len(s_close) > 1 else last_price
+                    high_price = float(s_high.max()) if not s_high.empty else last_price
+                    high_drop = (last_price - high_price) / high_price if high_price > 0 else 0.0
+                    if high_drop > 0:
+                        high_drop = 0.0
+                    result[tickers[0]] = {
+                        "last_price": last_price,
+                        "prev_price": prev_price,
+                        "high_price": high_price,
+                        "high_drop": high_drop,
+                    }
+            else:
+                close_data = close_data[~close_data.index.duplicated(keep="last")]
+                high_data = high_data[~high_data.index.duplicated(keep="last")]
+                for col in close_data.columns:
+                    s_close = close_data[col].dropna()
+                    if s_close.empty:
+                        continue
+                    s_high = high_data[col].dropna() if col in high_data.columns else s_close
+                    last_price = float(s_close.iloc[-1])
+                    prev_price = float(s_close.iloc[-2]) if len(s_close) > 1 else last_price
+                    high_price = float(s_high.max()) if not s_high.empty else last_price
+                    high_drop = (last_price - high_price) / high_price if high_price > 0 else 0.0
+                    if high_drop > 0:
+                        high_drop = 0.0
+                    result[col] = {
+                        "last_price": last_price,
+                        "prev_price": prev_price,
+                        "high_price": high_price,
+                        "high_drop": high_drop,
+                    }
+    except Exception:
+        pass
+
+    # 일괄 다운로드에서 누락된 티커 개별 재시도
+    missing = [t for t in tickers if t not in result]
+    for t in missing:
+        try:
+            hist = yf.Ticker(t).history(period="1y")
+            if not hist.empty and "Close" in hist.columns:
+                s_close = hist["Close"].dropna()
+                s_high = hist["High"].dropna() if "High" in hist.columns else s_close
+                if not s_close.empty:
+                    last_price = float(s_close.iloc[-1])
+                    prev_price = float(s_close.iloc[-2]) if len(s_close) > 1 else last_price
+                    high_price = float(s_high.max()) if not s_high.empty else last_price
+                    high_drop = (last_price - high_price) / high_price if high_price > 0 else 0.0
+                    if high_drop > 0:
+                        high_drop = 0.0
+                    result[t] = {
+                        "last_price": last_price,
+                        "prev_price": prev_price,
+                        "high_price": high_price,
+                        "high_drop": high_drop,
+                    }
+        except Exception:
+            pass
+
+    return result
+
+
 def build_holdings_df(records: pd.DataFrame, fx_series: pd.Series) -> pd.DataFrame:
     """현재 보유 자산 현황(평가금, 매수금, 수익금) 데이터프레임을 생성한다."""
     symbol_map = load_symbol_map()
     trades = extract_trades(records)
     positions = compute_positions(trades, symbol_map, fx_series)
 
-    prices = fetch_latest_prices(sorted({p.ticker for p in positions if p.ticker}))
+    prices = fetch_holdings_price_info(sorted({p.ticker for p in positions if p.ticker}))
     for pos in positions:
         if not pos.ticker:
-            prices[pos.ticker] = (1.0, 1.0)
+            prices[pos.ticker] = {
+                "last_price": 1.0,
+                "prev_price": 1.0,
+                "high_price": 1.0,
+                "high_drop": None,
+            }
 
     rows: List[Dict[str, float]] = []
     for pos in positions:
@@ -1495,8 +1587,13 @@ def build_holdings_df(records: pd.DataFrame, fx_series: pd.Series) -> pd.DataFra
             # 주가 조회 실패 시 평단가로 fallback하여 보유 종목 누락 방지
             latest_price_native = pos.avg_price_native or 0.0
             prev_price_native = latest_price_native
+            high_price_native = latest_price_native
+            high_drop = None
         else:
-            latest_price_native, prev_price_native = price_info
+            latest_price_native = price_info.get("last_price") or (pos.avg_price_native or 0.0)
+            prev_price_native = price_info.get("prev_price") or latest_price_native
+            high_price_native = price_info.get("high_price") or latest_price_native
+            high_drop = price_info.get("high_drop")
 
         valuation_native = pos.quantity * latest_price_native
         valuation = convert_to_krw(pos.account, valuation_native, None, fx_series, use_latest=True)
@@ -1515,6 +1612,7 @@ def build_holdings_df(records: pd.DataFrame, fx_series: pd.Series) -> pd.DataFra
                 "금액": pos.cost,
                 "현재가": current_price,
                 "등락률": None if prev_price == 0 else (current_price - prev_price) / prev_price,
+                "고점대비": high_drop,
             }
         )
 
@@ -1537,6 +1635,34 @@ def build_holdings_df(records: pd.DataFrame, fx_series: pd.Series) -> pd.DataFra
                 continue
             symbol = row["종목"]
             invested = float(invested_by_symbol.get(symbol, 0.0))
+            quantity = float(row.get("수량") or 0.0)
+            unit_price = float(row.get("단가") or 0.0)
+
+            current_price = unit_price
+            change_rate = None
+            try:
+                from fund_fetcher import get_cached_or_fetch_fund_price, get_fund_code_by_symbol
+            except ImportError:
+                try:
+                    from scripts.fund_fetcher import get_cached_or_fetch_fund_price, get_fund_code_by_symbol
+                except ImportError:
+                    get_cached_or_fetch_fund_price = None
+                    get_fund_code_by_symbol = None
+
+            if get_cached_or_fetch_fund_price and get_fund_code_by_symbol:
+                fund_code = get_fund_code_by_symbol(symbol)
+                if fund_code:
+                    try:
+                        fund_info = get_cached_or_fetch_fund_price(fund_code)
+                        if fund_info and fund_info.get("base_price", 0) > 0:
+                            current_price = fund_info["base_price"]
+                            chg = fund_info.get("change_price", 0.0)
+                            prev_p = current_price - chg
+                            if prev_p > 0:
+                                change_rate = chg / prev_p
+                    except Exception:
+                        pass
+
             rows.append(
                 {
                     "계좌": "sema",
@@ -1544,6 +1670,10 @@ def build_holdings_df(records: pd.DataFrame, fx_series: pd.Series) -> pd.DataFra
                     "평가금": valuation,
                     "매수금": invested,
                     "수익금": valuation - invested,
+                    "수량": quantity if quantity > 0 else 0.0,
+                    "현재가": current_price if current_price > 0 else 0.0,
+                    "등락률": change_rate,
+                    "고점대비": None,
                 }
             )
 
@@ -1806,7 +1936,11 @@ def plot_account_detail(account: str,
 
     # 종목별 데이터 테이블 가공
     table_df = account_holdings.copy()
-    main_data = table_df[["종목", "매수금", "평가금", "수익금", "수익률"]].copy()
+    if "고점대비" in table_df.columns:
+        table_df["고점대비"] = table_df["고점대비"].apply(lambda x: "-" if x is None or pd.isna(x) else f"{x * 100:.1f}%")
+        main_data = table_df[["종목", "매수금", "평가금", "수익금", "수익률", "고점대비"]].copy()
+    else:
+        main_data = table_df[["종목", "매수금", "평가금", "수익금", "수익률"]].copy()
     main_data["매수금"] = main_data["매수금"].apply(lambda x: f"{x:,.0f}")
     main_data["평가금"] = main_data["평가금"].apply(lambda x: f"{x:,.0f}")
     main_data["수익금"] = main_data["수익금"].apply(lambda x: f"{x:,.0f}")
@@ -1915,7 +2049,7 @@ def plot_account_detail(account: str,
     # Top-Down 상대 좌표 계산
     curr_y = fig_height - pad_top - extra_pad
 
-    header_colors = ["#2d3436", "#2d3436", "#2d3436", "#2d3436", "#2d3436"]
+    header_colors = ["#2d3436"] * max(5, len(main_data.columns))
     neutral_header = "#2d3436"
 
     # 1) 전체 요약 서브타이틀
@@ -2036,7 +2170,7 @@ def plot_account_detail(account: str,
                 cell.set_text_props(color="white", weight="bold")
             else:
                 col_name = main_data.columns[col]
-                if col_name in ("수익금", "수익률"):
+                if col_name in ("수익금", "수익률", "고점대비"):
                     val_str = str(main_data.iloc[row - 1, col]).strip()
                     cleaned = re.sub(r"[^\d.-]", "", val_str)
                     try:

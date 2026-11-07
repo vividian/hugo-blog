@@ -24,6 +24,34 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qs, urlparse
 import yaml
 
+try:
+    from scripts.fund_fetcher import (
+        fetch_fund_base_price,
+        get_cached_or_fetch_fund_price,
+        get_all_sema_funds_prices,
+        get_fund_code_by_symbol,
+        calculate_fund_valuation,
+        sync_sema_fund_evaluations,
+        SEMA_FUNDS,
+        DEFAULT_FUND_CODE,
+        DEFAULT_FUND_SYMBOL,
+    )
+except ImportError:
+    try:
+        from fund_fetcher import (
+            fetch_fund_base_price,
+            get_cached_or_fetch_fund_price,
+            get_all_sema_funds_prices,
+            get_fund_code_by_symbol,
+            calculate_fund_valuation,
+            sync_sema_fund_evaluations,
+            SEMA_FUNDS,
+            DEFAULT_FUND_CODE,
+            DEFAULT_FUND_SYMBOL,
+        )
+    except ImportError:
+        pass
+
 ROOT_DIR = Path(__file__).resolve().parent.parent
 DB_PATH = ROOT_DIR / "db" / "fa_records.db"
 CSV_PATH = ROOT_DIR / "config" / "trading_records.csv"
@@ -36,6 +64,7 @@ def start_file_watcher():
     watch_files = [
         Path(__file__).resolve(),
         FA_YAML_PATH,
+        ROOT_DIR / "scripts" / "fund_fetcher.py",
     ]
     mtimes = {f: f.stat().st_mtime for f in watch_files if f.exists()}
 
@@ -605,6 +634,16 @@ def run_dashboard_update() -> Dict[str, Any]:
 
     def _worker():
         try:
+            # 0. 공제회 펀드 실시간 기준가 수집 및 최신 평가금 동기화
+            try:
+                print("⏳ [대시보드 갱신 0/3] 공제회 펀드 실시간 기준가 수집 및 평가금 동기화 시작...")
+                sync_res = sync_sema_fund_evaluations(DB_PATH)
+                if sync_res and sync_res.get("updated"):
+                    print(f"✅ [대시보드 갱신] 공제회 펀드 최신 평가액 반영 완료 (총 {sync_res.get('total_updated', 0)}개 종목 갱신)")
+                    export_db_to_csv()
+            except Exception as fe:
+                print(f"⚠️ [대시보드 갱신] 펀드 기준가 동기화 건너뜀: {fe}")
+
             print("⏳ [대시보드 갱신 1/3] 실시간 시세 수집 및 대시보드 HTML 생성 시작...")
             set_dashboard_update_status(
                 status="running",
@@ -1700,6 +1739,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             </select>
             <input type="text" id="f-symbol-custom" class="fa-input" placeholder="종목명 직접 입력..." style="display:none; margin-top:6px;" oninput="handleCustomSymbolInput()">
             <input type="hidden" id="f-symbol" value="">
+            <div id="fund-price-hint" style="color:#2563eb; font-size:0.8rem; font-weight:700; margin-top:4px; display:none;"></div>
           </div>
 
           <!-- 단가 -->
@@ -1710,8 +1750,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
           <!-- 수량 -->
           <div class="fa-field" id="wrap-quantity">
-            <label class="fa-label">체결 수량 (주)</label>
-            <input type="number" step="any" id="f-quantity" class="fa-input" placeholder="0" oninput="calcAmount()">
+            <label class="fa-label" id="lbl-quantity">체결 수량 (주)</label>
+            <input type="number" step="any" id="f-quantity" class="fa-input" placeholder="0" oninput="handleQuantityInput()">
+            <div id="fund-qty-hint" style="color:var(--fa-text-muted); font-size:0.75rem; margin-top:3px; display:none;">💡 펀드 좌수를 입력하면 네이버 증권 당일 기준가로 평가금이 자동 계산됩니다.</div>
           </div>
 
           <!-- 정산 금액 -->
@@ -1734,8 +1775,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
           <!-- 평가금 (구분이 평가금일 때) -->
           <div class="fa-field" id="wrap-evaluation" style="display:none;">
-            <label class="fa-label">계좌 평가금 (원)</label>
+            <label class="fa-label" id="lbl-evaluation">계좌 평가금 (원)</label>
             <input type="number" step="any" id="f-evaluation" class="fa-input" placeholder="0">
+            <div id="fund-eval-calc-hint" style="color:var(--fa-accent); font-size:0.8rem; font-weight:700; margin-top:4px; display:none;"></div>
           </div>
         </div>
 
@@ -2024,6 +2066,22 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
     let allRecords = [];
 
+    let currentFundInfo = null;
+    let fundPrices = {};
+
+    const FUND_META = {
+      'K55210DT4614': {
+        name: '신한미국S&P500인덱스',
+        symbol: '신한 SPY-FD',
+        keywords: ['신한', 'SPY-FD', 'S&P500']
+      },
+      'K55301E51782': {
+        name: '미래에셋골드특별자산',
+        symbol: '미래에셋 골드',
+        keywords: ['골드', '미래에셋', 'GOLD']
+      }
+    };
+
     document.addEventListener("DOMContentLoaded", () => {
       flatpickr("#f-date", {
         locale: "ko",
@@ -2031,9 +2089,121 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         defaultDate: new Date()
       });
       syncUnheldToggles(getShowUnheldPref());
+      fetchFundPrices();
       loadSymbols();
       loadRecords();
     });
+
+    async function fetchFundPrices() {
+      try {
+        const res = await fetch('/api/fund-price?all=1');
+        const data = await res.json();
+        if (data.ok && data.data) {
+          fundPrices = data.data;
+          updateFundPriceDisplay();
+        }
+      } catch (e) {
+        console.warn("펀드 기준가 전체 조회 실패:", e);
+      }
+    }
+
+    async function fetchFundPrice(fundCode = "K55210DT4614") {
+      try {
+        const res = await fetch(`/api/fund-price?fundCode=${encodeURIComponent(fundCode)}`);
+        const data = await res.json();
+        if (data.ok && data.data) {
+          fundPrices[fundCode] = data.data;
+          updateFundPriceDisplay();
+        }
+      } catch (e) {
+        console.warn("펀드 기준가 조회 실패:", e);
+      }
+    }
+
+    function getSelectedFundCode() {
+      const acct = document.getElementById("f-account") ? document.getElementById("f-account").value : "";
+      if (acct !== "sema") return null;
+      const sym = document.getElementById("f-symbol") ? document.getElementById("f-symbol").value : "";
+      if (!sym) return null;
+      // 저축 / SAVING은 펀드 계산 대상에서 명시적 제외
+      if (sym.includes("SAVING") || sym.includes("저축") || sym.includes("현금")) {
+        return null;
+      }
+      for (const [code, meta] of Object.entries(FUND_META)) {
+        if (sym === meta.symbol || sym === code) return code;
+        if (meta.keywords.some(kw => sym.includes(kw))) return code;
+      }
+      return null;
+    }
+
+    function isSavingSelected() {
+      const acct = document.getElementById("f-account") ? document.getElementById("f-account").value : "";
+      if (acct !== "sema") return false;
+      const sym = document.getElementById("f-symbol") ? document.getElementById("f-symbol").value : "";
+      return (sym.includes("SAVING") || sym.includes("저축"));
+    }
+
+    function updateFundPriceDisplay() {
+      const hintEl = document.getElementById("fund-price-hint");
+      if (!hintEl) return;
+      const fundCode = getSelectedFundCode();
+      if (!fundCode) {
+        hintEl.style.display = "none";
+        return;
+      }
+      const info = fundPrices[fundCode];
+      const meta = FUND_META[fundCode] || { symbol: '펀드' };
+      if (info && info.base_price > 0) {
+        hintEl.innerHTML = `📈 <strong>${meta.symbol} 당일 기준가:</strong> <span style="color:#2563eb; font-weight:800;">${info.base_price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}원</span> (${info.trade_date || '당일 기준'})`;
+        hintEl.style.display = "block";
+      } else {
+        hintEl.style.display = "none";
+        fetchFundPrice(fundCode);
+      }
+    }
+
+    function calcFundEvaluation() {
+      const acct = document.getElementById("f-account") ? document.getElementById("f-account").value : "";
+      if (acct !== "sema") return;
+
+      const evalHint = document.getElementById("fund-eval-calc-hint");
+      const fundCode = getSelectedFundCode();
+
+      // SAVING 이거나 펀드가 아닌 종목은 자동계산하지 않고 입력된 평가금 유지
+      if (!fundCode) {
+        if (evalHint) evalHint.style.display = "none";
+        return;
+      }
+
+      const info = fundPrices[fundCode];
+      const meta = FUND_META[fundCode] || { symbol: '펀드' };
+      const qty = parseFloat(String(document.getElementById("f-quantity").value || "0").replace(/,/g, "")) || 0;
+      const basePrice = (info && info.base_price > 0) ? info.base_price : (parseFloat(document.getElementById("f-unit-price").value || "0") || 0);
+
+      if (qty > 0 && basePrice > 0) {
+        // 공식: 좌수 x 기준가 / 1000 소수점 이하 버림
+        const evalAmt = Math.floor((qty * basePrice) / 1000.0);
+        document.getElementById("f-evaluation").value = evalAmt;
+        if (document.getElementById("f-unit-price").value === "" || parseFloat(document.getElementById("f-unit-price").value) === 0) {
+          document.getElementById("f-unit-price").value = basePrice;
+        }
+        if (evalHint) {
+          evalHint.innerHTML = `🧮 <strong>[${meta.symbol}] 평가액 자동계산:</strong> ${qty.toLocaleString()}좌 × ${basePrice.toFixed(2)}원 ÷ 1,000 = <span style="color:var(--fa-gain); font-weight:800;">${evalAmt.toLocaleString()}원</span> (소수점 이하 버림)`;
+          evalHint.style.display = "block";
+        }
+      } else {
+        if (evalHint) evalHint.style.display = "none";
+      }
+    }
+
+    function handleQuantityInput() {
+      const acct = document.getElementById("f-account") ? document.getElementById("f-account").value : "";
+      if (acct === "sema") {
+        calcFundEvaluation();
+      } else {
+        calcAmount();
+      }
+    }
 
     function showToast(msg) {
       const toast = document.getElementById("toast");
@@ -2047,36 +2217,104 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       if (btnEl) btnEl.classList.add("active");
       document.getElementById("f-kind").value = kind;
 
-      // 필드 가시성 토글
+      updateFormFieldsVisibility();
+      renderSymbolOptions();
+    }
+
+    function updateFormFieldsVisibility() {
+      const acct = document.getElementById("f-account") ? document.getElementById("f-account").value : "";
+      const kind = document.getElementById("f-kind") ? document.getElementById("f-kind").value : "매수";
+      const sym = document.getElementById("f-symbol") ? document.getElementById("f-symbol").value : "";
+
       const isBuy = (kind === '매수');
       const isSell = (kind === '매도');
       const isTrade = (isBuy || isSell);
       const isDiv = (kind === '배당');
       const isDeposit = (kind === '입금');
       const isEval = (kind === '평가금');
+      const isSema = (acct === 'sema');
+      const isUsd = (acct === 'usa');
+      const fundCode = getSelectedFundCode();
+      const isFund = (fundCode !== null);
+      const isSaving = isSavingSelected();
 
-      document.getElementById("wrap-symbol").style.display = (isEval) ? 'none' : 'flex';
-      document.getElementById("wrap-unit-price").style.display = isTrade ? 'flex' : 'none';
-      document.getElementById("wrap-quantity").style.display = isTrade ? 'flex' : 'none';
-      document.getElementById("wrap-amount").style.display = isTrade ? 'flex' : 'none';
-      document.getElementById("wrap-deposit").style.display = (isBuy || isDeposit) ? 'flex' : 'none';
-      document.getElementById("wrap-dividend").style.display = isDiv ? 'flex' : 'none';
-      document.getElementById("wrap-evaluation").style.display = (isEval || isDeposit) ? 'flex' : 'none';
+      // 1. 종목명 선택
+      const wrapSymbol = document.getElementById("wrap-symbol");
+      if (wrapSymbol) wrapSymbol.style.display = (isEval && !isSema) ? 'none' : 'flex';
 
-      const depositInput = document.getElementById("f-deposit");
-      const evalInput = document.getElementById("f-evaluation");
-      const evalLabel = document.querySelector("#wrap-evaluation .fa-label");
-      if (isDeposit) {
-        depositInput.placeholder = "입금된 원금(투자금) 금액(원) 입력";
-        if (evalLabel) evalLabel.innerText = "계좌/종목 평가금 (원, 선택사항)";
-        evalInput.placeholder = "입금 후 총 평가금(원) 기록 시 입력 (공제회 등)";
+      // 2. 단가
+      const wrapUnitPrice = document.getElementById("wrap-unit-price");
+      if (wrapUnitPrice) wrapUnitPrice.style.display = isTrade ? 'flex' : 'none';
+
+      // 3. 수량 / 좌수
+      const wrapQty = document.getElementById("wrap-quantity");
+      const lblQty = document.getElementById("lbl-quantity") || document.querySelector("#wrap-quantity .fa-label");
+      const inputQty = document.getElementById("f-quantity");
+      const fundQtyHint = document.getElementById("fund-qty-hint");
+
+      if (isSema) {
+        if (isSaving) {
+          // SAVING(저축)은 좌수가 없고 사용자가 입력한 평가금액 그대로 사용
+          if (wrapQty) wrapQty.style.display = 'none';
+          if (fundQtyHint) fundQtyHint.style.display = 'none';
+        } else if (isDeposit || isEval || isTrade) {
+          // 신한 및 미래에셋 골드 펀드
+          if (wrapQty) wrapQty.style.display = 'flex';
+          if (lblQty) lblQty.innerHTML = `보유 좌수 (공제회 전용) <span style="color:var(--fa-accent); font-weight:700; font-size:0.78rem; margin-left:6px;">[좌]</span>`;
+          if (inputQty) inputQty.placeholder = "펀드 총 좌수 입력 (예: 29205393)";
+          if (fundQtyHint) {
+            const symName = (FUND_META[fundCode] ? FUND_META[fundCode].symbol : '펀드');
+            fundQtyHint.innerHTML = `💡 <strong>${symName}</strong> 좌수를 입력하면 네이버 증권 당일 기준가로 평가금이 자동 계산됩니다.`;
+            fundQtyHint.style.display = isFund ? 'block' : 'none';
+          }
+        }
       } else {
-        depositInput.placeholder = "매수 시 신규 투입된 투자금(원)이 있을 경우 입력";
-        if (evalLabel) evalLabel.innerText = "계좌 평가금 (원)";
-        evalInput.placeholder = "0";
+        if (wrapQty) wrapQty.style.display = isTrade ? 'flex' : 'none';
+        if (lblQty) lblQty.innerHTML = `체결 수량 (주)`;
+        if (inputQty) inputQty.placeholder = "0";
+        if (fundQtyHint) fundQtyHint.style.display = 'none';
       }
 
-      renderSymbolOptions();
+      // 4. 체결 금액
+      const wrapAmount = document.getElementById("wrap-amount");
+      if (wrapAmount) wrapAmount.style.display = isTrade ? 'flex' : 'none';
+
+      // 5. 투자금 (원금 입금액)
+      const wrapDeposit = document.getElementById("wrap-deposit");
+      const depositInput = document.getElementById("f-deposit");
+      const lblDeposit = document.querySelector("#wrap-deposit .fa-label");
+      if (wrapDeposit) wrapDeposit.style.display = (isBuy || isDeposit) ? 'flex' : 'none';
+      if (lblDeposit) lblDeposit.innerText = isUsd ? "투자금 ($)" : "투자금 (원금 입금액)";
+      if (depositInput) {
+        depositInput.placeholder = isDeposit ? "입금된 원금(투자금) 금액(원) 입력" : "매수 시 신규 투입된 투자금(원)이 있을 경우 입력";
+      }
+
+      // 6. 배당금
+      const wrapDividend = document.getElementById("wrap-dividend");
+      if (wrapDividend) wrapDividend.style.display = isDiv ? 'flex' : 'none';
+
+      // 7. 평가금
+      const wrapEvaluation = document.getElementById("wrap-evaluation");
+      const evalInput = document.getElementById("f-evaluation");
+      const evalLabel = document.getElementById("lbl-evaluation") || document.querySelector("#wrap-evaluation .fa-label");
+      if (wrapEvaluation) wrapEvaluation.style.display = (isEval || isDeposit) ? 'flex' : 'none';
+      if (evalLabel) {
+        if (isDeposit && isSema) {
+          evalLabel.innerText = isSaving ? "저축/예치금 평가금 (원)" : "펀드 평가금 (좌수 입력 시 자동계산)";
+        } else if (isDeposit) {
+          evalLabel.innerText = "계좌/종목 평가금 (원, 선택사항)";
+        } else {
+          evalLabel.innerText = isSaving ? "저축/예치금 평가금 (원)" : "계좌 평가금 (원)";
+        }
+      }
+      if (evalInput) {
+        evalInput.placeholder = (isDeposit && isSema && !isSaving) ? "좌수 입력 시 자동계산 (직접 수정도 가능)" : "0";
+      }
+
+      updateFundPriceDisplay();
+      if (isSema && !isSaving && inputQty && parseFloat(inputQty.value || '0') > 0) {
+        calcFundEvaluation();
+      }
     }
 
     function openNewSymbolModal() {
@@ -2248,7 +2486,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           exField.value = 1.0;
         }
       }
+      if (acct === "sema" && !currentFundInfo) {
+        fetchFundPrice();
+      }
       loadSymbols(acct);
+      updateFormFieldsVisibility();
     }
 
     function handleSymbolSelectChange() {
@@ -2270,10 +2512,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         hiddenSymbol.value = "";
       }
       if (hint) hint.innerText = "";
+      updateFormFieldsVisibility();
     }
 
     function handleCustomSymbolInput() {
       document.getElementById("f-symbol").value = document.getElementById("f-symbol-custom").value.trim();
+      updateFormFieldsVisibility();
     }
 
     function calcAmount() {
@@ -2384,6 +2628,22 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             : `<span style="color:var(--fa-purple); font-weight:700;">+${r.dividend.toLocaleString()}원</span>`;
         }
 
+        let priceStr = "-";
+        if (r.unit_price > 0) {
+          if (isUsd) {
+            priceStr = '$' + r.unit_price.toLocaleString();
+          } else if (r.account === "sema") {
+            priceStr = r.unit_price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '원';
+          } else {
+            priceStr = r.unit_price.toLocaleString() + '원';
+          }
+        }
+
+        let qtyStr = "-";
+        if (r.quantity !== 0 && r.quantity !== null && r.quantity !== undefined) {
+          qtyStr = (r.account === "sema") ? `${r.quantity.toLocaleString()}좌` : r.quantity.toLocaleString();
+        }
+
         const acctLabel = ACCOUNT_MAP[r.account] || r.account;
 
         return `
@@ -2392,8 +2652,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <td><span class="badge badge-account">${acctLabel}</span></td>
             <td><span class="badge ${badgeClass}">${kindText}</span></td>
             <td style="font-weight:700; color:var(--fa-text-main);">${displaySymbol}</td>
-            <td class="text-right">${r.unit_price > 0 ? (isUsd ? '$' + r.unit_price.toLocaleString() : r.unit_price.toLocaleString() + '원') : "-"}</td>
-            <td class="text-right">${r.quantity !== 0 && r.quantity !== null && r.quantity !== undefined ? r.quantity.toLocaleString() : "-"}</td>
+            <td class="text-right">${priceStr}</td>
+            <td class="text-right">${qtyStr}</td>
             <td class="text-right">${depositStr}</td>
             <td class="text-right">${tradeAmountStr}</td>
             <td class="text-right">${dividendStr}</td>
@@ -3340,6 +3600,34 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
             self._send_json(status)
             return
 
+        if path == "/api/fund-price":
+            qs = parse_qs(parsed.query)
+            is_all = qs.get("all", ["0"])[0] == "1"
+            if is_all:
+                try:
+                    all_prices = get_all_sema_funds_prices()
+                    self._send_json({"ok": True, "data": all_prices})
+                except Exception as fe:
+                    self._send_json({"ok": False, "error": str(fe)})
+                return
+
+            symbol = qs.get("symbol", [""])[0]
+            fund_code = qs.get("fundCode", [""])[0]
+            if not fund_code and symbol:
+                fund_code = get_fund_code_by_symbol(symbol) or ""
+            if not fund_code:
+                fund_code = DEFAULT_FUND_CODE
+
+            try:
+                info = get_cached_or_fetch_fund_price(fund_code)
+                if info:
+                    self._send_json({"ok": True, "data": info})
+                else:
+                    self._send_json({"ok": False, "error": f"펀드 기준가를 조회할 수 없습니다. ({fund_code})"})
+            except Exception as fe:
+                self._send_json({"ok": False, "error": str(fe)})
+            return
+
         if path == "/api/market/history":
             qs = parse_qs(parsed.query)
             symbol = qs.get("symbol", ["USDKRW=X"])[0]
@@ -3630,11 +3918,28 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
             data = json.loads(body)
             clean_date = normalize_date_str(data.get("date") or "")
             kind = data.get("kind", "매수")
+            acct = data.get("account")
+            symbol = data.get("symbol", "")
             qty = float(data.get("quantity") or 0)
             if kind == "매도" and qty > 0:
                 qty = -qty
             elif kind == "매수" and qty < 0:
                 qty = abs(qty)
+
+            unit_price = float(data.get("unit_price") or 0)
+            eval_val = float(data.get("evaluation") or 0)
+
+            # 공제회(sema) 펀드 좌수 입력 시 평가액 자동 산출 (신한 및 미래에셋 골드, SAVING은 제외)
+            if acct == "sema":
+                fund_code = get_fund_code_by_symbol(symbol)
+                if fund_code and qty > 0:
+                    fund_info = get_cached_or_fetch_fund_price(fund_code)
+                    base_price = fund_info.get("base_price", 0.0) if fund_info else 0.0
+                    if unit_price <= 0 and base_price > 0:
+                        unit_price = base_price
+                    effective_price = unit_price or base_price
+                    if effective_price > 0 and eval_val <= 0:
+                        eval_val = calculate_fund_valuation(qty, effective_price)
 
             conn = get_db_connection()
             cur = conn.cursor()
@@ -3644,11 +3949,11 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
                     amount, dividend, deposit, evaluation, exchange_rate, memo
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """, (
-                clean_date, data.get("account"), data.get("symbol", ""),
-                kind, float(data.get("unit_price") or 0),
+                clean_date, acct, symbol,
+                kind, unit_price,
                 qty, abs(float(data.get("amount") or 0)),
                 float(data.get("dividend") or 0), float(data.get("deposit") or 0),
-                float(data.get("evaluation") or 0), float(data.get("exchange_rate") or 1.0),
+                eval_val, float(data.get("exchange_rate") or 1.0),
                 data.get("memo", "")
             ))
             conn.commit()
@@ -3671,11 +3976,28 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
             data = json.loads(body)
             clean_date = normalize_date_str(data.get("date") or "")
             kind = data.get("kind", "매수")
+            acct = data.get("account")
+            symbol = data.get("symbol", "")
             qty = float(data.get("quantity") or 0)
             if kind == "매도" and qty > 0:
                 qty = -qty
             elif kind == "매수" and qty < 0:
                 qty = abs(qty)
+
+            unit_price = float(data.get("unit_price") or 0)
+            eval_val = float(data.get("evaluation") or 0)
+
+            # 공제회(sema) 펀드 좌수 입력 시 평가액 자동 산출 (신한 및 미래에셋 골드, SAVING은 제외)
+            if acct == "sema":
+                fund_code = get_fund_code_by_symbol(symbol)
+                if fund_code and qty > 0:
+                    fund_info = get_cached_or_fetch_fund_price(fund_code)
+                    base_price = fund_info.get("base_price", 0.0) if fund_info else 0.0
+                    if unit_price <= 0 and base_price > 0:
+                        unit_price = base_price
+                    effective_price = unit_price or base_price
+                    if effective_price > 0 and eval_val <= 0:
+                        eval_val = calculate_fund_valuation(qty, effective_price)
 
             conn = get_db_connection()
             cur = conn.cursor()
@@ -3686,11 +4008,11 @@ class FAAdminRequestHandler(SimpleHTTPRequestHandler):
                     evaluation = ?, exchange_rate = ?, memo = ?
                 WHERE id = ?;
             """, (
-                clean_date, data.get("account"), data.get("symbol", ""),
-                kind, float(data.get("unit_price") or 0),
+                clean_date, acct, symbol,
+                kind, unit_price,
                 qty, abs(float(data.get("amount") or 0)),
                 float(data.get("dividend") or 0), float(data.get("deposit") or 0),
-                float(data.get("evaluation") or 0), float(data.get("exchange_rate") or 1.0),
+                eval_val, float(data.get("exchange_rate") or 1.0),
                 data.get("memo", ""), rec_id
             ))
             conn.commit()

@@ -28,7 +28,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.75"
+APP_VERSION = "v2.7.76"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -2731,11 +2731,25 @@ def _build_account_detail_section(
             buy_p_str = f"{buy_p_amt:+,.0f}" if buy_p_amt != 0 else "0"
             buy_r_str = f"{buy_r_rate:+.2f}"
 
+            # 고점대비 하락률
+            high_drop_val = _as_float(hrow.get("고점대비"))
+            if high_drop_val is not None:
+                high_drop_pct = high_drop_val * 100.0
+                high_drop_str = f"{high_drop_pct:.1f}%"
+                high_drop_cls = "fa-num-negative" if high_drop_pct < -0.05 else "fa-num-positive" if high_drop_pct > 0.05 else ""
+                high_drop_badge = "fa-badge-negative" if high_drop_pct < -0.05 else "fa-badge-neutral"
+                high_badge_html = f"<span class='fa-badge {high_drop_badge}' title='52주 고점대비 하락률'>고점 {high_drop_str}</span>"
+            else:
+                high_drop_str = "-"
+                high_drop_cls = ""
+                high_badge_html = ""
+
             stock_cards.append(
                 f"<div class='fa-stock-card'>"
                 f"  <div class='fa-stock-card-head'>"
                 f"    <div class='fa-stock-card-title'>{html.escape(sym)}</div>"
                 f"    <div class='fa-stock-card-badges'>"
+                f"      {high_badge_html}"
                 f"      <span class='fa-badge {buy_p_bdg}'>{buy_r_str}%</span>"
                 f"    </div>"
                 f"  </div>"
@@ -2755,6 +2769,10 @@ def _build_account_detail_section(
                 f"    <div class='fa-stock-field'>"
                 f"      <span class='fa-stock-lbl'>배당금</span>"
                 f"      <span class='fa-stock-val' style='color: var(--fa-purple);'>{div_str}</span>"
+                f"    </div>"
+                f"    <div class='fa-stock-field'>"
+                f"      <span class='fa-stock-lbl'>고점대비</span>"
+                f"      <span class='fa-stock-val {high_drop_cls}'>{high_drop_str}</span>"
                 f"    </div>"
                 f"  </div>"
                 f"</div>"
@@ -5719,6 +5737,18 @@ def _log(msg: str) -> None:
 
 def _run_main() -> None:
     args = parse_args()
+    _log("Step 0: sync_sema_fund_evaluations")
+    try:
+        try:
+            from scripts.fund_fetcher import sync_sema_fund_evaluations
+        except ImportError:
+            from fund_fetcher import sync_sema_fund_evaluations
+        sync_res = sync_sema_fund_evaluations()
+        if sync_res and sync_res.get("updated"):
+            _log(f"Synced sema fund eval: {sync_res.get('symbol')} -> {sync_res.get('new_eval')}")
+    except Exception as fe:
+        _log(f"sync_sema_fund_evaluations note: {fe}")
+
     _log("Step 1: update_titles_from_fa_yaml")
     update_fa.update_titles_from_fa_yaml()
     static_dir = update_fa.PATHS.get("static_dir", ROOT_DIR / "content/fa")
