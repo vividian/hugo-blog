@@ -28,7 +28,7 @@ from scripts import update_fa
 DEFAULT_FRAGMENT_PATH = ROOT_DIR / "generated" / "fa" / "latest_fa_fragment.html"
 LEGACY_FRAGMENT_PATH = ROOT_DIR / "data" / "fa" / "latest_fa_fragment.html"
 
-APP_VERSION = "v2.7.76"
+APP_VERSION = "v2.7.77"
 
 FONT_FAMILY = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif"
 CHART_COLORWAY = [
@@ -2737,19 +2737,15 @@ def _build_account_detail_section(
                 high_drop_pct = high_drop_val * 100.0
                 high_drop_str = f"{high_drop_pct:.1f}%"
                 high_drop_cls = "fa-num-negative" if high_drop_pct < -0.05 else "fa-num-positive" if high_drop_pct > 0.05 else ""
-                high_drop_badge = "fa-badge-negative" if high_drop_pct < -0.05 else "fa-badge-neutral"
-                high_badge_html = f"<span class='fa-badge {high_drop_badge}' title='52주 고점대비 하락률'>고점 {high_drop_str}</span>"
             else:
                 high_drop_str = "-"
                 high_drop_cls = ""
-                high_badge_html = ""
 
             stock_cards.append(
                 f"<div class='fa-stock-card'>"
                 f"  <div class='fa-stock-card-head'>"
                 f"    <div class='fa-stock-card-title'>{html.escape(sym)}</div>"
                 f"    <div class='fa-stock-card-badges'>"
-                f"      {high_badge_html}"
                 f"      <span class='fa-badge {buy_p_bdg}'>{buy_r_str}%</span>"
                 f"    </div>"
                 f"  </div>"

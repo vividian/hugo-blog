@@ -433,6 +433,7 @@ class Position:
     ticker: str
     quantity: float
     cost: float
+    holding_start_date: Optional[pd.Timestamp] = None
 
 
 def ensure_static_dir() -> None:
@@ -1376,7 +1377,7 @@ def extract_trades(records: pd.DataFrame) -> pd.DataFrame:
 
 
 def compute_positions(trades: pd.DataFrame, symbol_map: Dict[str, AssetConfig], fx_series: pd.Series) -> List[Position]:
-    """거래 기록을 바탕으로 현재 보유 종목(수량, 총 투자 원금)을 계산한다."""
+    """거래 기록을 바탕으로 현재 보유 종목(수량, 총 투자 원금, 보유 시작일)을 계산한다."""
     positions: List[Position] = []
     for (account, symbol), group in trades.groupby(["계좌", "종목"]):
         config = symbol_map.get(symbol)
@@ -1384,6 +1385,7 @@ def compute_positions(trades: pd.DataFrame, symbol_map: Dict[str, AssetConfig], 
             continue
         total_qty = 0.0
         total_cost = 0.0
+        holding_start_date: Optional[pd.Timestamp] = None
 
         # 동일 일자 내에서 매수(+수량)가 매도(-수량)보다 항상 먼저 처리되도록 정렬
         sorted_group = group.sort_values(by=["일자", "수량"], ascending=[True, False])
@@ -1398,14 +1400,17 @@ def compute_positions(trades: pd.DataFrame, symbol_map: Dict[str, AssetConfig], 
             total_qty += qty
             if qty > 0:
                 total_cost += krw_flow
+                if prev_qty <= 0.0001:
+                    holding_start_date = trade_date
             else:
                 if prev_qty > 0:
                     avg_cost = total_cost / prev_qty if prev_qty else 0.0
                     total_cost -= avg_cost * abs(qty)
 
-            if total_qty <= 0:
+            if total_qty <= 0.0001:
                 total_qty = 0.0
                 total_cost = 0.0
+                holding_start_date = None
 
         if total_qty <= 0.0001:
             continue
@@ -1417,6 +1422,7 @@ def compute_positions(trades: pd.DataFrame, symbol_map: Dict[str, AssetConfig], 
                 ticker=config.ticker,
                 quantity=total_qty,
                 cost=total_cost,
+                holding_start_date=holding_start_date,
             )
         )
     return positions
@@ -1477,15 +1483,23 @@ def fetch_latest_prices(tickers: List[str]) -> Dict[str, Tuple[float, float]]:
     return result
 
 
-def fetch_holdings_price_info(tickers: List[str]) -> Dict[str, Dict[str, Optional[float]]]:
-    """보유 종목 티커들의 최신 가격, 전일 가격, 52주(1년) 최고가 및 고점대비 하락률을 조회한다."""
+def fetch_holdings_price_history(
+    tickers: List[str], min_start_date: Optional[pd.Timestamp] = None
+) -> Dict[str, Dict[str, Any]]:
+    """보유 종목 티커들의 가격 히스토리(종가, 고가) 및 최신/전일 가격을 조회한다."""
     if not tickers:
         return {}
-    result: Dict[str, Dict[str, Optional[float]]] = {}
+    if min_start_date is None:
+        start_date = pd.Timestamp.now() - pd.Timedelta(days=365)
+    else:
+        start_date = min_start_date - pd.Timedelta(days=7)
+    start_str = start_date.strftime("%Y-%m-%d")
+
+    result: Dict[str, Dict[str, Any]] = {}
     try:
         data = yf.download(
             tickers,
-            period="1y",
+            start=start_str,
             interval="1d",
             progress=False,
             auto_adjust=False,
@@ -1497,22 +1511,25 @@ def fetch_holdings_price_info(tickers: List[str]) -> Dict[str, Dict[str, Optiona
             if close_data.index.tz is not None:
                 close_data.index = close_data.index.tz_localize(None)
             close_data.index = close_data.index.normalize()
+            if high_data.index.tz is not None:
+                high_data.index = high_data.index.tz_localize(None)
+            high_data.index = high_data.index.normalize()
 
             if isinstance(close_data, pd.Series):
                 s_close = close_data[~close_data.index.duplicated(keep="last")].ffill().dropna()
-                s_high = high_data[~high_data.index.duplicated(keep="last")].dropna() if isinstance(high_data, pd.Series) else s_close
+                s_high = (
+                    high_data[~high_data.index.duplicated(keep="last")].dropna()
+                    if isinstance(high_data, pd.Series)
+                    else s_close
+                )
                 if not s_close.empty:
                     last_price = float(s_close.iloc[-1])
                     prev_price = float(s_close.iloc[-2]) if len(s_close) > 1 else last_price
-                    high_price = float(s_high.max()) if not s_high.empty else last_price
-                    high_drop = (last_price - high_price) / high_price if high_price > 0 else 0.0
-                    if high_drop > 0:
-                        high_drop = 0.0
                     result[tickers[0]] = {
+                        "close": s_close,
+                        "high": s_high,
                         "last_price": last_price,
                         "prev_price": prev_price,
-                        "high_price": high_price,
-                        "high_drop": high_drop,
                     }
             else:
                 close_data = close_data[~close_data.index.duplicated(keep="last")]
@@ -1524,15 +1541,11 @@ def fetch_holdings_price_info(tickers: List[str]) -> Dict[str, Dict[str, Optiona
                     s_high = high_data[col].dropna() if col in high_data.columns else s_close
                     last_price = float(s_close.iloc[-1])
                     prev_price = float(s_close.iloc[-2]) if len(s_close) > 1 else last_price
-                    high_price = float(s_high.max()) if not s_high.empty else last_price
-                    high_drop = (last_price - high_price) / high_price if high_price > 0 else 0.0
-                    if high_drop > 0:
-                        high_drop = 0.0
                     result[col] = {
+                        "close": s_close,
+                        "high": s_high,
                         "last_price": last_price,
                         "prev_price": prev_price,
-                        "high_price": high_price,
-                        "high_drop": high_drop,
                     }
     except Exception:
         pass
@@ -1541,22 +1554,21 @@ def fetch_holdings_price_info(tickers: List[str]) -> Dict[str, Dict[str, Optiona
     missing = [t for t in tickers if t not in result]
     for t in missing:
         try:
-            hist = yf.Ticker(t).history(period="1y")
+            hist = yf.Ticker(t).history(start=start_str)
             if not hist.empty and "Close" in hist.columns:
+                if hist.index.tz is not None:
+                    hist.index = hist.index.tz_localize(None)
+                hist.index = hist.index.normalize()
                 s_close = hist["Close"].dropna()
                 s_high = hist["High"].dropna() if "High" in hist.columns else s_close
                 if not s_close.empty:
                     last_price = float(s_close.iloc[-1])
                     prev_price = float(s_close.iloc[-2]) if len(s_close) > 1 else last_price
-                    high_price = float(s_high.max()) if not s_high.empty else last_price
-                    high_drop = (last_price - high_price) / high_price if high_price > 0 else 0.0
-                    if high_drop > 0:
-                        high_drop = 0.0
                     result[t] = {
+                        "close": s_close,
+                        "high": s_high,
                         "last_price": last_price,
                         "prev_price": prev_price,
-                        "high_price": high_price,
-                        "high_drop": high_drop,
                     }
         except Exception:
             pass
@@ -1570,30 +1582,37 @@ def build_holdings_df(records: pd.DataFrame, fx_series: pd.Series) -> pd.DataFra
     trades = extract_trades(records)
     positions = compute_positions(trades, symbol_map, fx_series)
 
-    prices = fetch_holdings_price_info(sorted({p.ticker for p in positions if p.ticker}))
-    for pos in positions:
-        if not pos.ticker:
-            prices[pos.ticker] = {
-                "last_price": 1.0,
-                "prev_price": 1.0,
-                "high_price": 1.0,
-                "high_drop": None,
-            }
+    active_tickers = sorted({p.ticker for p in positions if p.ticker})
+    valid_start_dates = [p.holding_start_date for p in positions if p.holding_start_date is not None]
+    min_start_date = min(valid_start_dates) if valid_start_dates else None
+
+    price_history = fetch_holdings_price_history(active_tickers, min_start_date=min_start_date)
 
     rows: List[Dict[str, float]] = []
     for pos in positions:
-        price_info = prices.get(pos.ticker)
-        if price_info is None:
+        fallback_price = (pos.cost / pos.quantity) if pos.quantity else 0.0
+        hist_data = price_history.get(pos.ticker) if pos.ticker else None
+        if hist_data is None:
             # 주가 조회 실패 시 평단가로 fallback하여 보유 종목 누락 방지
-            latest_price_native = pos.avg_price_native or 0.0
+            latest_price_native = fallback_price
             prev_price_native = latest_price_native
-            high_price_native = latest_price_native
             high_drop = None
         else:
-            latest_price_native = price_info.get("last_price") or (pos.avg_price_native or 0.0)
-            prev_price_native = price_info.get("prev_price") or latest_price_native
-            high_price_native = price_info.get("high_price") or latest_price_native
-            high_drop = price_info.get("high_drop")
+            latest_price_native = hist_data.get("last_price") or fallback_price
+            prev_price_native = hist_data.get("prev_price") or latest_price_native
+            s_high = hist_data.get("high")
+            if s_high is not None and not s_high.empty:
+                if pos.holding_start_date is not None:
+                    start_ts = pos.holding_start_date.normalize()
+                    period_high = s_high[s_high.index >= start_ts]
+                    high_val = float(period_high.max()) if not period_high.empty else latest_price_native
+                else:
+                    high_val = float(s_high.max())
+                high_drop = (latest_price_native - high_val) / high_val if high_val > 0 else 0.0
+                if high_drop > 0:
+                    high_drop = 0.0
+            else:
+                high_drop = None
 
         valuation_native = pos.quantity * latest_price_native
         valuation = convert_to_krw(pos.account, valuation_native, None, fx_series, use_latest=True)
@@ -1770,6 +1789,7 @@ class Position:
     ticker: str
     quantity: float
     cost: float
+    holding_start_date: Optional[pd.Timestamp] = None
 
 
 def ensure_static_dir() -> None:
